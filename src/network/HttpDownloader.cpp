@@ -15,7 +15,31 @@
 #include "AppVersion.h"
 #include "util/UrlUtils.h"
 
+#ifndef SIMULATOR
+#include "esp_wifi.h"
+#endif
+
 namespace {
+#ifndef SIMULATOR
+class WifiPowerSaveGuard final {
+ public:
+  WifiPowerSaveGuard() { esp_wifi_set_ps(WIFI_PS_NONE); }
+  ~WifiPowerSaveGuard() { esp_wifi_set_ps(WIFI_PS_MIN_MODEM); }
+
+  WifiPowerSaveGuard(const WifiPowerSaveGuard&) = delete;
+  WifiPowerSaveGuard& operator=(const WifiPowerSaveGuard&) = delete;
+};
+#else
+class WifiPowerSaveGuard final {
+ public:
+  WifiPowerSaveGuard() = default;
+  ~WifiPowerSaveGuard() = default;
+
+  WifiPowerSaveGuard(const WifiPowerSaveGuard&) = delete;
+  WifiPowerSaveGuard& operator=(const WifiPowerSaveGuard&) = delete;
+};
+#endif
+
 class FileWriteStream final : public Stream {
  public:
   FileWriteStream(FsFile& file, size_t total, HttpDownloader::ProgressCallback progress)
@@ -119,6 +143,8 @@ bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent, c
 HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& url, const std::string& destPath,
                                                              ProgressCallback progress, const std::string& username,
                                                              const std::string& password) {
+  WifiPowerSaveGuard wifiPowerSaveGuard;
+
   std::unique_ptr<NetworkClient> client;
   if (UrlUtils::isHttpsUrl(url)) {
     auto* secureClient = new (std::nothrow) NetworkClientSecure();

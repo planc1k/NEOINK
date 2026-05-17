@@ -8,6 +8,7 @@
 - Added a 9pt `Itty Bitty` reader font size, plus build flags for omitting Itty Bitty and Large reader font assets in size-constrained firmware variants.
 
 ### Fixed
+- Disabled WiFi power saving during regular file downloads so OPDS book downloads and SD font downloads can run faster and more consistently.
 - Fixed Lyra Carousel selected menu icons rendering as black squares on X3 devices.
 - Relaxed KOReader Sync auth response validation so compatible self-hosted servers that return valid JSON on successful login can authenticate.
 - Fixed OPDS browsing on memory-constrained builds so large catalog feeds fail safely instead of rebooting the device.
