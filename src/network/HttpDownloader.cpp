@@ -43,36 +43,95 @@ class WifiPowerSaveGuard final {
 class FileWriteStream final : public Stream {
  public:
   FileWriteStream(FsFile& file, size_t total, HttpDownloader::ProgressCallback progress)
-      : file_(file), total_(total), progress_(std::move(progress)) {}
+      : file_(file), total_(total), progress_(std::move(progress)) {
+    writeBuffer_.reset(new (std::nothrow) uint8_t[kWriteBufferSize]);
+    if (!writeBuffer_) {
+      LOG_DBG("HTTP", "Download write buffer unavailable; using direct SD writes");
+    }
+  }
 
   size_t write(uint8_t byte) override { return write(&byte, 1); }
 
   size_t write(const uint8_t* buffer, size_t size) override {
-    // Write-through stream for HTTPClient::writeToStream with progress tracking.
-    const size_t written = file_.write(buffer, size);
-    if (written != size) {
-      writeOk_ = false;
+    if (!writeOk_) {
+      return 0;
     }
-    downloaded_ += written;
-    if (progress_ && total_ > 0) {
-      progress_(downloaded_, total_);
+
+    if (!writeBuffer_) {
+      return writeDirect(buffer, size);
     }
-    return written;
+
+    size_t accepted = 0;
+    while (accepted < size) {
+      if (buffered_ == kWriteBufferSize && !flushBuffer()) {
+        break;
+      }
+
+      const size_t space = kWriteBufferSize - buffered_;
+      const size_t remaining = size - accepted;
+      const size_t toCopy = remaining < space ? remaining : space;
+      std::memcpy(writeBuffer_.get() + buffered_, buffer + accepted, toCopy);
+      buffered_ += toCopy;
+      accepted += toCopy;
+      downloaded_ += toCopy;
+    }
+
+    notifyProgress();
+    return accepted;
   }
 
   int available() override { return 0; }
   int read() override { return -1; }
   int peek() override { return -1; }
-  void flush() override { file_.flush(); }
+  void flush() override {
+    if (writeOk_) {
+      flushBuffer();
+    }
+    file_.flush();
+  }
 
   size_t downloaded() const { return downloaded_; }
   bool ok() const { return writeOk_; }
 
  private:
+  static constexpr size_t kWriteBufferSize = 4096;
+
+  size_t writeDirect(const uint8_t* buffer, size_t size) {
+    const size_t written = file_.write(buffer, size);
+    if (written != size) {
+      writeOk_ = false;
+    }
+    downloaded_ += written;
+    notifyProgress();
+    return written;
+  }
+
+  bool flushBuffer() {
+    if (!writeBuffer_ || buffered_ == 0) {
+      return true;
+    }
+
+    const size_t written = file_.write(writeBuffer_.get(), buffered_);
+    if (written != buffered_) {
+      writeOk_ = false;
+      return false;
+    }
+    buffered_ = 0;
+    return true;
+  }
+
+  void notifyProgress() const {
+    if (progress_ && total_ > 0) {
+      progress_(downloaded_, total_);
+    }
+  }
+
   FsFile& file_;
   size_t total_;
   size_t downloaded_ = 0;
+  size_t buffered_ = 0;
   bool writeOk_ = true;
+  std::unique_ptr<uint8_t[]> writeBuffer_;
   HttpDownloader::ProgressCallback progress_;
 };
 }  // namespace
@@ -208,6 +267,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   // Let HTTPClient handle chunked decoding and stream body bytes into the file.
   FileWriteStream fileStream(file, contentLength, progress);
   const int writeResult = http.writeToStream(&fileStream);
+  fileStream.flush();
 
   file.close();
   http.end();
