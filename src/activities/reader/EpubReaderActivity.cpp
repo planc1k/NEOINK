@@ -13,6 +13,8 @@
 #include <esp_system.h>
 
 #include <algorithm>
+#include <functional>
+#include <iterator>
 #include <limits>
 #include <memory>
 
@@ -79,6 +81,71 @@ int clampPercent(int percent) {
 
 uint16_t clampAutoPageTurnIntervalSeconds(const uint16_t seconds) {
   return std::clamp(seconds, MIN_AUTO_PAGE_TURN_INTERVAL_S, MAX_AUTO_PAGE_TURN_INTERVAL_S);
+}
+
+// SD card folder finished books are moved into. Single source of truth for the path.
+constexpr char READ_FOLDER[] = "/Read";
+
+// True if path is inside READ_FOLDER (starts with "<READ_FOLDER>/"). Non-allocating so
+// it is cheap to call from loop(), and avoids reintroducing a separate "/Read/" literal.
+bool isInReadFolder(const std::string& path) {
+  constexpr size_t n = sizeof(READ_FOLDER) - 1;  // excludes NUL
+  return path.size() > n && path.compare(0, n, READ_FOLDER) == 0 && path[n] == '/';
+}
+
+// Pick a non-colliding destination path inside /Read/ for a finished book.
+// Mirrors the suffixing scheme used elsewhere: "name.epub" -> "name (2).epub", etc.
+std::string buildReadFolderDestination(const std::string& srcPath) {
+  const size_t lastSlash = srcPath.rfind('/');
+  const std::string filename = (lastSlash != std::string::npos) ? srcPath.substr(lastSlash + 1) : srcPath;
+
+  Storage.mkdir(READ_FOLDER);
+  std::string dstPath = std::string(READ_FOLDER) + "/" + filename;
+  if (!Storage.exists(dstPath.c_str())) {
+    return dstPath;
+  }
+
+  const size_t dotPos = filename.rfind('.');
+  const std::string base = (dotPos != std::string::npos) ? filename.substr(0, dotPos) : filename;
+  const std::string ext = (dotPos != std::string::npos) ? filename.substr(dotPos) : "";
+  int suffix = 2;
+  do {
+    dstPath = std::string(READ_FOLDER) + "/" + base + " (" + std::to_string(suffix) + ")" + ext;
+    suffix++;
+  } while (Storage.exists(dstPath.c_str()) && suffix < 100);
+  return dstPath;
+}
+
+// Relocate a finished book and its cache dir into /Read/, keep it in recents by
+// repointing its entry to the new path, and repoint the resume pointer too.
+void moveFinishedBookToReadFolder(const std::string& srcPath, const std::string& dstPath,
+                                  const std::string& oldCachePath, const std::string& title) {
+  LOG_INF("ERS", "Moving finished epub: %s -> %s", srcPath.c_str(), dstPath.c_str());
+  if (!Storage.rename(srcPath.c_str(), dstPath.c_str())) {
+    LOG_ERR("ERS", "Failed to move finished book to '/Read' folder");
+    snprintf(APP_STATE.pendingAlertTitle, sizeof(APP_STATE.pendingAlertTitle), "%s", tr(STR_MOVE_TO_READ_FAILED_TITLE));
+    snprintf(APP_STATE.pendingAlertBody, sizeof(APP_STATE.pendingAlertBody), tr(STR_MOVE_TO_READ_FAILED_BODY),
+             title.c_str());
+    APP_STATE.pendingAlertGoHomeOnBack.store(false, std::memory_order_relaxed);
+    APP_STATE.hasPendingAlert.store(true, std::memory_order_release);
+    return;
+  }
+
+  // Cache dir is keyed by hash of the epub path (see Epub ctor), so it must be re-keyed.
+  const std::string newCachePath = "/.crosspoint/epub_" + std::to_string(std::hash<std::string>{}(dstPath));
+  if (!oldCachePath.empty() && Storage.exists(oldCachePath.c_str())) {
+    if (!Storage.rename(oldCachePath.c_str(), newCachePath.c_str())) {
+      LOG_ERR("ERS", "Failed to rename cache dir %s -> %s (non-fatal)", oldCachePath.c_str(), newCachePath.c_str());
+    }
+  }
+
+  // Keep the book in recents (crossink behavior): repoint the entry to its new
+  // location instead of dropping it. updatePath persists on success.
+  RECENT_BOOKS.updatePath(srcPath, dstPath, oldCachePath, newCachePath);
+  if (APP_STATE.openEpubPath == srcPath) {
+    APP_STATE.openEpubPath = dstPath;
+    APP_STATE.saveToFile();
+  }
 }
 
 }  // namespace
@@ -287,39 +354,13 @@ void EpubReaderActivity::onExit() {
   BOOKMARKS.unload();
   section.reset();
 
-  if (pendingReadFolderMove) {
-    const std::string srcEpubPath = epub->getPath();
-    const size_t lastSlash = srcEpubPath.rfind('/');
-    const std::string filename = (lastSlash != std::string::npos) ? srcEpubPath.substr(lastSlash + 1) : srcEpubPath;
-
-    Storage.mkdir("/Read");
-    std::string dstEpubPath = "/Read/" + filename;
-    if (Storage.exists(dstEpubPath.c_str())) {
-      const size_t dotPos = filename.rfind('.');
-      const std::string base = (dotPos != std::string::npos) ? filename.substr(0, dotPos) : filename;
-      const std::string ext = (dotPos != std::string::npos) ? filename.substr(dotPos) : "";
-      int suffix = 2;
-      do {
-        dstEpubPath = "/Read/" + base + " (" + std::to_string(suffix) + ")" + ext;
-        suffix++;
-      } while (Storage.exists(dstEpubPath.c_str()) && suffix < 100);
-    }
-
-    // Mutate APP_STATE on the main task (before the background task starts) to avoid racing
-    // with other main-task readers/writers of openEpubPath and saveToFile().
-    if (APP_STATE.openEpubPath == srcEpubPath) {
-      APP_STATE.openEpubPath = dstEpubPath;
-      APP_STATE.saveToFile();
-    }
-
-    auto* params = new ReadFolderMoveParams{srcEpubPath, dstEpubPath, epub->getCachePath(), epub->getTitle()};
-    epub.reset();
-    TaskHandle_t moveTaskHandle = nullptr;
-    xTaskCreate(&readFolderMoveTask, "ReadFolderMove", 4096, params, 1, &moveTaskHandle);
-    if (!moveTaskHandle) {
-      LOG_ERR("ERS", "Failed to create readFolderMoveTask");
-      delete params;
-    }
+  if (pendingReadFolderMove && epub) {
+    const std::string srcPath = epub->getPath();
+    const std::string oldCachePath = epub->getCachePath();
+    const std::string title = epub->getTitle();
+    const std::string dstPath = buildReadFolderDestination(srcPath);
+    epub.reset();  // release the Epub (and any open handles) before renaming on the SD card
+    moveFinishedBookToReadFolder(srcPath, dstPath, oldCachePath, title);
   } else {
     epub.reset();
   }
@@ -384,6 +425,31 @@ void EpubReaderActivity::loop() {
       requestUpdate();
       return;
     }
+  }
+
+  // End-of-Book screen reached (currentSpineIndex == spine count) means the book is
+  // finished. Two independent finished-book features key off this same condition.
+  const bool atEndOfBook = currentSpineIndex > 0 && currentSpineIndex >= epub->getSpineItemsCount();
+
+  // Drop this book from the Recent Books list; if the reader then pages back into the book,
+  // re-add it. So removal only sticks if the reader leaves while still on the End-of-Book
+  // screen. Acts only on the transition (guarded by recentsEntryRemoved) — no per-frame writes.
+  if (SETTINGS.removeReadBooksFromRecents) {
+    if (atEndOfBook && !recentsEntryRemoved) {
+      recentsEntryRemoved = RECENT_BOOKS.removeByPath(epub->getPath());
+    } else if (!atEndOfBook && recentsEntryRemoved) {
+      RECENT_BOOKS.addOrUpdateBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), epub->getThumbBmpPath());
+      recentsEntryRemoved = false;
+    }
+  }
+
+  // Arm the move here so any exit path relocates the book into /Read/.
+  // setBookCompleted() also arms this when the user marks a book finished before
+  // the End-of-Book screen.
+  if (atEndOfBook) {
+    pendingReadFolderMove = SETTINGS.moveFinishedToReadFolder && !isInReadFolder(epub->getPath());
+  } else if (!stats.isCompleted) {
+    pendingReadFolderMove = false;
   }
 
   if (automaticPageTurnActive) {
@@ -457,7 +523,8 @@ void EpubReaderActivity::loop() {
     startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
                                renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
                                SETTINGS.orientation, !currentPageFootnotes.empty(), !BOOKMARKS.getBookmarks().empty(),
-                               BOOKMARKS.hasBookmarkForPage(bmSpine, bmProgress, bookmarkPageCount), isBookCompleted),
+                               BOOKMARKS.hasBookmarkForPage(bmSpine, bmProgress, bookmarkPageCount), isBookCompleted,
+                               automaticPageTurnActive, getAutoPageTurnIntervalSeconds()),
                            [this](const ActivityResult& result) {
                              // Always apply orientation change even if the menu was cancelled
                              const auto& menu = std::get<MenuResult>(result.data);
@@ -1191,7 +1258,7 @@ void EpubReaderActivity::setBookCompleted(bool isCompleted) {
   stats.isCompleted = isCompleted;
   if (isCompleted) {
     completionPromptShown = true;
-    if (SETTINGS.moveFinishedToReadFolder && epub->getPath().rfind("/Read/", 0) != 0) {
+    if (SETTINGS.moveFinishedToReadFolder && !isInReadFolder(epub->getPath())) {
       pendingReadFolderMove = true;
     }
   } else {
@@ -1873,40 +1940,6 @@ void EpubReaderActivity::restoreSavedPosition() {
   }
   requestUpdate();
 }
-void EpubReaderActivity::readFolderMoveTask(void* arg) {
-  auto* params = static_cast<ReadFolderMoveParams*>(arg);
-
-  LOG_INF("ERS", "Moving epub: %s -> %s", params->epubPath.c_str(), params->dstEpubPath.c_str());
-
-  if (!Storage.rename(params->epubPath.c_str(), params->dstEpubPath.c_str())) {
-    LOG_ERR("ERS", "Failed to move book to 'Read' folder");
-    snprintf(APP_STATE.pendingAlertTitle, sizeof(APP_STATE.pendingAlertTitle), "%s", tr(STR_MOVE_TO_READ_FAILED_TITLE));
-    snprintf(APP_STATE.pendingAlertBody, sizeof(APP_STATE.pendingAlertBody), tr(STR_MOVE_TO_READ_FAILED_BODY),
-             params->title.c_str());
-    APP_STATE.pendingAlertGoHomeOnBack.store(false, std::memory_order_relaxed);
-    APP_STATE.hasPendingAlert.store(true, std::memory_order_release);
-    delete params;
-    vTaskDelete(nullptr);
-    return;
-  }
-
-  // Rename cache directory to match new epub path hash
-  const std::string oldCachePath = params->cachePath;
-  const std::string newCachePath = Epub::cachePathForFilePath(params->dstEpubPath, "/.crosspoint");
-  if (!oldCachePath.empty() && Storage.exists(oldCachePath.c_str())) {
-    if (!Storage.rename(oldCachePath.c_str(), newCachePath.c_str())) {
-      LOG_ERR("ERS", "Failed to rename cache dir %s -> %s (non-fatal)", oldCachePath.c_str(), newCachePath.c_str());
-    }
-  }
-
-  // Update recent books store with new paths
-  RECENT_BOOKS.updatePath(params->epubPath, params->dstEpubPath, oldCachePath, newCachePath);
-
-  LOG_INF("ERS", "Move to /Read/ complete");
-  delete params;
-  vTaskDelete(nullptr);
-}
-
 bool EpubReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, GfxRenderer& renderer) {
   auto epub = std::make_shared<Epub>(filePath, "/.crosspoint");
   // Load CSS when embeddedStyle is enabled, as createSectionFile may need it to rebuild the cache.

@@ -144,6 +144,18 @@ families:
       italic:     {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/tinos/Tinos-Italic.ttf"}
       bolditalic: {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/tinos/Tinos-BoldItalic.ttf"}
 
+  - name: Domitian
+    description: "A humanist serif for literary reading"
+    languages: "Latin, Greek, Cyrillic"
+    intervals: latin-ext,greek,cyrillic
+    sizes: [8, 9, 10, 12, 14, 16, 18, 20]
+    styles:
+      regular:    {url: "https://mirrors.ctan.org/fonts/domitian/opentype/Domitian-Roman.otf"}
+      bold:       {url: "https://mirrors.ctan.org/fonts/domitian/opentype/Domitian-Bold.otf"}
+      italic:     {url: "https://mirrors.ctan.org/fonts/domitian/opentype/Domitian-Italic.otf"}
+      bolditalic: {url: "https://mirrors.ctan.org/fonts/domitian/opentype/Domitian-BoldItalic.otf"}
+
+
   # ── Sans-serif ─────────────────────────────────────────────────────────
 
   - name: Alegreya

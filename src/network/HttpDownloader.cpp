@@ -58,8 +58,8 @@ class ProgressNotifier {
 
 class FileWriteStream final : public Stream {
  public:
-  FileWriteStream(FsFile& file, size_t total, HttpDownloader::ProgressCallback progress)
-      : file_(file), progress_(total, std::move(progress)) {}
+  FileWriteStream(FsFile& file, size_t total, HttpDownloader::ProgressCallback progress, bool* cancelFlag)
+      : file_(file), progress_(total, std::move(progress)), cancelFlag_(cancelFlag) {}
 
   size_t write(uint8_t byte) override { return write(&byte, 1); }
 
@@ -68,6 +68,10 @@ class FileWriteStream final : public Stream {
       return 0;
     }
 
+    if (cancelFlag_ && *cancelFlag_) {
+      writeOk_ = false;
+      return 0;
+    }
     const size_t accepted = file_.write(buffer, size);
     if (accepted != size) {
       writeOk_ = false;
@@ -91,10 +95,12 @@ class FileWriteStream final : public Stream {
   size_t downloaded_ = 0;
   bool writeOk_ = true;
   ProgressNotifier progress_;
+  bool* cancelFlag_;
 };
 
 HttpDownloader::DownloadError downloadKnownLengthBody(HTTPClient& http, FsFile& file, const size_t contentLength,
-                                                      HttpDownloader::ProgressCallback progress, size_t& downloaded) {
+                                                      HttpDownloader::ProgressCallback progress, size_t& downloaded,
+                                                      bool* cancelFlag) {
   auto* stream = http.getStreamPtr();
   if (!stream) {
     LOG_ERR("HTTP", "Failed to get response stream");
@@ -110,6 +116,9 @@ HttpDownloader::DownloadError downloadKnownLengthBody(HTTPClient& http, FsFile& 
   ProgressNotifier progressNotifier(contentLength, std::move(progress));
   uint32_t lastProgressMs = millis();
   while (downloaded < contentLength) {
+    if (cancelFlag && *cancelFlag) {
+      return HttpDownloader::ABORTED;
+    }
     const size_t remaining = contentLength - downloaded;
 
     int available = stream->available();
@@ -225,8 +234,9 @@ bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent, c
 }
 
 HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& url, const std::string& destPath,
-                                                             ProgressCallback progress, const std::string& username,
-                                                             const std::string& password, DownloadOptions options) {
+                                                             ProgressCallback progress, bool* cancelFlag,
+                                                             const std::string& username, const std::string& password,
+                                                             DownloadOptions options) {
   WifiPowerSaveGuard wifiPowerSaveGuard;
 
   std::unique_ptr<NetworkClient> client;
@@ -332,14 +342,16 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   int writeResult = 0;
 
   if (contentLength > 0) {
-    transferError = downloadKnownLengthBody(http, file, contentLength, std::move(progress), downloaded);
+    transferError = downloadKnownLengthBody(http, file, contentLength, std::move(progress), downloaded, cancelFlag);
   } else {
     // Let HTTPClient handle chunked decoding and stream body bytes into the file.
-    FileWriteStream fileStream(file, contentLength, std::move(progress));
+    FileWriteStream fileStream(file, contentLength, std::move(progress), cancelFlag);
     writeResult = http.writeToStream(&fileStream);
     fileStream.finishProgress();
     downloaded = fileStream.downloaded();
-    if (writeResult < 0) {
+    if (cancelFlag && *cancelFlag) {
+      transferError = ABORTED;
+    } else if (writeResult < 0) {
       transferError = HTTP_ERROR;
     } else if (!fileStream.ok()) {
       LOG_ERR("HTTP", "Write failed during download");
@@ -356,7 +368,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
     if (writeResult < 0) {
       LOG_ERR("HTTP", "writeToStream error: %d (%s)", writeResult, HTTPClient::errorToString(writeResult).c_str());
     }
-    if (!options.preservePartial) {
+    if (transferError == ABORTED || !options.preservePartial) {
       Storage.remove(destPath.c_str());
     }
     return transferError;

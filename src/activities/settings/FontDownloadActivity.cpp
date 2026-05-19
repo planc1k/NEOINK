@@ -16,6 +16,7 @@
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "SdCardFontSystem.h"
+#include "SilentRestart.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
@@ -139,10 +140,13 @@ void FontDownloadActivity::onEnter() {
 
 void FontDownloadActivity::onExit() {
   Activity::onExit();
-  WiFi.disconnect(false);
-  delay(100);
-  WiFi.mode(WIFI_OFF);
-  delay(100);
+
+  if (WiFi.getMode() != WIFI_MODE_NULL) {
+    WiFi.disconnect(false);
+    delay(30);
+    silentRestart();
+  }
+
   sdFontSystem.ensureLoaded(renderer);
 }
 
@@ -346,10 +350,11 @@ void FontDownloadActivity::resolveInstalledFamilyName(ManifestFamily& family) co
 // --- Download ---
 
 void FontDownloadActivity::downloadAll() {
+  cancelRequested_ = false;
   for (size_t i = 0; i < families_.size(); i++) {
     if (families_[i].installed) continue;
     downloadFamily(families_[i]);
-    if (state_ == ERROR) return;
+    if (state_ == ERROR || cancelRequested_) return;
   }
 
   {
@@ -359,10 +364,11 @@ void FontDownloadActivity::downloadAll() {
 }
 
 void FontDownloadActivity::updateAll() {
+  cancelRequested_ = false;
   for (size_t i = 0; i < families_.size(); i++) {
     if (!families_[i].hasUpdate) continue;
     downloadFamily(families_[i]);
-    if (state_ == ERROR) return;
+    if (state_ == ERROR || cancelRequested_) return;
   }
 
   {
@@ -464,6 +470,7 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
     fileTotal_ = 0;
     downloadAttempt_ = 0;
     downloadAttemptTotal_ = 0;
+    cancelRequested_ = false;
   }
   requestUpdateAndWait();
 
@@ -530,9 +537,25 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
           [this](size_t downloaded, size_t total) {
             fileProgress_ = downloaded;
             fileTotal_ = total;
+            mappedInput.update();
+            if (mappedInput.isPressed(MappedInputManager::Button::Back) ||
+                mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+              cancelRequested_ = true;
+            }
             requestUpdate(true);
           },
-          "", "", downloadOptions);
+          &cancelRequested_, "", "", downloadOptions);
+      if (result == HttpDownloader::ABORTED) {
+        Storage.remove(tempPath);
+        {
+          RenderLock lock(*this);
+          state_ = FAMILY_LIST;
+          downloadAttempt_ = 0;
+          downloadAttemptTotal_ = 0;
+        }
+        requestUpdate(true);
+        return;
+      }
       if (result == HttpDownloader::OK) {
         break;
       }
@@ -599,6 +622,7 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
     if (hadExistingFile) {
       Storage.remove(backupPath);
     }
+    currentFileIndex_++;
   }
 
   fontInstaller_.refreshRegistry();
@@ -689,12 +713,25 @@ void FontDownloadActivity::loop() {
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       if (!families_.empty()) {
         if (isDownloadAllRow(selectedIndex_)) {
+          currentFileIndex_ = 0;
+          currentFileTotal_ = 0;
+          for (const auto& f : families_) {
+            if (!f.installed) currentFileTotal_ += f.files.size();
+          }
+
           downloadAll();
         } else if (isUpdateAllRow(selectedIndex_)) {
+          currentFileIndex_ = 0;
+          currentFileTotal_ = 0;
+          for (const auto& f : families_) {
+            if (f.hasUpdate) currentFileTotal_ += f.files.size();
+          }
           updateAll();
         } else {
           auto& family = families_[familyIndexFromList(selectedIndex_)];
           if (!family.installed || family.hasUpdate) {
+            currentFileIndex_ = 0;
+            currentFileTotal_ = family.files.size();
             downloadFamily(family);
           } else {
             promptDeleteSelectedFamily();
@@ -917,6 +954,9 @@ void FontDownloadActivity::render(RenderLock&&) {
         renderer,
         Rect{metrics.contentSidePadding, barY, pageWidth - metrics.contentSidePadding * 2, metrics.progressBarHeight},
         static_cast<int>(progress * 100), 100);
+
+    const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), "", "", "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (state_ == COMPLETE) {
     renderer.drawCenteredText(UI_10_FONT_ID, centerY, tr(STR_FONT_INSTALLED), true, EpdFontFamily::BOLD);
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");

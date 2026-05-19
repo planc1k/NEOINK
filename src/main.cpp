@@ -4,6 +4,7 @@
 #include <FontDecompressor.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalClock.h>
 #include <HalDisplay.h>
 #include <HalGPIO.h>
 #include <HalPowerManager.h>
@@ -251,50 +252,29 @@ unsigned long t2 = 0;
 // power button release does not also trigger a short-press action (e.g. sleep).
 static bool screenshotComboHandled = false;
 
-// Verify power button press duration on wake-up from deep sleep
-// Pre-condition: isWakeupByPowerButton() == true
-void verifyPowerButtonDuration() {
-  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) {
-    // Fast path for short press
-    // Needed because inputManager.isPressed() may take up to ~500ms to return the correct state
-    return;
-  }
+// Definitions for SilentRestart.h. RTC_NOINIT survives ESP.restart() but not power loss.
+RTC_NOINIT_ATTR uint32_t silentRebootMagic;
+RTC_NOINIT_ATTR uint32_t silentRebootTarget;
+constexpr uint32_t SILENT_REBOOT_MAGIC = 0xC1EAB007;
+constexpr uint32_t SILENT_REBOOT_TARGET_HOME = 0;
+constexpr uint32_t SILENT_REBOOT_TARGET_READER = 1;
 
-  // Give the user up to 1000ms to start holding the power button, and must hold for
-  // SETTINGS.getPowerButtonWakeDuration()
-  const auto start = millis();
-  bool abort = false;
-  // Subtract the current time, because inputManager only starts counting the HeldTime from the first update()
-  // This way, we remove the time we already took to reach here from the duration,
-  // assuming the button was held until now from millis()==0 (i.e. device start time).
-  const uint16_t calibration = start;
-  const uint16_t calibratedPressDuration =
-      (calibration < SETTINGS.getPowerButtonWakeDuration()) ? SETTINGS.getPowerButtonWakeDuration() - calibration : 1;
-
-  gpio.update();
-  // Needed because inputManager.isPressed() may take up to ~500ms to return the correct state
-  while (!gpio.isPressed(HalGPIO::BTN_POWER) && millis() - start < 1000) {
-    delay(10);  // only wait 10ms each iteration to not delay too much in case of short configured duration.
-    gpio.update();
-  }
-
-  t2 = millis();
-  if (gpio.isPressed(HalGPIO::BTN_POWER)) {
-    do {
-      delay(10);
-      gpio.update();
-    } while (gpio.isPressed(HalGPIO::BTN_POWER) && gpio.getHeldTime() < calibratedPressDuration);
-    abort = gpio.getHeldTime() < calibratedPressDuration;
-  } else {
-    abort = true;
-  }
-
-  if (abort) {
-    // Button released too early. Returning to sleep.
-    // IMPORTANT: Re-arm the wakeup trigger before sleeping again
-    powerManager.startDeepSleep(gpio);
-  }
+void silentRestart() {
+  silentRebootTarget = SILENT_REBOOT_TARGET_HOME;
+  silentRebootMagic = SILENT_REBOOT_MAGIC;
+  LOG_DBG("MAIN", "Silent restart (target=home)");
+  delay(50);
+  ESP.restart();
 }
+
+void silentRestartToReader() {
+  silentRebootTarget = SILENT_REBOOT_TARGET_READER;
+  silentRebootMagic = SILENT_REBOOT_MAGIC;
+  LOG_DBG("MAIN", "Silent restart (target=reader)");
+  delay(50);
+  ESP.restart();
+}
+
 void waitForPowerRelease() {
   gpio.update();
   while (gpio.isPressed(HalGPIO::BTN_POWER)) {
@@ -569,20 +549,37 @@ void setupDisplayAndFonts() {
 void setup() {
   t1 = millis();
 
+#ifdef ENABLE_SERIAL_LOG
+  // Earliest possible Serial setup. The 250 ms stall before begin() lets the
+  // USB Serial/JTAG peripheral finish power-on and lets the host complete USB
+  // enumeration before we touch the CDC state — otherwise cold boot races
+  // and the host has to be physically replugged for logs to flow. Warm reboot
+  // worked without the delay because USB was already enumerated.
+  //
+  // setTxTimeoutMs(0) makes writes non-blocking — the HWCDC TX FIFO drops
+  // bytes harmlessly if the host isn't actively draining, instead of blocking
+  // for the default 250 ms per write and chaining into a firmware hang.
+  delay(250);
+  Serial.begin(115200);
+#ifndef SIMULATOR
+  logSerial.setTxTimeoutMs(0);
+#endif
+#endif
+
   HalSystem::begin();
+
+  // Read-and-clear so a panic later in setup() doesn't loop into silent reboot.
+  // Bound the target range too — RTC_NOINIT memory is uninitialized on cold boot.
+  const bool isSilentReboot = (silentRebootMagic == SILENT_REBOOT_MAGIC);
+  const uint32_t snapshotTarget =
+      (isSilentReboot && silentRebootTarget <= SILENT_REBOOT_TARGET_READER) ? silentRebootTarget : 0;
+  silentRebootMagic = 0;
+  silentRebootTarget = 0;
+
   gpio.begin();
   powerManager.begin();
   halTiltSensor.begin();
-
-#ifdef ENABLE_SERIAL_LOG
-  if (gpio.isUsbConnected()) {
-    Serial.begin(115200);
-    const unsigned long start = millis();
-    while (!Serial && (millis() - start) < 500) {
-      delay(10);
-    }
-  }
-#endif
+  halClock.begin();
 
   LOG_INF("MAIN", "Hardware detect: %s", gpio.deviceIsX3() ? "X3" : "X4");
 
@@ -647,7 +644,11 @@ void setup() {
 
   setupDisplayAndFonts();
 
-  activityManager.goToBoot();
+  // First paint after silent reboot is HALF_REFRESH (SDK forces it after begin()'s
+  // panel reset); subsequent paints FAST.
+  if (!isSilentReboot) {
+    activityManager.goToBoot();
+  }
 
   APP_STATE.loadFromFile();
   RECENT_BOOKS.loadFromFile();
@@ -659,6 +660,13 @@ void setup() {
   } else if (HalSystem::isRebootFromPanic()) {
     // If we rebooted from a panic, go to crash report screen to show the panic info
     activityManager.goToCrashReport();
+  } else if (isSilentReboot && snapshotTarget == SILENT_REBOOT_TARGET_READER && !APP_STATE.openEpubPath.empty()) {
+    activityManager.goToReader(APP_STATE.openEpubPath);
+  } else if (isSilentReboot) {
+    // target == home (or reader with no open book): land on home — don't fall
+    // through to the sleep-wake "resume reader" logic, which fires on stale
+    // openEpubPath + lastSleepFromReader from a prior session.
+    activityManager.goHome();
   } else if (APP_STATE.openEpubPath.empty() || !APP_STATE.lastSleepFromReader ||
              mappedInputManager.isPressed(MappedInputManager::Button::Back) || APP_STATE.readerActivityLoadCount > 0) {
     // Boot to home screen if no book is open, last sleep was not from reader, back button is held, or reader activity

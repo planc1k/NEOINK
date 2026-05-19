@@ -50,7 +50,7 @@ enum class HomeMenuAction {
   Settings,
 };
 
-struct HomeMenuItem {
+struct HomeMenuEntry {
   const char* label;
   UIIcon icon;
   HomeMenuAction action;
@@ -173,8 +173,8 @@ bool ensureReusableCoverPath(RecentBook& book) {
   return true;
 }
 
-std::vector<HomeMenuItem> buildHomeMenuItems(bool hasOpdsServers, bool hasReadingStats, bool hasBookmarks) {
-  std::vector<HomeMenuItem> items = {
+std::vector<HomeMenuEntry> buildHomeMenuItems(bool hasOpdsServers, bool hasReadingStats, bool hasBookmarks) {
+  std::vector<HomeMenuEntry> items = {
       {tr(STR_BROWSE_FILES), Folder, HomeMenuAction::BrowseFiles},
       {tr(STR_MENU_RECENT_BOOKS), Recent, HomeMenuAction::RecentBooks},
   };
@@ -194,8 +194,8 @@ std::vector<HomeMenuItem> buildHomeMenuItems(bool hasOpdsServers, bool hasReadin
   return items;
 }
 
-std::vector<HomeMenuItem> buildMinimalMenuItems(bool hasOpdsServers, bool hasReadingStats, bool hasBookmarks) {
-  std::vector<HomeMenuItem> items = {
+std::vector<HomeMenuEntry> buildMinimalMenuItems(bool hasOpdsServers, bool hasReadingStats, bool hasBookmarks) {
+  std::vector<HomeMenuEntry> items = {
       {tr(STR_MENU_RECENT_BOOKS), Recent, HomeMenuAction::RecentBooks},
   };
 
@@ -211,6 +211,42 @@ std::vector<HomeMenuItem> buildMinimalMenuItems(bool hasOpdsServers, bool hasRea
 
   items.push_back({tr(STR_FILE_TRANSFER), Transfer, HomeMenuAction::FileTransfer});
   return items;
+}
+
+std::vector<HomeMenuEntry> buildSelectableHomeMenuItems(bool hasOpdsServers, bool hasReadingStats, bool hasBookmarks,
+                                                        bool includeContinueReading) {
+  auto items = buildHomeMenuItems(hasOpdsServers, hasReadingStats, hasBookmarks);
+  if (includeContinueReading) {
+    items.insert(items.begin(), {tr(STR_CONTINUE_READING), Book, HomeMenuAction::ContinueReading});
+  }
+  return items;
+}
+
+HomeMenuAction homeActionForInitialMenuItem(HomeMenuItem item) {
+  switch (item) {
+    case HomeMenuItem::FILE_BROWSER:
+      return HomeMenuAction::BrowseFiles;
+    case HomeMenuItem::RECENTS:
+      return HomeMenuAction::RecentBooks;
+    case HomeMenuItem::OPDS_BROWSER:
+      return HomeMenuAction::OpdsBrowser;
+    case HomeMenuItem::FILE_TRANSFER:
+      return HomeMenuAction::FileTransfer;
+    case HomeMenuItem::SETTINGS_MENU:
+      return HomeMenuAction::Settings;
+    case HomeMenuItem::NONE:
+    default:
+      return HomeMenuAction::ContinueReading;
+  }
+}
+
+int findMenuActionIndex(const std::vector<HomeMenuEntry>& items, HomeMenuAction action) {
+  for (int i = 0; i < static_cast<int>(items.size()); ++i) {
+    if (items[i].action == action) {
+      return i;
+    }
+  }
+  return -1;
 }
 
 bool isMinimalTheme() {
@@ -393,7 +429,7 @@ void HomeActivity::loadRecentBooks(int maxBooks) {
     }
 
     RecentBook book = storedBook;
-    if (!Storage.exists(book.path.c_str())) {
+    if (RecentBooksStore::isMissing(book)) {
       continue;
     }
 
@@ -643,6 +679,17 @@ void HomeActivity::onEnter() {
   }
   updateHighlightedBookContext();
 
+  if (initialMenuItem != HomeMenuItem::NONE) {
+    const bool includeContinueReading = metrics.homeContinueReadingInMenu && !recentBooks.empty();
+    const auto menuItems =
+        buildSelectableHomeMenuItems(hasOpdsServers, hasReadingStats, hasBookmarks, includeContinueReading);
+    const int menuIndex = findMenuActionIndex(menuItems, homeActionForInitialMenuItem(initialMenuItem));
+    if (menuIndex >= 0) {
+      selectorIndex = getHomeMenuSelectionOffset(recentBooks) + menuIndex;
+      updateHighlightedBookContext();
+    }
+  }
+
   if (isCarouselTheme && hasValidCarouselDiskCache(recentBooks, renderer)) {
     preRenderCarouselFrames(false);
   }
@@ -697,37 +744,30 @@ void HomeActivity::onExit() {
 }
 
 bool HomeActivity::storeCoverBuffer() {
-  uint8_t* frameBuffer = renderer.getFrameBuffer();
-  if (!frameBuffer) {
-    return false;
-  }
-
-  // Free any existing buffer first
+  // render() must have already set the cover rect; without it we'd be back to
+  // cloning the whole framebuffer.
+  if (coverRectW <= 0 || coverRectH <= 0) return false;
   freeCoverBuffer();
-
-  const size_t bufferSize = renderer.getBufferSize();
-  coverBuffer = static_cast<uint8_t*>(malloc(bufferSize));
+  const size_t needed = renderer.getRegionByteSize(coverRectX, coverRectY, coverRectW, coverRectH);
+  if (needed == 0) return false;
+  coverBuffer = static_cast<uint8_t*>(malloc(needed));
   if (!coverBuffer) {
+    LOG_ERR("HOME", "OOM: cover buffer (%u bytes)", (unsigned)needed);
     return false;
   }
-
-  memcpy(coverBuffer, frameBuffer, bufferSize);
+  coverBufferSize = needed;
+  if (!renderer.copyRegionToBuffer(coverRectX, coverRectY, coverRectW, coverRectH, coverBuffer, coverBufferSize)) {
+    free(coverBuffer);
+    coverBuffer = nullptr;
+    coverBufferSize = 0;
+    return false;
+  }
   return true;
 }
 
 bool HomeActivity::restoreCoverBuffer() {
-  if (!coverBuffer) {
-    return false;
-  }
-
-  uint8_t* frameBuffer = renderer.getFrameBuffer();
-  if (!frameBuffer) {
-    return false;
-  }
-
-  const size_t bufferSize = renderer.getBufferSize();
-  memcpy(frameBuffer, coverBuffer, bufferSize);
-  return true;
+  if (!coverBuffer || coverRectW <= 0 || coverRectH <= 0) return false;
+  return renderer.copyBufferToRegion(coverRectX, coverRectY, coverRectW, coverRectH, coverBuffer, coverBufferSize);
 }
 
 void HomeActivity::freeCoverBuffer() {
@@ -735,6 +775,7 @@ void HomeActivity::freeCoverBuffer() {
     free(coverBuffer);
     coverBuffer = nullptr;
   }
+  coverBufferSize = 0;
   coverBufferStored = false;
 }
 
@@ -1282,10 +1323,8 @@ void HomeActivity::loop() {
       return;
     }
 
-    auto menuItems = buildHomeMenuItems(hasOpdsServers, hasReadingStats, hasBookmarks);
-    if (metrics.homeContinueReadingInMenu && !recentBooks.empty()) {
-      menuItems.insert(menuItems.begin(), {tr(STR_CONTINUE_READING), Book, HomeMenuAction::ContinueReading});
-    }
+    auto menuItems = buildSelectableHomeMenuItems(hasOpdsServers, hasReadingStats, hasBookmarks,
+                                                  metrics.homeContinueReadingInMenu && !recentBooks.empty());
     const int menuSelectedIndex = selectorIndex - getHomeMenuSelectionOffset(recentBooks);
     if (menuSelectedIndex < 0 || menuSelectedIndex >= static_cast<int>(menuItems.size())) {
       return;
@@ -1426,21 +1465,25 @@ void HomeActivity::render(RenderLock&&) {
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding},
                  metrics.homeContinueReadingInMenu && !recentBooks.empty() ? recentBooks[0].title.c_str() : nullptr);
 
+  // Record the tile rect so storeCoverBuffer (called from the theme) knows
+  // which sub-region of the framebuffer to snapshot. ~16 KB in Portrait
+  // instead of the 48 KB full framebuffer the previous bind captured.
+  coverRectX = 0;
+  coverRectY = metrics.homeTopPadding;
+  coverRectW = pageWidth;
+  coverRectH = metrics.homeCoverTileHeight;
+
   GUI.drawRecentBookCover(renderer, Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight},
                           recentBooks, selectorIndex, coverRendered, coverBufferStored, bufferRestored,
                           std::bind(&HomeActivity::storeCoverBuffer, this),
                           hasAnyBookStats(currentBookStats) ? &currentBookStats : nullptr, currentBookProgressPercent);
 
-  auto menuItems = buildHomeMenuItems(hasOpdsServers, hasReadingStats, hasBookmarks);
+  auto menuItems = buildSelectableHomeMenuItems(hasOpdsServers, hasReadingStats, hasBookmarks,
+                                                metrics.homeContinueReadingInMenu && !recentBooks.empty());
 
   const int menuStartY = metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset;
   const int menuEndY = pageHeight - metrics.buttonHintsHeight;
   const int menuHeight = std::max(0, menuEndY - menuStartY);
-
-  if (metrics.homeContinueReadingInMenu && !recentBooks.empty()) {
-    // Insert Continue Reading at the top if enabled in theme
-    menuItems.insert(menuItems.begin(), {tr(STR_CONTINUE_READING), Book, HomeMenuAction::ContinueReading});
-  }
 
   GUI.drawButtonMenu(
       renderer, Rect{0, menuStartY, pageWidth, menuHeight}, static_cast<int>(menuItems.size()),
