@@ -58,7 +58,7 @@ jobs:
           echo "RELEASE_VERSION=$VERSION" >> "$GITHUB_ENV"
           sed -i "s/crossink_version = .*/crossink_version = $VERSION/" platformio.ini
 
-      - name: Build CrossPoint
+      - name: Build CrossInk
         env:
           CROSSPOINT_RELEASE_VERSION: ${{ env.RELEASE_VERSION }}
         run: pio run -e teensy -e tiny -e xlarge -e no_emoji
