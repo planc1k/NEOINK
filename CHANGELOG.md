@@ -26,6 +26,7 @@
 ### Changed
 - Moved the full-time page-as-sleep behavior into a new `Sleep Screen > Quick Resume` option, which also keeps `Quick Resume on Timeout` on, and renamed the timeout-only toggle.
 - Moved the in-reader Footnotes shortcut above Select Chapter when footnotes are available on the current page.
+- Made book titles in the file browser's long-press action menu smaller and allowed them to wrap to two lines so longer book names are easier to read.
 - Reduced unnecessary screen refresh and list-clearing work during OPDS browsing and SD font downloads so transfers spend more time downloading and less time repainting progress.
 
 ## [v1.2.11.1] - 2026-05-15
