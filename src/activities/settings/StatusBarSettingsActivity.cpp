@@ -209,8 +209,8 @@ void StatusBarSettingsActivity::render(RenderLock&&) {
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
-  
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_TOGGLE), tr(STR_DIR_UP), tr(STR_DIR_DOWN));  
+
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_TOGGLE), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
 
   int verticalPreviewPadding = 50;
   int verticalPreviewTextPadding = 40;
@@ -262,7 +262,7 @@ void StatusBarSettingsActivity::render(RenderLock&&) {
   } else if (SETTINGS.statusBarTitle == CrossPointSettings::STATUS_BAR_TITLE::CHAPTER_TITLE) {
     title = tr(STR_EXAMPLE_CHAPTER);
   }
-  
+
   if (isLandscapeCw || isLandscapeCcw || isInverted) {
     verticalPreviewPadding = 0;
   }
