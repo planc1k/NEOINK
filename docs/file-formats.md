@@ -8,17 +8,16 @@ nav_order: 8
 ## `global_stats.bin`
 
 `/.crosspoint/global_stats.bin` stores this device's all-time reading counters.
-If `/.crosspoint/synced_stats/` already exists, saves also mirror the same
-counters to `/.crosspoint/synced_stats/device_<mac>.bin`, where `<mac>` is the
-device's hardware MAC address without separators. The reader does not create
-this folder on its own.
+This is the source of truth for the current reader.
 
-The `/.crosspoint/synced_stats/` directory is designed for peer-to-peer folder
-sync: each device owns one contribution file, and display-only Reading Stats
-views add every other device's contribution to this device's local
-`global_stats.bin`. This device's own contribution file is skipped while
-aggregating so mirroring the folder back to the same device does not double
-count its local stats.
+The `/.crosspoint/synced_stats/` directory stores snapshots received from other
+readers. Display-only Reading Stats views add valid peer files from that folder
+to this device's local `global_stats.bin`. A stale file matching this device's
+own `device_<mac>.bin` name is skipped while aggregating so local stats are not
+counted twice.
+
+For user-facing sync behavior, folder layout, and manual cleanup instructions,
+see [Reading Stats Sync](./reading-stats-sync.md).
 
 ### Version 2
 

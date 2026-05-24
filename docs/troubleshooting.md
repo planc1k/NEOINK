@@ -192,6 +192,8 @@ Moving or renaming a book can create a new cache location because CrossInk keys 
 
 Newer firmware can sometimes read older stats, but older firmware may not understand newer stats files. Opening a book on the older firmware can save over the newer stats format.
 
+For nearby stats sync behavior and manual cleanup of `/.crosspoint/synced_stats/`, see [Reading Stats Sync](./reading-stats-sync.md).
+
 ## Updates
 
 ### OTA update check fails
