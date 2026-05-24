@@ -57,6 +57,7 @@ struct FootnoteResult {
 struct BookmarkResult {
   uint16_t spineIndex = 0;
   float progress = 0.0f;
+  uint16_t paragraphIndex = UINT16_MAX;
 };
 
 struct FileBrowserActionResult {

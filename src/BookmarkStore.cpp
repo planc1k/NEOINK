@@ -10,8 +10,9 @@
 
 namespace {
 constexpr uint8_t LEGACY_VERSION = 2;
-constexpr uint8_t VERSION = 3;
-// Stored count is uint16_t in v3, but we keep an in-memory safety cap for ESP32-C3 RAM.
+constexpr uint8_t COUNT_U16_VERSION = 3;
+constexpr uint8_t VERSION = 4;
+// Stored count is uint16_t in v3+, but we keep an in-memory safety cap for ESP32-C3 RAM.
 constexpr uint16_t MAX_BOOKMARKS = 1024;
 constexpr size_t INITIAL_BOOKMARK_RESERVE = 8;
 constexpr char BOOKMARKS_DIR[] = "/.crosspoint/bookmarks";
@@ -24,7 +25,7 @@ bool readBookmarkCount(FsFile& file, const uint8_t version, uint16_t& count) {
     return true;
   }
 
-  if (version == VERSION) {
+  if (version == COUNT_U16_VERSION || version == VERSION) {
     serialization::readPod(file, count);
     return true;
   }
@@ -73,7 +74,7 @@ void BookmarkStore::unload() {
 }
 
 BookmarkStore::AddResult BookmarkStore::addBookmark(uint16_t spineIndex, float progress, int pageCount,
-                                                    const char* chapterTitle) {
+                                                    const char* chapterTitle, uint16_t paragraphIndex) {
   if (pageCount > 0) {
     const float pageSlice = 1.0f / static_cast<float>(pageCount);
     const float pageStart = progress;
@@ -93,6 +94,7 @@ BookmarkStore::AddResult BookmarkStore::addBookmark(uint16_t spineIndex, float p
   bm.progress = progress;
   bm.timestamp = 0;  // ESP32-C3 has no battery-backed RTC; reserved for future use
   snprintf(bm.chapterTitle, sizeof(bm.chapterTitle), "%s", chapterTitle ? chapterTitle : "");
+  bm.paragraphIndex = paragraphIndex;
 
   bookmarks.push_back(bm);
   dirty = true;
@@ -167,7 +169,7 @@ bool BookmarkStore::readFromFile() {
 
   uint8_t version;
   serialization::readPod(f, version);
-  if (version != LEGACY_VERSION && version != VERSION) {
+  if (version != LEGACY_VERSION && version != COUNT_U16_VERSION && version != VERSION) {
     LOG_ERR("BKS", "Unknown bookmark file version: %u", version);
     f.close();
     return false;
@@ -225,11 +227,21 @@ bool BookmarkStore::readFromFile() {
       f.close();
       return false;
     }
+    if (version >= VERSION) {
+      if (f.available() < static_cast<int>(sizeof(bm.paragraphIndex))) {
+        LOG_ERR("BKS", "Bookmark file truncated at paragraphIndex, record %u", i);
+        f.close();
+        return false;
+      }
+      serialization::readPod(f, bm.paragraphIndex);
+    } else {
+      bm.paragraphIndex = UINT16_MAX;
+    }
     bookmarks.push_back(bm);
   }
 
   f.close();
-  if (version == LEGACY_VERSION) {
+  if (version != VERSION) {
     dirty = true;
     saveToFile();
     LOG_DBG("BKS", "Migrated bookmark file to version %u", VERSION);
@@ -259,6 +271,7 @@ bool BookmarkStore::writeToFile() const {
     serialization::writePod(f, bm.progress);
     serialization::writePod(f, bm.timestamp);
     f.write(reinterpret_cast<const uint8_t*>(bm.chapterTitle), sizeof(bm.chapterTitle));
+    serialization::writePod(f, bm.paragraphIndex);
   }
 
   f.close();
@@ -298,7 +311,7 @@ bool BookmarkStore::getAllBookmarkedBooks(std::vector<BookmarkedBookEntry>& out)
     }
     uint8_t version;
     serialization::readPod(f, version);
-    if (version != LEGACY_VERSION && version != VERSION) {
+    if (version != LEGACY_VERSION && version != COUNT_U16_VERSION && version != VERSION) {
       LOG_DBG("BKS", "Skipping bookmark file with unknown version: %s", name.c_str());
       f.close();
       continue;

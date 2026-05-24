@@ -6,6 +6,7 @@
 - Added an adjustable reader line-height setting with percent-based spacing for EPUB and TXT books.
 - Added nearby Reading Stats sync between CrossInk readers using direct ESP-NOW device-to-device messages.
 - Auto Page Turn interval now remembers the last selected interval per book when it is turned on again.
+- EPUB bookmarks now save a paragraph anchor when available, so they reopen closer to the original text after font, margin, or spacing changes.
 
 ### Fixed
 - Fixed Lyra Carousel popup rendering so loading, indexing, and sleep-entry popups appear in the right place again.

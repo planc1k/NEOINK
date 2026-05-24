@@ -12,6 +12,8 @@ struct Bookmark {
   float progress;
   uint32_t timestamp;
   char chapterTitle[BOOKMARK_CHAPTER_TITLE_MAX];
+  // Optional 1-based paragraph anchor from the section cache. UINT16_MAX means unavailable.
+  uint16_t paragraphIndex = UINT16_MAX;
 };
 
 struct BookmarkedBookEntry {
@@ -37,7 +39,8 @@ class BookmarkStore {
                    const std::string& bookType);
   void unload();
 
-  AddResult addBookmark(uint16_t spineIndex, float progress, int pageCount, const char* chapterTitle);
+  AddResult addBookmark(uint16_t spineIndex, float progress, int pageCount, const char* chapterTitle,
+                        uint16_t paragraphIndex = UINT16_MAX);
   void removeBookmarkForPage(uint16_t spineIndex, float pageProgress, int pageCount);
   bool removeBookmarkAt(size_t index);
   bool hasBookmarkForPage(uint16_t spineIndex, float pageProgress, int pageCount);

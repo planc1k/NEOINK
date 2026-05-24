@@ -309,12 +309,14 @@ void EpubReaderActivity::onEnter() {
     // Resume from a bookmark selected on the Home screen
     currentSpineIndex = APP_STATE.pendingBookmarkSpine;
     pendingSpineProgress = APP_STATE.pendingBookmarkProgress;
+    pendingBookmarkParagraphIndex = APP_STATE.pendingBookmarkParagraphIndex;
     pendingPercentJump = true;
     cachedSpineIndex = currentSpineIndex;
 
     // Clear the pending jump
     APP_STATE.pendingBookmarkSpine = UINT16_MAX;
     APP_STATE.pendingBookmarkProgress = -1.0f;
+    APP_STATE.pendingBookmarkParagraphIndex = UINT16_MAX;
     APP_STATE.saveToFile();
   } else {
     EpubReaderUtils::Progress progress;
@@ -1029,7 +1031,11 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           titleStr = epub->getTocItem(tocIndex).title;
           chapterTitle = titleStr.c_str();
         }
-        const auto addResult = BOOKMARKS.addBookmark(spine, progress, section->pageCount, chapterTitle);
+        uint16_t paragraphIndex = UINT16_MAX;
+        if (const auto pIdx = section->getParagraphIndexForPage(static_cast<uint16_t>(section->currentPage))) {
+          paragraphIndex = *pIdx;
+        }
+        const auto addResult = BOOKMARKS.addBookmark(spine, progress, section->pageCount, chapterTitle, paragraphIndex);
         bookmarkFeedbackType = (addResult == BookmarkStore::AddResult::Added) ? BookmarkFeedbackType::Added
                                                                               : BookmarkFeedbackType::LimitReached;
       }
@@ -1047,6 +1053,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
               RenderLock lock(*this);
               currentSpineIndex = bm.spineIndex;
               pendingSpineProgress = bm.progress;
+              pendingBookmarkParagraphIndex = bm.paragraphIndex;
               pendingPercentJump = true;
               section.reset();
             }
@@ -1595,6 +1602,16 @@ void EpubReaderActivity::render(RenderLock&& lock) {
         newPage = section->pageCount - 1;
       }
       section->currentPage = newPage;
+      if (pendingBookmarkParagraphIndex != UINT16_MAX) {
+        if (const auto paragraphPage = section->getPageForParagraphIndex(pendingBookmarkParagraphIndex)) {
+          section->currentPage = *paragraphPage;
+          LOG_DBG("ERS", "Resolved bookmark paragraph %u to page %u", pendingBookmarkParagraphIndex, *paragraphPage);
+        } else {
+          LOG_DBG("ERS", "Bookmark paragraph %u not found; using saved chapter progress",
+                  pendingBookmarkParagraphIndex);
+        }
+      }
+      pendingBookmarkParagraphIndex = UINT16_MAX;
       pendingPercentJump = false;
     }
 

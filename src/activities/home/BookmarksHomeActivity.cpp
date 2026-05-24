@@ -148,6 +148,7 @@ void BookmarksHomeActivity::openBookmarkList(int bookIndex) {
           if (bm) {
             APP_STATE.pendingBookmarkSpine = bm->spineIndex;
             APP_STATE.pendingBookmarkProgress = bm->progress;
+            APP_STATE.pendingBookmarkParagraphIndex = bm->paragraphIndex;
             APP_STATE.saveToFile();
             onSelectBook(entry.bookPath);
           } else {

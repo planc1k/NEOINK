@@ -106,7 +106,8 @@ void EpubReaderBookmarkListActivity::loop() {
       return;
     }
     if (!bookmarks.empty() && selectedIndex >= 0 && selectedIndex < static_cast<int>(bookmarks.size())) {
-      setResult(BookmarkResult{bookmarks[selectedIndex].spineIndex, bookmarks[selectedIndex].progress});
+      setResult(BookmarkResult{bookmarks[selectedIndex].spineIndex, bookmarks[selectedIndex].progress,
+                               bookmarks[selectedIndex].paragraphIndex});
       finish();
     }
     return;
