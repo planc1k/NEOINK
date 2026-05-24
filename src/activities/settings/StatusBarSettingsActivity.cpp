@@ -267,6 +267,10 @@ void StatusBarSettingsActivity::render(RenderLock&&) {
     verticalPreviewPadding = 0;
   }
 
+  if (isLandscapeCw || isLandscapeCcw || isInverted) {
+    verticalPreviewPadding = 0;
+  }
+
   GUI.drawStatusBar(renderer, 75, 8, 32, title, verticalPreviewPadding);
 
   renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding,
