@@ -20,6 +20,7 @@
 - Free the active SD-card reader font before opening OPDS catalogs so WiFi/feed parsing has more memory available.
 - Fixed Auto Page Turn so each book remembers the last selected interval when it is turned on again.
 - Fixed EPUB first-open CSS caching so clean and migrated caches are less likely to build unstyled section layouts.
+- Show a loading popup immediately after selecting a book, before EPUB indexing or cache loading begins.
 
 ### Changed
 

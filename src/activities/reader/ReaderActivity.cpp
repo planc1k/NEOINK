@@ -2,6 +2,7 @@
 
 #include <FsHelpers.h>
 #include <HalStorage.h>
+#include <I18n.h>
 
 #include "CrossPointSettings.h"
 #include "Epub.h"
@@ -13,6 +14,7 @@
 #include "XtcReaderActivity.h"
 #include "activities/util/BmpViewerActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
+#include "components/UITheme.h"
 
 bool ReaderActivity::isXtcFile(const std::string& path) { return FsHelpers::hasXtcExtension(path); }
 
@@ -107,6 +109,8 @@ void ReaderActivity::onEnter() {
     goToLibrary();  // Start from root when entering via Browse
     return;
   }
+
+  GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
 
   sdFontSystem.ensureLoaded(renderer);
 
