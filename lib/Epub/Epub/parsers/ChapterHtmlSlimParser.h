@@ -64,6 +64,7 @@ class ChapterHtmlSlimParser {
   int imageCounter = 0;
   bool lowMemoryImageFallback = false;
   bool lowMemoryAbort = false;
+  bool attemptedTextLayoutFontCacheRelease = false;
 
   // Style tracking (replaces depth-based approach)
   struct StyleStackEntry {

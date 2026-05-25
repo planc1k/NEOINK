@@ -112,9 +112,22 @@ bool ChapterHtmlSlimParser::shouldAbortForLowMemory(const char* stage) {
     return true;
   }
 
-  const auto heap = MemoryBudget::snapshot();
+  auto heap = MemoryBudget::snapshot();
   if (heap.freeHeap >= MIN_FREE_HEAP_FOR_TEXT_LAYOUT && heap.maxAllocHeap >= MIN_MAX_ALLOC_FOR_TEXT_LAYOUT) {
     return false;
+  }
+
+  if (!attemptedTextLayoutFontCacheRelease) {
+    attemptedTextLayoutFontCacheRelease = true;
+    if (renderer.releaseSdCardFontForLowMemory(fontId)) {
+      const auto afterRelease = MemoryBudget::snapshot();
+      LOG_DBG("EHP", "Released SD font caches before %s: free=%u->%u maxAlloc=%u->%u", stage, heap.freeHeap,
+              afterRelease.freeHeap, heap.maxAllocHeap, afterRelease.maxAllocHeap);
+      heap = afterRelease;
+      if (heap.freeHeap >= MIN_FREE_HEAP_FOR_TEXT_LAYOUT && heap.maxAllocHeap >= MIN_MAX_ALLOC_FOR_TEXT_LAYOUT) {
+        return false;
+      }
+    }
   }
 
   LOG_ERR("EHP", "Low heap during %s (%u free, %u max alloc); aborting section build", stage, heap.freeHeap,
@@ -346,7 +359,19 @@ void ChapterHtmlSlimParser::emitBufferedTableAsParagraphs(BufferedTable& table) 
       wordsExtractedInBlock = 0;
       makePages();
       currentTextBlock.reset();
+      pendingFootnotes.clear();
+      if (lowMemoryAbort) {
+        break;
+      }
     }
+    std::vector<BufferedTableCell>().swap(row.cells);
+    if (lowMemoryAbort) {
+      break;
+    }
+  }
+  std::vector<BufferedTableRow>().swap(table.rows);
+  if (lowMemoryAbort) {
+    return;
   }
 
   if (table.blockStyle.marginBottom > 0) {
@@ -384,6 +409,17 @@ void ChapterHtmlSlimParser::emitBufferedTableAsFragments(BufferedTable& table) {
   const uint16_t lineHeight = renderer.getLineHeight(fontId) * lineCompression;
   std::vector<PreparedSegment> preparedSegments;
   preparedSegments.reserve(table.rows.size());
+
+  auto releasePreparedSegments = [&preparedSegments]() {
+    for (auto& segment : preparedSegments) {
+      for (auto& row : segment.rows) {
+        std::vector<TableFragmentCell>().swap(row.fragmentRow.cells);
+        std::vector<FootnoteEntry>().swap(row.footnotes);
+      }
+      std::vector<PreparedRow>().swap(segment.rows);
+    }
+    std::vector<PreparedSegment>().swap(preparedSegments);
+  };
 
   auto prepareRow = [&](const BufferedTableRow& row, const uint8_t columnCount, PreparedSegment& segment) -> bool {
     const uint16_t baseColumnWidth = columnCount > 0 ? tableWidth / columnCount : 0;
@@ -451,6 +487,7 @@ void ChapterHtmlSlimParser::emitBufferedTableAsFragments(BufferedTable& table) {
 
     if (rowHasMergedCells && !isFullWidthSingleCellRow) {
       LOG_DBG("EHP", "Table layout fallback: unsupported colspan structure");
+      releasePreparedSegments();
       emitBufferedTableAsParagraphs(table);
       return;
     }
@@ -463,6 +500,7 @@ void ChapterHtmlSlimParser::emitBufferedTableAsFragments(BufferedTable& table) {
     }
 
     if (!prepareRow(row, segmentColumnCount, preparedSegments.back())) {
+      releasePreparedSegments();
       emitBufferedTableAsParagraphs(table);
       return;
     }

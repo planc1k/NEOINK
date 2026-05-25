@@ -22,6 +22,7 @@
 - Fixed EPUB first-open CSS caching so clean and migrated caches are less likely to build unstyled section layouts.
 - Show a loading popup immediately after selecting a book, before EPUB indexing or cache loading begins.
 - Preserve usable partial EPUB CSS rules when low memory stops stylesheet parsing, while retrying a complete CSS cache rebuild on later opens.
+- Fixed EPUB table fallback rendering so temporary table-layout data is released before low-memory text layout aborts.
 
 ### Changed
 
