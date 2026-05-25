@@ -19,6 +19,7 @@
 - Fixed OPDS feed errors so low-memory parser-buffer failures show the specific memory message instead of the generic parse error.
 - Free the active SD-card reader font before opening OPDS catalogs so WiFi/feed parsing has more memory available.
 - Fixed Auto Page Turn so each book remembers the last selected interval when it is turned on again.
+- Fixed EPUB first-open CSS caching so clean and migrated caches are less likely to build unstyled section layouts.
 
 ### Changed
 
