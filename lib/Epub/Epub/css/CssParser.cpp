@@ -896,20 +896,30 @@ CssStyle CssParser::parseInlineStyle(const std::string& styleValue) { return par
 
 // Cache file name (magic + version identify Crossink-owned CSS rule caches)
 constexpr char rulesCache[] = "/css_rules.cache";
+constexpr char rulesCacheTmp[] = "/css_rules.cache.tmp";
+constexpr char rulesCacheBackup[] = "/css_rules.cache.bak";
 
 bool CssParser::hasCache() const { return Storage.exists((cachePath + rulesCache).c_str()); }
 
 void CssParser::deleteCache() const {
   if (hasCache()) Storage.remove((cachePath + rulesCache).c_str());
+  Storage.remove((cachePath + rulesCacheTmp).c_str());
+  Storage.remove((cachePath + rulesCacheBackup).c_str());
 }
 
-bool CssParser::saveToCache() const {
+bool CssParser::saveToCache(const bool complete) const {
   if (cachePath.empty()) {
     return false;
   }
 
+  const std::string finalPath = cachePath + rulesCache;
+  const std::string tmpPath = cachePath + rulesCacheTmp;
+  const std::string backupPath = cachePath + rulesCacheBackup;
+
+  Storage.remove(tmpPath.c_str());
+
   FsFile file;
-  if (!Storage.openFileForWrite("CSS", cachePath + rulesCache, file)) {
+  if (!Storage.openFileForWrite("CSS", tmpPath, file)) {
     return false;
   }
 
@@ -917,6 +927,7 @@ bool CssParser::saveToCache() const {
   const uint32_t magic = CssParser::CSS_CACHE_MAGIC;
   file.write(reinterpret_cast<const uint8_t*>(&magic), sizeof(magic));
   file.write(CssParser::CSS_CACHE_VERSION);
+  file.write(static_cast<uint8_t>(complete ? 0 : CSS_CACHE_FLAG_PARTIAL));
 
   // Write rule count
   const auto ruleCount = static_cast<uint16_t>(rulesBySelector_.size());
@@ -987,7 +998,31 @@ bool CssParser::saveToCache() const {
     writeStyle(rule.style);
   }
 
-  LOG_DBG("CSS", "Saved %u rules + %u descendant rules to cache", ruleCount, descendantCount);
+  file.close();
+
+  Storage.remove(backupPath.c_str());
+  const bool hadExistingCache = Storage.exists(finalPath.c_str());
+  if (hadExistingCache && !Storage.rename(finalPath.c_str(), backupPath.c_str())) {
+    LOG_ERR("CSS", "Failed to backup existing CSS cache before replace");
+    Storage.remove(tmpPath.c_str());
+    return false;
+  }
+
+  if (!Storage.rename(tmpPath.c_str(), finalPath.c_str())) {
+    LOG_ERR("CSS", "Failed to promote temporary CSS cache");
+    Storage.remove(tmpPath.c_str());
+    if (hadExistingCache) {
+      Storage.rename(backupPath.c_str(), finalPath.c_str());
+    }
+    return false;
+  }
+
+  if (hadExistingCache) {
+    Storage.remove(backupPath.c_str());
+  }
+
+  LOG_DBG("CSS", "Saved %u rules + %u descendant rules to %s cache", ruleCount, descendantCount,
+          complete ? "complete" : "partial");
   return true;
 }
 
@@ -1011,6 +1046,7 @@ bool CssParser::loadFromCache() {
 
   // Clear existing rules
   clear();
+  cachePartial_ = false;
 
   // Read and verify header
   uint32_t magic = 0;
@@ -1030,6 +1066,21 @@ bool CssParser::loadFromCache() {
     Storage.remove((cachePath + rulesCache).c_str());
     return false;
   }
+
+  uint8_t flags = 0;
+  if (file.read(&flags, 1) != 1) {
+    LOG_DBG("CSS", "Cache flags missing, removing stale cache for rebuild");
+    file.close();
+    Storage.remove((cachePath + rulesCache).c_str());
+    return false;
+  }
+  if ((flags & ~CSS_CACHE_FLAG_PARTIAL) != 0) {
+    LOG_DBG("CSS", "Unsupported CSS cache flags 0x%02X, removing stale cache for rebuild", flags);
+    file.close();
+    Storage.remove((cachePath + rulesCache).c_str());
+    return false;
+  }
+  cachePartial_ = (flags & CSS_CACHE_FLAG_PARTIAL) != 0;
 
   // Read rule count
   uint16_t ruleCount = 0;
@@ -1187,6 +1238,7 @@ bool CssParser::loadFromCache() {
     }
   }
 
-  LOG_DBG("CSS", "Loaded %zu rules + %u descendant rules from cache", rulesBySelector_.size(), descendantCount);
+  LOG_DBG("CSS", "Loaded %zu rules + %u descendant rules from %s cache", rulesBySelector_.size(), descendantCount,
+          cachePartial_ ? "partial" : "complete");
   return true;
 }

@@ -45,7 +45,7 @@ class CssParser {
  public:
   // Bump when CSS cache format or rules change; section caches are invalidated when this changes
   static constexpr uint32_t CSS_CACHE_MAGIC = 0x435843FF;  // bytes: 0xFF, "CXC"
-  static constexpr uint8_t CSS_CACHE_VERSION = 8;
+  static constexpr uint8_t CSS_CACHE_VERSION = 9;
 
   static constexpr size_t MAX_DESCENDANT_RULES = 100;
 
@@ -86,7 +86,7 @@ class CssParser {
   /**
    * Check if any rules have been loaded
    */
-  [[nodiscard]] bool empty() const { return rulesBySelector_.empty(); }
+  [[nodiscard]] bool empty() const { return rulesBySelector_.empty() && descendantRules_.empty(); }
 
   /**
    * Get count of loaded rule sets
@@ -102,6 +102,7 @@ class CssParser {
     // post-index cleanup behavior callers relied on.
     decltype(rulesBySelector_){}.swap(rulesBySelector_);
     decltype(descendantRules_){}.swap(descendantRules_);
+    cachePartial_ = false;
   }
 
   /**
@@ -116,9 +117,10 @@ class CssParser {
 
   /**
    * Save parsed CSS rules to a cache file.
+   * @param complete false when the cache contains only rules parsed before a safe low-memory stop
    * @return true if cache was written successfully
    */
-  bool saveToCache() const;
+  bool saveToCache(bool complete = true) const;
 
   /**
    * Load CSS rules from a cache file.
@@ -127,7 +129,14 @@ class CssParser {
    */
   bool loadFromCache();
 
+  /**
+   * True when the last loaded/saved cache is a usable but incomplete CSS parse.
+   */
+  [[nodiscard]] bool isCachePartial() const { return cachePartial_; }
+
  private:
+  static constexpr uint8_t CSS_CACHE_FLAG_PARTIAL = 1 << 0;
+
   struct DescendantRule {
     std::string ancestorSelector;  // e.g. "div", ".chapter", "section.body"
     std::string subjectSelector;   // e.g. "p", ".indent", "p.indent"
@@ -140,6 +149,7 @@ class CssParser {
   std::vector<DescendantRule> descendantRules_;
 
   std::string cachePath;
+  bool cachePartial_ = false;
 
   const CssStyle* findRule(const std::string& key) const;
   [[nodiscard]] bool ensureRuleCapacity();

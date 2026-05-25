@@ -279,9 +279,9 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
       const auto cssHeapBefore = MemoryBudget::snapshot();
       const bool cssLoaded = cssParser->loadFromCache();
       const auto cssHeapAfter = MemoryBudget::snapshot();
-      LOG_DBG("SCT", "CSS cache load: ok=%u rules=%u free=%u->%u delta=%d maxAlloc=%u->%u delta=%d",
-              cssLoaded ? 1U : 0U, static_cast<unsigned>(cssParser->ruleCount()), cssHeapBefore.freeHeap,
-              cssHeapAfter.freeHeap,
+      LOG_DBG("SCT", "CSS cache load: ok=%u partial=%u rules=%u free=%u->%u delta=%d maxAlloc=%u->%u delta=%d",
+              cssLoaded ? 1U : 0U, cssParser->isCachePartial() ? 1U : 0U, static_cast<unsigned>(cssParser->ruleCount()),
+              cssHeapBefore.freeHeap, cssHeapAfter.freeHeap,
               static_cast<int32_t>(cssHeapAfter.freeHeap) - static_cast<int32_t>(cssHeapBefore.freeHeap),
               cssHeapBefore.maxAllocHeap, cssHeapAfter.maxAllocHeap,
               static_cast<int32_t>(cssHeapAfter.maxAllocHeap) - static_cast<int32_t>(cssHeapBefore.maxAllocHeap));

@@ -479,6 +479,10 @@ if (parsedSize != fileSize) {
 
 ## `css_rules.cache`
 
+### Version 9
+
+Adds one cache-flags byte after the version byte. Bit 0 marks a cache as partial: the parser stopped safely before the end of the stylesheet, usually because heap was too fragmented or low to grow the rule table, but the rules already parsed are valid and may be used for section layout. Partial caches are reusable as a fallback and may be replaced by a later complete rebuild.
+
 ### Version 8
 
 Adds a Crossink-owned cache magic before the version byte so cached EPUB CSS rules written by upstream CrossPoint or other forks are rejected and rebuilt before section caches are regenerated.
