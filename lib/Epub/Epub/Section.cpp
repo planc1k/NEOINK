@@ -293,13 +293,26 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
     }
   }
 
+  // Collect TOC anchors for this spine so the parser can insert page breaks at chapter boundaries
+  std::vector<std::string> tocAnchors;
+  const int startTocIndex = epub->getTocIndexForSpineIndex(spineIndex);
+  if (startTocIndex >= 0) {
+    for (int i = startTocIndex; i < epub->getTocItemsCount(); i++) {
+      auto entry = epub->getTocItem(i);
+      if (entry.spineIndex != spineIndex) break;
+      if (!entry.anchor.empty()) {
+        tocAnchors.push_back(std::move(entry.anchor));
+      }
+    }
+  }
+
   ChapterHtmlSlimParser visitor(
       epub, tmpHtmlPath, renderer, fontId, lineCompression, extraParagraphSpacing, forceParagraphIndents,
       paragraphAlignment, viewportWidth, viewportHeight, hyphenationEnabled, bionicReadingEnabled, guideReadingEnabled,
       [this, &lut](std::unique_ptr<Page> page, const uint16_t paragraphIndex, const uint16_t listItemIndex) {
         lut.push_back({this->onPageComplete(std::move(page)), paragraphIndex, listItemIndex});
       },
-      embeddedStyle, contentBase, imageBasePath, imageRendering, popupFn, cssParser);
+      embeddedStyle, contentBase, imageBasePath, imageRendering, std::move(tocAnchors), popupFn, cssParser);
   Hyphenator::setPreferredLanguage(epub->getLanguage());
   LOG_DBG("SCT", "Parser start: spine=%d free=%u maxAlloc=%u", spineIndex, ESP.getFreeHeap(), ESP.getMaxAllocHeap());
   success = visitor.parseAndBuildPages();

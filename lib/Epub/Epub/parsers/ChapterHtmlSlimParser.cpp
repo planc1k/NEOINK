@@ -167,6 +167,26 @@ bool ChapterHtmlSlimParser::startNewPage(const char* reason) {
   return true;
 }
 
+void ChapterHtmlSlimParser::flushPendingAnchor() {
+  if (pendingAnchorId.empty()) return;
+
+  // If the pending anchor is a TOC chapter boundary, force a page break after the previous
+  // block is flushed so the chapter starts on a fresh page.
+  if (std::find(tocAnchors.begin(), tocAnchors.end(), pendingAnchorId) != tocAnchors.end()) {
+    if (currentPage && !currentPage->elements.empty()) {
+      completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
+      completedPageCount++;
+      if (!startNewPage("TOC anchor page break")) {
+        return;
+      }
+    }
+  }
+
+  // Record deferred anchor after previous block is flushed (and any TOC page break)
+  anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
+  pendingAnchorId.clear();
+}
+
 // flush the contents of partWordBuffer to currentTextBlock
 void ChapterHtmlSlimParser::flushPartWordBuffer() {
   if (lowMemoryAbort) {
@@ -235,22 +255,23 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
       combinedStyle.fromBrElement = incoming.fromBrElement;
       currentTextBlock->setBlockStyle(combinedStyle);
 
-      if (!pendingAnchorId.empty()) {
-        anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
-        pendingAnchorId.clear();
-      }
+      flushPendingAnchor();
       return;
     }
 
     makePages();
   }
-  // Record deferred anchor after previous block is flushed
-  if (!pendingAnchorId.empty()) {
-    anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
-    pendingAnchorId.clear();
+  // If the pending anchor is a TOC chapter boundary, force a page break after the previous
+  // block is flushed so the chapter starts on a fresh page.
+  flushPendingAnchor();
+  currentTextBlock.reset(new (std::nothrow) ParsedText(extraParagraphSpacing, forceParagraphIndents, hyphenationEnabled,
+                                                       bionicReadingEnabled, guideReadingEnabled, blockStyle));
+  if (!currentTextBlock) {
+    const auto heap = MemoryBudget::snapshot();
+    LOG_ERR("EHP", "Failed to create text block (%u free, %u max alloc)", heap.freeHeap, heap.maxAllocHeap);
+    lowMemoryAbort = true;
+    return;
   }
-  currentTextBlock.reset(new ParsedText(extraParagraphSpacing, forceParagraphIndents, hyphenationEnabled,
-                                        bionicReadingEnabled, guideReadingEnabled, blockStyle));
   wordsExtractedInBlock = 0;
 }
 
@@ -713,7 +734,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       } else if (strcmp(atts[i], "style") == 0) {
         styleAttr = atts[i + 1];
       } else if (strcmp(atts[i], "id") == 0) {
-        // Defer recording until startNewTextBlock, after previous block is flushed to pages
+        // Defer both anchor recording and TOC page breaks until startNewTextBlock,
+        // after the previous block is flushed to pages via makePages().
         self->pendingAnchorId = atts[i + 1];
       }
     }
