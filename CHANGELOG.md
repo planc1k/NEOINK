@@ -3,39 +3,35 @@
 ## [Unreleased]
 
 ### Added
-- Added an adjustable reader line-height setting with percent-based spacing for EPUB and TXT books.
-- Added nearby Reading Stats sync between CrossInk readers using direct ESP-NOW device-to-device messages.
-- Reading Stats now separates this device's totals from all-device totals when synced stats are available.
-- Auto Page Turn interval now remembers the last selected interval per book when it is turned on again.
-- Added EPUB render heap diagnostics that include the largest allocatable block, not just total free heap.
+- Adjustable reader line-height setting with percent-based spacing for EPUB and TXT books.
+- Nearby Reading Stats sync between CrossInk readers using direct ESP-NOW device-to-device messages.
+- Separate Reading Stats totals for this device and all synced devices when nearby sync data is available.
+- EPUB render heap diagnostics that include the largest allocatable block, not just total free heap.
 - EPUB bookmarks now save a paragraph anchor and preview snippet when available, so they reopen closer to the original text after font, margin, or spacing changes and are easier to recognize in the bookmark list.
-- Added a separate tilt-to-turn direction setting with left-right and forward-back gesture options.
-- Added a per-server OPDS filename setting so downloaded books can be saved as either Author - Title or Title - Author.
-- Added optional EPUB chapter/book time-left estimates using a persisted per-book reading pace.
+- Separate tilt-to-turn direction setting with left-right and forward-back gesture options.
+- Per-server OPDS filename setting so downloaded books can be saved as either Author - Title or Title - Author.
+- Optional EPUB chapter and book time-left estimates using a persisted per-book reading pace.
+
+### Changed
+- Moved the X3 reader clock from the bottom status bar into a new top-centered status bar.
+- Improved OPDS and font download responsiveness by reducing progress-update overhead and temporarily disabling WiFi power saving during transfers.
+- Book selection now shows a loading popup before EPUB indexing or cache loading begins.
 
 ### Fixed
 - Fixed inverted reader menus so front-button hint outlines keep the normal portrait shape while the labels stay readable in the inverted orientation.
 - Fixed web file uploads so replacing a book refreshes render/cache files without wiping that book's saved progress, per-book stats, or reader settings.
 - Fixed Lyra Carousel popup rendering so loading, indexing, and sleep-entry popups appear in the right place again.
 - Fixed settings rows so longer option values like "Forward-Back Inverted" are no longer cut off.
-- Fixed EPUB progress saves so KOReader Sync writes complete resume data without truncating the existing progress file first.
-- Fixed KOReader Sync remote-progress saves so refined page positions cannot be saved with a too-small page count.
-- Improved OPDS book download throughput by using a larger transfer buffer while keeping SD-card font downloads on the lower-memory path.
+- Fixed KOReader Sync progress saves so complete resume data is written safely, and refined page positions cannot be saved with a too-small page count.
 - Fixed OPDS feed errors so low-memory parser-buffer failures show the specific memory message instead of the generic parse error.
-- Free the active SD-card reader font before opening OPDS catalogs so WiFi/feed parsing has more memory available.
+- Fixed OPDS catalog loading with SD-card fonts by releasing the active reader font before WiFi/feed parsing needs the memory.
 - Fixed Auto Page Turn so each book remembers the last selected interval when it is turned on again.
 - Fixed EPUB first-open CSS caching so clean and migrated caches are less likely to build unstyled section layouts.
-- Show a loading popup immediately after selecting a book, before EPUB indexing or cache loading begins.
-- Preserve usable partial EPUB CSS rules when low memory stops stylesheet parsing, while retrying a complete CSS cache rebuild on later opens.
-- Fixed EPUB table fallback rendering so temporary table-layout data is released before low-memory text layout aborts.
-- Reduced EPUB memory pressure with SD-card fonts by skipping silent next-chapter indexing and releasing optional font caches after chapter indexing.
-- EPUB chapters that run out of memory with an SD-card font now retry with the selected built-in font instead of failing to open.
-- Reduced EPUB pagination heap churn and made page allocation failures stop cleanly instead of risking a reboot.
+- Fixed low-memory EPUB stylesheet handling by preserving usable partial CSS rules and retrying a complete CSS cache rebuild on later opens.
+- Fixed low-memory EPUB table and SD-card font rendering paths so temporary layout data and optional font caches are released before retrying or aborting.
+- Fixed EPUB chapters that run out of memory with an SD-card font so they retry with the selected built-in font instead of failing to open.
+- Fixed EPUB pagination allocation failures so they stop cleanly instead of risking a reboot.
 - Clarified the low-memory EPUB image warning so it says some or all images may be missing.
-
-### Changed
-- Moved the X3 reader clock from the bottom status bar into a new top-centered status bar.
-
 
 ## [v1.3.0] - 2026-05-21
 
