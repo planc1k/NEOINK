@@ -29,6 +29,7 @@
 - Reduced EPUB memory pressure with SD-card fonts by skipping silent next-chapter indexing and releasing optional font caches after chapter indexing.
 - EPUB chapters that run out of memory with an SD-card font now retry with the selected built-in font instead of failing to open.
 - Reduced EPUB pagination heap churn and made page allocation failures stop cleanly instead of risking a reboot.
+- Clarified the low-memory EPUB image warning so it says some or all images may be missing.
 
 ### Changed
 
