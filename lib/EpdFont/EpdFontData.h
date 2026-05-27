@@ -159,7 +159,8 @@ constexpr bool isGreekFallback(uint32_t cp) {
 }
 constexpr bool isReplacementFallback(uint32_t cp) { return cp == 0xFFFD; }
 constexpr bool isSpaceFallback(uint32_t cp) {
-  return cp == 0x00A0 || cp == 0x1680 || (cp >= 0x2000 && cp <= 0x200A) || cp == 0x202F || cp == 0x205F || cp == 0x3000;
+  return cp == 0x00A0 || cp == 0x1680 || (cp >= 0x2000 && cp <= 0x200A) || cp == 0x202F ||
+         (cp >= 0x2060 && cp <= 0x2063) || cp == 0x205F || cp == 0x3000;
 }
 constexpr uint32_t aliasCodepoint(uint32_t cp) {
   return cp == MODIFIER_LETTER_TURNED_COMMA ? LEFT_SINGLE_QUOTATION_MARK : cp;

@@ -34,6 +34,7 @@
 - Fixed low-memory EPUB table and SD-card font rendering paths so temporary layout data and optional font caches are released before retrying or aborting.
 - Fixed EPUB chapters that run out of memory with an SD-card font so they retry with the selected built-in font instead of failing to open.
 - Fixed EPUB pagination allocation failures so they stop cleanly instead of risking a reboot.
+- Fixed EPUB text with invisible word-joiner characters so missing font glyphs no longer show replacement diamonds.
 - Clarified the low-memory EPUB image warning so it says some or all images may be missing.
 
 ## [v1.3.0] - 2026-05-21
