@@ -51,12 +51,13 @@ void drawScrollBar(const GfxRenderer& renderer, Rect rect, int itemCount, int pa
 }  // namespace
 int coverWidth = 0;
 
-void RoundedRaffTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title,
-                                  const char* subtitle) const {
+void RoundedRaffTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle,
+                                  const bool readerContext) const {
   (void)subtitle;
   // Home screen header is custom-rendered in drawRecentBookCover.
   if (title == nullptr) {
-    drawTopStatusBarClock(renderer, rect.y, nullptr, false, homeHeaderClockTextYOffset(renderer));
+    drawTopStatusBarClock(renderer, rect.y, nullptr, readerContext,
+                          readerContext ? 0 : homeHeaderClockTextYOffset(renderer));
     return;
   }
   const int sidePadding = RoundedRaffMetrics::values.contentSidePadding;
@@ -86,7 +87,7 @@ void RoundedRaffTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const 
                    Rect{batteryIconX, rect.y + 14, RoundedRaffMetrics::values.batteryWidth,
                         RoundedRaffMetrics::values.batteryHeight},
                    showBatteryPercentage);
-  drawTopStatusBarClock(renderer, rect.y, nullptr, false);
+  drawTopStatusBarClock(renderer, rect.y, nullptr, readerContext);
 }
 
 void RoundedRaffTheme::drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,

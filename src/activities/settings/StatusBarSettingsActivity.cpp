@@ -181,7 +181,7 @@ void StatusBarSettingsActivity::render(RenderLock&&) {
   int bottomPreviewPadding = metrics.buttonHintsHeight + metrics.verticalSpacing;
 
   GUI.drawHeader(renderer, Rect{contentX, metrics.topPadding, contentWidth, metrics.headerHeight},
-                 tr(STR_CUSTOMISE_STATUS_BAR));
+                 tr(STR_CUSTOMISE_STATUS_BAR), nullptr, readerContext);
 
   GUI.drawList(
       renderer, Rect{contentX, contentTop, contentWidth, contentHeight}, visibleItemCount,

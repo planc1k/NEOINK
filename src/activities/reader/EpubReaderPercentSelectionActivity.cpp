@@ -63,7 +63,7 @@ void EpubReaderPercentSelectionActivity::render(RenderLock&&) {
   Rect screen = theme.getScreenSafeArea(renderer, true, false);
 
   GUI.drawHeader(renderer, Rect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight},
-                 tr(STR_GO_TO_PERCENT));
+                 tr(STR_GO_TO_PERCENT), nullptr, true);
 
   const int contentTop = screen.y + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing * 4;
 

@@ -197,6 +197,10 @@ Binary layout:
 
 ## `section.bin`
 
+### Version 39
+
+Adds optional publisher page markers to serialized `Page` records. These markers store the EPUB `pagebreak` label and rendered y-position so print-edition page numbers can be drawn in the reader margin without changing EPUB text layout.
+
 ### Version 38
 
 Invalidates cached EPUB section files after adding superscript and subscript rendering. No binary layout fields changed from version 37; cached pages need rebuilding so affected words carry the new style bits and layout widths.

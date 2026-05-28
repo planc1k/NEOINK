@@ -249,7 +249,8 @@ void drawBookCover(const GfxRenderer& renderer, const Rect& coverRect, const Rec
 }
 }  // namespace
 
-void MinimalTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle) const {
+void MinimalTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle,
+                              const bool readerContext) const {
   (void)subtitle;
 
   renderer.fillRect(rect.x, rect.y, rect.width, rect.height, false);
@@ -270,7 +271,8 @@ void MinimalTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char
     renderer.drawLine(rect.x, rect.y + rect.height - 3, rect.x + rect.width - 1, rect.y + rect.height - 3, 3, true);
   }
 
-  drawTopStatusBarClock(renderer, rect.y, nullptr, false, title == nullptr ? homeHeaderClockTextYOffset(renderer) : 0);
+  drawTopStatusBarClock(renderer, rect.y, nullptr, readerContext,
+                        title == nullptr && !readerContext ? homeHeaderClockTextYOffset(renderer) : 0);
 }
 
 void MinimalTheme::drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,

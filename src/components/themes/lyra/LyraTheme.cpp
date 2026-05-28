@@ -113,7 +113,8 @@ void LyraTheme::fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t
   }
 }
 
-void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle) const {
+void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle,
+                           const bool readerContext) const {
   renderer.fillRect(rect.x, rect.y, rect.width, rect.height, false);
 
   const bool showBatteryPercentage =
@@ -163,7 +164,8 @@ void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
                       rect.y + 50, truncatedSubtitle.c_str(), true);
   }
 
-  drawTopStatusBarClock(renderer, rect.y, nullptr, false, title == nullptr ? homeHeaderClockTextYOffset(renderer) : 0);
+  drawTopStatusBarClock(renderer, rect.y, nullptr, readerContext,
+                        title == nullptr && !readerContext ? homeHeaderClockTextYOffset(renderer) : 0);
 }
 
 void LyraTheme::drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label, const char* rightLabel) const {

@@ -175,7 +175,7 @@ void ReaderOptionsActivity::toggleCurrentSetting() {
       return;
     }
     if (setting.action == SettingAction::CustomiseStatusBar) {
-      startActivityForResult(std::make_unique<StatusBarSettingsActivity>(renderer, mappedInput),
+      startActivityForResult(std::make_unique<StatusBarSettingsActivity>(renderer, mappedInput, true),
                              [](const ActivityResult&) { SETTINGS.saveToFile(); });
       return;
     }
@@ -246,7 +246,7 @@ void ReaderOptionsActivity::render(RenderLock&&) {
   const int contentWidth = pageWidth - hintGutterWidth;
 
   GUI.drawHeader(renderer, Rect{contentX, metrics.topPadding, contentWidth, metrics.headerHeight},
-                 tr(STR_READER_OPTIONS), nullptr);
+                 tr(STR_READER_OPTIONS), nullptr, true);
 
   const auto& visibleSettings = *currentSettings;
   Rect listRect{contentX, metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing, contentWidth,

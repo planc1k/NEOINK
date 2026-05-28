@@ -144,12 +144,12 @@ void ControlsOptionsActivity::toggleCurrentSetting() {
     SETTINGS.saveToFile();
   } else if (setting.type == SettingType::ACTION) {
     if (setting.action == SettingAction::RemapFrontButtons) {
-      startActivityForResult(std::make_unique<ButtonRemapActivity>(renderer, mappedInput, false),
+      startActivityForResult(std::make_unique<ButtonRemapActivity>(renderer, mappedInput, false, true),
                              [](const ActivityResult&) { SETTINGS.saveToFile(); });
       return;
     }
     if (setting.action == SettingAction::RemapFrontButtonsReader) {
-      startActivityForResult(std::make_unique<ButtonRemapActivity>(renderer, mappedInput, true),
+      startActivityForResult(std::make_unique<ButtonRemapActivity>(renderer, mappedInput, true, true),
                              [](const ActivityResult&) { SETTINGS.saveToFile(); });
       return;
     }
@@ -203,7 +203,7 @@ void ControlsOptionsActivity::render(RenderLock&&) {
   const int contentWidth = pageWidth - hintGutterWidth;
 
   GUI.drawHeader(renderer, Rect{contentX, metrics.topPadding, contentWidth, metrics.headerHeight}, tr(STR_CAT_CONTROLS),
-                 nullptr);
+                 nullptr, true);
 
   const auto& visibleSettings = *currentSettings;
   Rect listRect{contentX, metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing, contentWidth,

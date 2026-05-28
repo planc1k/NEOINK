@@ -364,7 +364,8 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
   }
 }
 
-void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle) const {
+void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle,
+                           const bool readerContext) const {
   // Hide last battery draw
   constexpr int maxBatteryWidth = 80;
   renderer.fillRect(rect.x + rect.width - maxBatteryWidth, rect.y + 5, maxBatteryWidth,
@@ -384,7 +385,9 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
     auto truncatedTitle = renderer.truncatedText(UI_12_FONT_ID, title,
                                                  rect.width - padding * 2 - BaseMetrics::values.contentSidePadding * 2,
                                                  EpdFontFamily::BOLD);
-    if (SETTINGS.shouldShowClockOutsideReader() && halClock.isAvailable()) {
+    const bool showHeaderClock = halClock.isAvailable() && (readerContext ? SETTINGS.shouldShowClockInReader()
+                                                                          : SETTINGS.shouldShowClockOutsideReader());
+    if (showHeaderClock) {
       renderer.drawText(UI_12_FONT_ID, rect.x + BaseMetrics::values.contentSidePadding, rect.y + 5,
                         truncatedTitle.c_str(), true, EpdFontFamily::BOLD);
     } else {
@@ -401,7 +404,8 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
                       truncatedSubtitle.c_str(), true);
   }
 
-  drawTopStatusBarClock(renderer, rect.y, nullptr, false, title == nullptr ? homeHeaderClockTextYOffset(renderer) : 0);
+  drawTopStatusBarClock(renderer, rect.y, nullptr, readerContext,
+                        title == nullptr && !readerContext ? homeHeaderClockTextYOffset(renderer) : 0);
 }
 
 void BaseTheme::drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label, const char* rightLabel) const {
@@ -901,7 +905,8 @@ void BaseTheme::drawTopStatusBarClock(const GfxRenderer& renderer, int topY, con
   const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, timeText);
   const int lineHeight = renderer.getLineHeight(SMALL_FONT_ID);
   const int textX = (renderer.getScreenWidth() - textWidth) / 2;
-  const int textY = (topY >= 0 ? topY : orientedMarginTop) + (statusBarHeight - lineHeight) / 2 + textYOffset;
+  const int effectiveTextYOffset = textYOffset + (readerContext ? homeHeaderClockTextYOffset(renderer) : 0);
+  const int textY = (topY >= 0 ? topY : orientedMarginTop) + (statusBarHeight - lineHeight) / 2 + effectiveTextYOffset;
   renderer.drawText(SMALL_FONT_ID, textX, textY, timeText);
 }
 

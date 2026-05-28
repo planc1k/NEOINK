@@ -9,8 +9,11 @@ class ButtonRemapActivity final : public Activity {
  public:
   // isReaderMode = true  → saves to reader-specific front button fields
   // isReaderMode = false → saves to system-wide front button fields (default)
-  explicit ButtonRemapActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool isReaderMode = false)
-      : Activity("ButtonRemap", renderer, mappedInput), readerMode(isReaderMode) {}
+  explicit ButtonRemapActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool isReaderMode = false,
+                               bool headerReaderContext = false)
+      : Activity("ButtonRemap", renderer, mappedInput),
+        readerMode(isReaderMode),
+        headerReaderContext(headerReaderContext) {}
 
   void onEnter() override;
   void onExit() override;
@@ -19,6 +22,7 @@ class ButtonRemapActivity final : public Activity {
 
  private:
   bool readerMode;
+  bool headerReaderContext;
 
   // Index of the logical role currently awaiting input.
   uint8_t currentStep = 0;

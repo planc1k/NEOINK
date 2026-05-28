@@ -45,6 +45,15 @@ static constexpr const char* const SKIP_TAGS[] = {"head"};
 
 bool isWhitespace(const char c) { return c == ' ' || c == '\r' || c == '\n' || c == '\t'; }
 
+static char asciiLower(const char c) { return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c; }
+
+static bool tokenEqualsIgnoreCase(const char* value, const char* token, const size_t tokenLen) {
+  for (size_t i = 0; i < tokenLen; ++i) {
+    if (asciiLower(value[i]) != asciiLower(token[i])) return false;
+  }
+  return true;
+}
+
 bool matches(const char* tag_name, const char* const* possible_tags, size_t count) {
   for (size_t i = 0; i < count; i++) {
     if (strcmp(tag_name, possible_tags[i]) == 0) {
@@ -72,12 +81,40 @@ bool isInternalEpubLink(const char* href) {
   return true;
 }
 
+bool attributeContainsToken(const char* value, const char* token) {
+  if (!value || !token || token[0] == '\0') return false;
+
+  const size_t tokenLen = strlen(token);
+  const char* pos = value;
+  while (*pos != '\0') {
+    while (isWhitespace(*pos)) {
+      pos++;
+    }
+    const char* end = pos;
+    while (*end != '\0' && !isWhitespace(*end)) {
+      end++;
+    }
+    if (static_cast<size_t>(end - pos) == tokenLen && tokenEqualsIgnoreCase(pos, token, tokenLen)) {
+      return true;
+    }
+    pos = end;
+  }
+
+  return false;
+}
+
 bool isHeaderOrBlock(const char* name) {
   return matches(name, HEADER_TAGS, std::size(HEADER_TAGS)) || matches(name, BLOCK_TAGS, std::size(BLOCK_TAGS));
 }
 
 bool isTableStructuralTag(const char* name) {
   return strcmp(name, "table") == 0 || strcmp(name, "tr") == 0 || strcmp(name, "td") == 0 || strcmp(name, "th") == 0;
+}
+
+void ChapterHtmlSlimParser::skipCurrentElement() {
+  skipUntilDepth = depth;
+  skipEndElementStateUntilDepth = depth;
+  depth += 1;
 }
 
 // Update effective bold/italic/underline based on block style and inline style stack
@@ -185,6 +222,35 @@ void ChapterHtmlSlimParser::flushPendingAnchor() {
   // Record deferred anchor after previous block is flushed (and any TOC page break)
   anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
   pendingAnchorId.clear();
+}
+
+void ChapterHtmlSlimParser::addPendingPublisherPageMarker(const char* label) {
+  if (!label || label[0] == '\0' || tableDepth > 0) {
+    return;
+  }
+
+  if (partWordBufferIndex > 0) {
+    flushPartWordBuffer();
+  }
+
+  PendingPublisherPageMarker marker;
+  marker.wordIndex = wordsExtractedInBlock + (currentTextBlock ? static_cast<int>(currentTextBlock->size()) : 0);
+  strncpy(marker.label, label, sizeof(marker.label) - 1);
+  marker.label[sizeof(marker.label) - 1] = '\0';
+  pendingPublisherPageMarkers.push_back(marker);
+}
+
+void ChapterHtmlSlimParser::attachPendingPublisherPageMarkers(const int yPos) {
+  if (!currentPage || pendingPublisherPageMarkers.empty()) {
+    return;
+  }
+
+  auto markerIt = pendingPublisherPageMarkers.begin();
+  while (markerIt != pendingPublisherPageMarkers.end() && markerIt->wordIndex <= wordsExtractedInBlock) {
+    currentPage->addPublisherPageMarker(markerIt->label, yPos);
+    ++markerIt;
+  }
+  pendingPublisherPageMarkers.erase(pendingPublisherPageMarkers.begin(), markerIt);
 }
 
 // flush the contents of partWordBuffer to currentTextBlock
@@ -370,6 +436,7 @@ void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
   }
 
   currentPageNextY += topSpacing;
+  attachPendingPublisherPageMarkers(currentPageNextY);
 
   auto pageRule = std::shared_ptr<PageHorizontalRule>(
       new (std::nothrow) PageHorizontalRule(width, ruleThickness, xPos, currentPageNextY));
@@ -759,10 +826,23 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
   }
 
+  const char* roleAttr = getAttribute(atts, "role");
+  const char* epubTypeAttr = getAttribute(atts, "epub:type");
+  const bool isPublisherPageBreak =
+      attributeContainsToken(roleAttr, "doc-pagebreak") || attributeContainsToken(epubTypeAttr, "pagebreak");
+  if (isPublisherPageBreak) {
+    const char* markerLabel = getAttribute(atts, "title");
+    if (!markerLabel || markerLabel[0] == '\0') {
+      markerLabel = getAttribute(atts, "aria-label");
+    }
+    self->addPendingPublisherPageMarker(markerLabel);
+    self->skipCurrentElement();
+    return;
+  }
+
   // Skip elements with display:none before all fast paths (tables, links, etc.).
   if (cssStyle.hasDisplay() && cssStyle.display == CssDisplay::None) {
-    self->skipUntilDepth = self->depth;
-    self->depth += 1;
+    self->skipCurrentElement();
     return;
   }
 
@@ -889,8 +969,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       }
       self->nextWordContinues = false;
     }
-    self->skipUntilDepth = self->depth;
-    self->depth += 1;
+    self->skipCurrentElement();
     return;
   }
 
@@ -921,13 +1000,13 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       // Skip low-res Kindle fallback images (not intended for modern readers)
       if (amznM8Removed) {
         LOG_DBG("EHP", "Skipping Kindle M8 low-res fallback image");
+        self->skipCurrentElement();
         return;
       }
 
       // imageRendering: 0=display, 1=placeholder (alt text only), 2=suppress entirely
       if (self->imageRendering == 2) {
-        self->skipUntilDepth = self->depth;
-        self->depth += 1;
+        self->skipCurrentElement();
         return;
       }
 
@@ -938,8 +1017,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
           imgDisplayStyle.applyOver(CssParser::parseInlineStyle(styleAttr));
         }
         if (imgDisplayStyle.hasDisplay() && imgDisplayStyle.display == CssDisplay::None) {
-          self->skipUntilDepth = self->depth;
-          self->depth += 1;
+          self->skipCurrentElement();
           return;
         }
       }
@@ -965,8 +1043,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
           }
 
           if (self->lowMemoryImageFallback) {
-            self->skipUntilDepth = self->depth;
-            self->depth += 1;
+            self->skipCurrentElement();
             return;
           } else {
             // Resolve the image path relative to the HTML file
@@ -1004,8 +1081,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                   if (!MemoryBudget::hasHeapForEpubInlineImage("EHP", cachedImagePath.c_str())) {
                     self->lowMemoryImageFallback = true;
                     Storage.remove(cachedImagePath.c_str());
-                    self->skipUntilDepth = self->depth;
-                    self->depth += 1;
+                    self->skipCurrentElement();
                     return;
                   }
 
@@ -1140,6 +1216,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                   }
 
                   self->currentPageNextY += imageMarginTop;
+                  self->attachPendingPublisherPageMarkers(self->currentPageNextY);
 
                   // Create ImageBlock and add to page
                   auto imageBlock = std::shared_ptr<ImageBlock>(
@@ -1206,29 +1283,15 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       }
 
       // No alt text, skip
-      self->skipUntilDepth = self->depth;
-      self->depth += 1;
+      self->skipCurrentElement();
       return;
     }
   }
 
   if (matches(name, SKIP_TAGS, std::size(SKIP_TAGS))) {
     // start skip
-    self->skipUntilDepth = self->depth;
-    self->depth += 1;
+    self->skipCurrentElement();
     return;
-  }
-
-  // Skip blocks with role="doc-pagebreak" and epub:type="pagebreak"
-  if (atts != nullptr) {
-    for (int i = 0; atts[i]; i += 2) {
-      if (strcmp(atts[i], "role") == 0 && strcmp(atts[i + 1], "doc-pagebreak") == 0 ||
-          strcmp(atts[i], "epub:type") == 0 && strcmp(atts[i + 1], "pagebreak") == 0) {
-        self->skipUntilDepth = self->depth;
-        self->depth += 1;
-        return;
-      }
-    }
   }
 
   // Detect internal <a href="..."> links (footnotes, cross-references)
@@ -1769,6 +1832,15 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     return;
   }
 
+  if (self->skipEndElementStateUntilDepth < self->depth) {
+    self->depth -= 1;
+    if (self->skipUntilDepth == self->depth) {
+      self->skipUntilDepth = INT_MAX;
+      self->skipEndElementStateUntilDepth = INT_MAX;
+    }
+    return;
+  }
+
   // Check if any style state will change after we decrement depth
   // If so, we MUST flush the partWordBuffer with the CURRENT style first
   // Note: depth hasn't been decremented yet, so we check against (depth - 1)
@@ -2054,6 +2126,7 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
     ++footnoteIt;
   }
   pendingFootnotes.erase(pendingFootnotes.begin(), footnoteIt);
+  attachPendingPublisherPageMarkers(currentPageNextY);
 
   // Apply horizontal left inset (margin + padding) as x position offset
   const int16_t xOffset = line->getBlockStyle().leftInset();
@@ -2109,6 +2182,7 @@ void ChapterHtmlSlimParser::makePages() {
     }
     pendingFootnotes.clear();
   }
+  attachPendingPublisherPageMarkers(currentPageNextY);
 
   // Apply bottom spacing after the paragraph (stored in pixels)
   if (blockStyle.marginBottom > 0) {

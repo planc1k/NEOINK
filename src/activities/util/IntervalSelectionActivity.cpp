@@ -59,7 +59,11 @@ void IntervalSelectionActivity::loop() {
 void IntervalSelectionActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, I18N.get(titleId), true, EpdFontFamily::BOLD);
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int screenWidth = renderer.getScreenWidth();
+
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, screenWidth, metrics.headerHeight}, I18N.get(titleId), nullptr,
+                 readerActivity);
 
   char formattedValue[32];
   if (showPercentValue) {
@@ -71,7 +75,6 @@ void IntervalSelectionActivity::render(RenderLock&&) {
   }
   renderer.drawCenteredText(UI_12_FONT_ID, 90, formattedValue, true, EpdFontFamily::BOLD);
 
-  const int screenWidth = renderer.getScreenWidth();
   const int barWidth = std::min(360, std::max(0, screenWidth - 40));
   constexpr int barHeight = 16;
   const int barX = std::max(0, (screenWidth - barWidth) / 2);

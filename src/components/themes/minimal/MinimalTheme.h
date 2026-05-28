@@ -30,8 +30,8 @@ class MinimalTheme : public LyraTheme {
  public:
   static void setHomeButtonHintSelection(int selectedIndex);
 
-  void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title,
-                  const char* subtitle = nullptr) const override;
+  void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle = nullptr,
+                  bool readerContext = false) const override;
   void drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,
                   bool selected) const override;
   void drawList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,

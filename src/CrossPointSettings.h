@@ -358,6 +358,8 @@ class CrossPointSettings {
 
   // Reader screen margin settings
   uint8_t screenMargin = 5;
+  // Show EPUB publisher pagebreak labels in the reader margin when present.
+  uint8_t publisherPageNumbers = 0;
   // OPDS browser settings
   char opdsServerUrl[128] = "";
   char opdsUsername[64] = "";

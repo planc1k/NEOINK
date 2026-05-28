@@ -13,6 +13,7 @@
 - Optional EPUB chapter and book time-left estimates using a persisted per-book reading pace.
 - EPUB superscript and subscript rendering for `<sup>`, `<sub>`, and CSS `vertical-align: super/sub`.
 - Side button layout option to make both reader side buttons turn to the next page.
+- Optional EPUB publisher page numbers in the reader margin when the book includes `pagebreak` markers.
 
 ### Changed
 - Moved the X3 reader clock from the bottom status bar into a new top-centered status bar.

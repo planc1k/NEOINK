@@ -56,6 +56,8 @@ constexpr uint32_t MIN_READING_PACE_SAMPLE_SECONDS = 2;
 constexpr uint32_t MAX_READING_PACE_SAMPLE_SECONDS = 10 * 60;
 constexpr uint32_t MIN_BOOK_PROGRESS_READING_SECONDS = 2 * 60;
 constexpr float MIN_BOOK_PROGRESS_FOR_TIME_LEFT = 0.01f;
+constexpr uint8_t PUBLISHER_PAGE_NUMBER_LEFT_MARGIN_MIN = 15;
+constexpr int PUBLISHER_PAGE_NUMBER_X = 5;
 
 uint8_t largestBlockPercent(const MemoryBudget::HeapSnapshot& heap) {
   if (heap.freeHeap == 0) {
@@ -80,6 +82,77 @@ void drawToastBuffer(const GfxRenderer& renderer, const char* msg) {
 void drawToast(const GfxRenderer& renderer, const char* msg) {
   drawToastBuffer(renderer, msg);
   renderer.displayBuffer();
+}
+
+void drawPublisherPageMarkers(const GfxRenderer& renderer, const Page& page, const int contentTop,
+                              const int contentBottom) {
+  if (!SETTINGS.publisherPageNumbers || page.publisherPageMarkers.empty()) {
+    return;
+  }
+
+  const int lineHeight = renderer.getLineHeight(SMALL_FONT_ID);
+  const int lineStep = std::max(1, lineHeight - 2);
+  const int availableHeight = contentBottom - contentTop;
+  if (availableHeight <= lineHeight) {
+    return;
+  }
+
+  for (const auto& marker : page.publisherPageMarkers) {
+    const char* label = marker.label;
+    if (!label || label[0] == '\0') {
+      continue;
+    }
+
+    bool hasNonAscii = false;
+    int labelLen = 0;
+    int maxCharWidth = 0;
+    for (const unsigned char* p = reinterpret_cast<const unsigned char*>(label); *p != '\0'; p++) {
+      if (*p >= 0x80) {
+        hasNonAscii = true;
+        break;
+      }
+      if (*p <= ' ') {
+        continue;
+      }
+      char ch[2] = {static_cast<char>(*p), '\0'};
+      maxCharWidth = std::max(maxCharWidth, renderer.getTextWidth(SMALL_FONT_ID, ch));
+      labelLen++;
+    }
+
+    if (labelLen == 0) {
+      continue;
+    }
+
+    const int x = PUBLISHER_PAGE_NUMBER_X;
+    if (hasNonAscii) {
+      const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, label);
+      const int maxY = contentBottom - lineHeight;
+      const int y = maxY < contentTop ? contentTop : std::min(std::max(contentTop + marker.yPos, contentTop), maxY);
+      renderer.drawTextRotated90CW(SMALL_FONT_ID, x, y + textWidth, label);
+      continue;
+    }
+
+    const int markerHeight = lineHeight + (labelLen - 1) * lineStep;
+    int y = contentTop + marker.yPos - lineHeight / 2;
+    const int maxY = contentBottom - markerHeight;
+    y = maxY < contentTop ? contentTop : std::min(std::max(y, contentTop), maxY);
+
+    int row = 0;
+    for (const char* p = label; *p != '\0'; p++) {
+      if (static_cast<unsigned char>(*p) <= ' ') {
+        continue;
+      }
+      char ch[2] = {*p, '\0'};
+      const int charWidth = renderer.getTextWidth(SMALL_FONT_ID, ch);
+      renderer.drawText(SMALL_FONT_ID, x + (maxCharWidth - charWidth) / 2, y + row * lineStep, ch);
+      row++;
+    }
+  }
+}
+
+uint8_t effectiveReaderLeftMargin() {
+  return SETTINGS.publisherPageNumbers ? std::max<uint8_t>(SETTINGS.screenMargin, PUBLISHER_PAGE_NUMBER_LEFT_MARGIN_MIN)
+                                       : SETTINGS.screenMargin;
 }
 
 bool releaseReaderSdFontCachesForLowMemory(const GfxRenderer& renderer, const char* tag, const char* reason) {
@@ -1805,7 +1878,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
                                    &orientedMarginLeft);
-  orientedMarginLeft += SETTINGS.screenMargin;
+  orientedMarginLeft += effectiveReaderLeftMargin();
   orientedMarginRight += SETTINGS.screenMargin;
 
   const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
@@ -2170,8 +2243,28 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
   const bool needsImageGrayscale = pageHasImages;
   const bool needsTextGrayscale = SETTINGS.textAntiAliasing;
   const bool needsAnyGrayscale = needsTextGrayscale || needsImageGrayscale;
+  const int contentBottom = renderer.getScreenHeight() - orientedMarginBottom;
 
-  page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+  const auto composeBuffer = [&](const auto& renderContent) {
+    renderContent();
+    drawPublisherPageMarkers(renderer, *page, orientedMarginTop, contentBottom);
+  };
+
+  const auto composePageBuffer = [&]() {
+    composeBuffer([&]() { page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop); });
+  };
+
+  const auto composeGrayscaleBuffer = [&]() {
+    composeBuffer([&]() {
+      if (needsTextGrayscale) {
+        page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+      } else {
+        page->renderImages(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+      }
+    });
+  };
+
+  composePageBuffer();
   renderStatusBar();
   if (pendingBookmarkFeedback) {
     const char* msg = tr(STR_BOOKMARK_ADDED);
@@ -2220,7 +2313,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
       // Re-render page content to restore images into the blanked area
       // Status bar is not re-rendered here to avoid reading stale dynamic values (e.g. battery %)
       const auto tImageRestoreRender = millis();
-      page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+      composePageBuffer();
       const uint32_t imageRestoreRenderMs = millis() - tImageRestoreRender;
       const auto tImageFinalDisplay = millis();
       renderer.displayBuffer(HalDisplay::FAST_REFRESH);
@@ -2249,22 +2342,14 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
   if (canApplyGrayscale) {
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
-    if (needsTextGrayscale) {
-      page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
-    } else {
-      page->renderImages(renderer, fontId, orientedMarginLeft, orientedMarginTop);
-    }
+    composeGrayscaleBuffer();
     renderer.copyGrayscaleLsbBuffers();
     const auto tGrayLsb = millis();
 
     // Render and copy to MSB buffer
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
-    if (needsTextGrayscale) {
-      page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
-    } else {
-      page->renderImages(renderer, fontId, orientedMarginLeft, orientedMarginTop);
-    }
+    composeGrayscaleBuffer();
     renderer.copyGrayscaleMsbBuffers();
     const auto tGrayMsb = millis();
 
@@ -2441,7 +2526,7 @@ bool EpubReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, Gf
   int marginTop, marginRight, marginBottom, marginLeft;
   renderer.getOrientedViewableTRBL(&marginTop, &marginRight, &marginBottom, &marginLeft);
   marginTop += SETTINGS.screenMargin;
-  marginLeft += SETTINGS.screenMargin;
+  marginLeft += effectiveReaderLeftMargin();
   marginRight += SETTINGS.screenMargin;
   const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
   marginBottom += std::max(SETTINGS.screenMargin, statusBarHeight);
@@ -2523,6 +2608,7 @@ bool EpubReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, Gf
 
   renderer.clearScreen();
   page->render(renderer, renderFontId, marginLeft, marginTop);
+  drawPublisherPageMarkers(renderer, *page, marginTop, renderer.getScreenHeight() - marginBottom);
   // No displayBuffer call; caller (SleepActivity) handles that after compositing the overlay.
   return true;
 }

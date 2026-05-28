@@ -392,6 +392,20 @@ bool Page::serialize(FsFile& file) const {
     }
   }
 
+  const uint8_t markerCount = std::min<uint8_t>(publisherPageMarkers.size(), MAX_PUBLISHER_PAGE_MARKERS_PER_PAGE);
+  if (!serialization::tryWritePod(file, markerCount)) {
+    LOG_ERR("PGE", "Failed to write publisher page marker count");
+    return false;
+  }
+  for (uint8_t i = 0; i < markerCount; i++) {
+    const auto& marker = publisherPageMarkers[i];
+    if (!serialization::tryWritePod(file, marker.yPos) ||
+        file.write(marker.label, sizeof(marker.label)) != sizeof(marker.label)) {
+      LOG_ERR("PGE", "Failed to write publisher page marker");
+      return false;
+    }
+  }
+
   return true;
 }
 
@@ -471,6 +485,27 @@ std::unique_ptr<Page> Page::deserialize(FsFile& file) {
     }
     entry.number[sizeof(entry.number) - 1] = '\0';
     entry.href[sizeof(entry.href) - 1] = '\0';
+  }
+
+  uint8_t markerCount;
+  if (!serialization::tryReadPod(file, markerCount)) {
+    LOG_ERR("PGE", "Failed to read publisher page marker count");
+    return nullptr;
+  }
+  if (markerCount > MAX_PUBLISHER_PAGE_MARKERS_PER_PAGE) {
+    LOG_ERR("PGE", "Invalid publisher page marker count %u", markerCount);
+    return nullptr;
+  }
+  page->publisherPageMarkers.reserve(markerCount);
+  for (uint8_t i = 0; i < markerCount; i++) {
+    Page::PublisherPageMarker marker;
+    if (!serialization::tryReadPod(file, marker.yPos) ||
+        file.read(marker.label, sizeof(marker.label)) != sizeof(marker.label)) {
+      LOG_ERR("PGE", "Failed to read publisher page marker %u", i);
+      return nullptr;
+    }
+    marker.label[sizeof(marker.label) - 1] = '\0';
+    page->publisherPageMarkers.push_back(marker);
   }
 
   return page;

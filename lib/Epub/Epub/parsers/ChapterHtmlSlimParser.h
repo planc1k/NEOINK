@@ -34,6 +34,7 @@ class ChapterHtmlSlimParser {
   std::function<void()> popupFn;  // Popup callback
   int depth = 0;
   int skipUntilDepth = INT_MAX;
+  int skipEndElementStateUntilDepth = INT_MAX;
   int boldUntilDepth = INT_MAX;
   int italicUntilDepth = INT_MAX;
   int underlineUntilDepth = INT_MAX;
@@ -135,11 +136,20 @@ class ChapterHtmlSlimParser {
   std::vector<std::pair<int, FootnoteEntry>> pendingFootnotes;  // <wordIndex, entry>
   int wordsExtractedInBlock = 0;
 
+  struct PendingPublisherPageMarker {
+    int wordIndex = 0;
+    char label[16] = {};
+  };
+  std::vector<PendingPublisherPageMarker> pendingPublisherPageMarkers;
+
   void updateEffectiveInlineStyle();
+  void skipCurrentElement();
   bool shouldAbortForLowMemory(const char* stage);
   bool startNewPage(const char* reason);
   void startNewTextBlock(const BlockStyle& blockStyle);
   void flushPendingAnchor();
+  void addPendingPublisherPageMarker(const char* label);
+  void attachPendingPublisherPageMarkers(int yPos);
   void flushPartWordBuffer();
   void makePages();
   void emitHorizontalRule(const BlockStyle& blockStyle);

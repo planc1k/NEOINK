@@ -19,6 +19,7 @@ struct ReaderLayoutSettingsSnapshot {
   uint8_t lineHeightPercent;
   uint8_t orientation;
   uint8_t screenMargin;
+  uint8_t publisherPageNumbers;
   uint8_t paragraphAlignment;
   uint8_t embeddedStyle;
   uint8_t hyphenationEnabled;
@@ -32,9 +33,10 @@ struct ReaderLayoutSettingsSnapshot {
   bool operator==(const ReaderLayoutSettingsSnapshot& other) const {
     return fontFamily == other.fontFamily && fontSize == other.fontSize && sdFontSizeRange == other.sdFontSizeRange &&
            lineHeightPercent == other.lineHeightPercent && orientation == other.orientation &&
-           screenMargin == other.screenMargin && paragraphAlignment == other.paragraphAlignment &&
-           embeddedStyle == other.embeddedStyle && hyphenationEnabled == other.hyphenationEnabled &&
-           imageRendering == other.imageRendering && extraParagraphSpacing == other.extraParagraphSpacing &&
+           screenMargin == other.screenMargin && publisherPageNumbers == other.publisherPageNumbers &&
+           paragraphAlignment == other.paragraphAlignment && embeddedStyle == other.embeddedStyle &&
+           hyphenationEnabled == other.hyphenationEnabled && imageRendering == other.imageRendering &&
+           extraParagraphSpacing == other.extraParagraphSpacing &&
            forceParagraphIndents == other.forceParagraphIndents && bionicReadingEnabled == other.bionicReadingEnabled &&
            guideReadingEnabled == other.guideReadingEnabled &&
            std::strncmp(sdFontFamilyName, other.sdFontFamilyName, sizeof(sdFontFamilyName)) == 0;
@@ -50,6 +52,7 @@ ReaderLayoutSettingsSnapshot captureReaderLayoutSettings() {
       SETTINGS.lineHeightPercent,
       SETTINGS.orientation,
       SETTINGS.screenMargin,
+      SETTINGS.publisherPageNumbers,
       SETTINGS.paragraphAlignment,
       SETTINGS.embeddedStyle,
       SETTINGS.hyphenationEnabled,
@@ -192,7 +195,7 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
   Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
 
   GUI.drawHeader(renderer, Rect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight},
-                 title.c_str());
+                 title.c_str(), nullptr, true);
 
   // Progress summary
   std::string progressLine;

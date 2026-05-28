@@ -2,6 +2,7 @@
 #include <HalStorage.h>
 
 #include <algorithm>
+#include <cstring>
 #include <string>
 #include <utility>
 #include <vector>
@@ -120,11 +121,19 @@ class PageTableFragment final : public PageElement {
 
 class Page {
  public:
+  struct PublisherPageMarker {
+    int16_t yPos = 0;
+    char label[16] = {};
+  };
+
   // the list of block index and line numbers on this page
   std::vector<std::shared_ptr<PageElement>> elements;
   std::vector<FootnoteEntry> footnotes;
+  std::vector<PublisherPageMarker> publisherPageMarkers;
   static constexpr uint16_t MAX_FOOTNOTES_PER_PAGE = 16;
   static constexpr uint8_t INITIAL_FOOTNOTE_RESERVE = 2;
+  static constexpr uint8_t MAX_PUBLISHER_PAGE_MARKERS_PER_PAGE = 8;
+  static constexpr uint8_t INITIAL_PUBLISHER_PAGE_MARKER_RESERVE = 2;
 
   void addFootnote(const char* number, const char* href) {
     if (footnotes.size() >= MAX_FOOTNOTES_PER_PAGE) return;  // Cap per-page footnotes
@@ -132,11 +141,23 @@ class Page {
       footnotes.reserve(INITIAL_FOOTNOTE_RESERVE);
     }
     FootnoteEntry entry;
-    strncpy(entry.number, number, sizeof(entry.number) - 1);
+    std::strncpy(entry.number, number, sizeof(entry.number) - 1);
     entry.number[sizeof(entry.number) - 1] = '\0';
-    strncpy(entry.href, href, sizeof(entry.href) - 1);
+    std::strncpy(entry.href, href, sizeof(entry.href) - 1);
     entry.href[sizeof(entry.href) - 1] = '\0';
     footnotes.push_back(entry);
+  }
+
+  void addPublisherPageMarker(const char* label, const int yPos) {
+    if (!label || label[0] == '\0' || publisherPageMarkers.size() >= MAX_PUBLISHER_PAGE_MARKERS_PER_PAGE) return;
+    if (publisherPageMarkers.empty()) {
+      publisherPageMarkers.reserve(INITIAL_PUBLISHER_PAGE_MARKER_RESERVE);
+    }
+    PublisherPageMarker marker;
+    marker.yPos = static_cast<int16_t>(std::clamp(yPos, static_cast<int>(INT16_MIN), static_cast<int>(INT16_MAX)));
+    std::strncpy(marker.label, label, sizeof(marker.label) - 1);
+    marker.label[sizeof(marker.label) - 1] = '\0';
+    publisherPageMarkers.push_back(marker);
   }
 
   void render(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) const;

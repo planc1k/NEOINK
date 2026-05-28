@@ -319,6 +319,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           "orientation", StrId::STR_CAT_READER));
     add(SettingInfo::Value(StrId::STR_SCREEN_MARGIN, &CrossPointSettings::screenMargin, {5, 40, 5}, "screenMargin",
                            StrId::STR_CAT_READER));
+    add(SettingInfo::Toggle(StrId::STR_PUBLISHER_PAGE_NUMBERS, &CrossPointSettings::publisherPageNumbers,
+                            "publisherPageNumbers", StrId::STR_CAT_READER));
     add(SettingInfo::Enum(
         StrId::STR_PARA_ALIGNMENT, &CrossPointSettings::paragraphAlignment,
         {StrId::STR_JUSTIFY, StrId::STR_ALIGN_LEFT, StrId::STR_CENTER, StrId::STR_ALIGN_RIGHT, StrId::STR_BOOK_S_STYLE},
@@ -534,6 +536,7 @@ inline std::vector<SettingInfo> buildGroupedReaderSettingsList(const std::vector
 
   readerSettings.push_back(SettingInfo::SectionHeader(StrId::STR_READER_UI));
   addReaderSetting(StrId::STR_ORIENTATION);
+  addReaderSetting(StrId::STR_PUBLISHER_PAGE_NUMBERS);
   readerSettings.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
 
   return readerSettings;
@@ -550,10 +553,11 @@ inline void addSettingByName(std::vector<SettingInfo>& target, const std::vector
 
 inline std::vector<SettingInfo> buildReaderSettingsParentList(const std::vector<SettingInfo>& allSettings) {
   std::vector<SettingInfo> readerSettings;
-  readerSettings.reserve(7);
+  readerSettings.reserve(8);
   readerSettings.push_back(SettingInfo::Submenu(StrId::STR_READER_FONT_OPTIONS, SettingAction::ReaderFontOptions));
   readerSettings.push_back(SettingInfo::Submenu(StrId::STR_READER_PAGE_LAYOUT, SettingAction::ReaderPageLayout));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
+  addSettingByName(readerSettings, allSettings, StrId::STR_PUBLISHER_PAGE_NUMBERS);
   addSettingByName(readerSettings, allSettings, StrId::STR_EMBEDDED_STYLE);
   addSettingByName(readerSettings, allSettings, StrId::STR_IMAGES);
   addSettingByName(readerSettings, allSettings, StrId::STR_BIONIC_READING);
