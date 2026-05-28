@@ -242,10 +242,10 @@ void TxtReaderActivity::initializeReader() {
                                    &cachedOrientedMarginLeft);
   cachedOrientedMarginLeft += cachedScreenMargin;
   cachedOrientedMarginRight += cachedScreenMargin;
-  const int topStatusBarHeight = ReaderUtils::getTopClockStatusBarHeight();
-  if (topStatusBarHeight > 0) {
-    cachedOrientedMarginTop +=
-        std::max(cachedScreenMargin, static_cast<uint8_t>(topStatusBarHeight + ReaderUtils::STATUS_BAR_TEXT_PADDING));
+  const int topStatusBarReservedHeight = ReaderUtils::getTopClockStatusBarReservedHeight();
+  if (topStatusBarReservedHeight > 0) {
+    cachedOrientedMarginTop += std::max(static_cast<int>(cachedScreenMargin),
+                                        topStatusBarReservedHeight + ReaderUtils::STATUS_BAR_TEXT_PADDING);
   } else {
     cachedOrientedMarginTop += cachedScreenMargin;
   }
@@ -653,10 +653,10 @@ bool TxtReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, Gfx
   renderer.getOrientedViewableTRBL(&marginTop, &marginRight, &marginBottom, &marginLeft);
   marginLeft += screenMargin;
   marginRight += screenMargin;
-  const int topStatusBarHeight = ReaderUtils::getTopClockStatusBarHeight();
-  if (topStatusBarHeight > 0) {
+  const int topStatusBarReservedHeight = ReaderUtils::getTopClockStatusBarReservedHeight();
+  if (topStatusBarReservedHeight > 0) {
     marginTop +=
-        std::max(screenMargin, static_cast<uint8_t>(topStatusBarHeight + ReaderUtils::STATUS_BAR_TEXT_PADDING));
+        std::max(static_cast<int>(screenMargin), topStatusBarReservedHeight + ReaderUtils::STATUS_BAR_TEXT_PADDING);
   } else {
     marginTop += screenMargin;
   }

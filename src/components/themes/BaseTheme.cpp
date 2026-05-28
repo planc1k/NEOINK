@@ -906,7 +906,8 @@ void BaseTheme::drawTopStatusBarClock(const GfxRenderer& renderer, int topY, con
   const int lineHeight = renderer.getLineHeight(SMALL_FONT_ID);
   const int textX = (renderer.getScreenWidth() - textWidth) / 2;
   const int effectiveTextYOffset = textYOffset + (readerContext ? homeHeaderClockTextYOffset(renderer) : 0);
-  const int textY = (topY >= 0 ? topY : orientedMarginTop) + (statusBarHeight - lineHeight) / 2 + effectiveTextYOffset;
+  const int baseTopY = topY >= 0 ? topY : orientedMarginTop + metrics.topPadding;
+  const int textY = baseTopY + (statusBarHeight - lineHeight) / 2 + effectiveTextYOffset;
   renderer.drawText(SMALL_FONT_ID, textX, textY, timeText);
 }
 

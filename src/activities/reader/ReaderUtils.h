@@ -47,6 +47,15 @@ inline int getTopClockStatusBarHeight() {
   return std::max(UITheme::getStatusBarHeight(), metrics.statusBarVerticalMargin);
 }
 
+inline int getTopClockStatusBarReservedHeight() {
+  const int statusBarHeight = getTopClockStatusBarHeight();
+  if (statusBarHeight <= 0) {
+    return 0;
+  }
+
+  return UITheme::getInstance().getMetrics().topPadding + statusBarHeight;
+}
+
 inline uint8_t rotatedOrientation(const uint8_t orientation, const bool clockwise) {
   return clockwise ? (orientation + 1) % CrossPointSettings::ORIENTATION_COUNT
                    : (orientation + CrossPointSettings::ORIENTATION_COUNT - 1) % CrossPointSettings::ORIENTATION_COUNT;

@@ -1882,10 +1882,10 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   orientedMarginRight += SETTINGS.screenMargin;
 
   const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
-  const int topStatusBarHeight = ReaderUtils::getTopClockStatusBarHeight();
-  if (topStatusBarHeight > 0) {
-    orientedMarginTop += std::max(SETTINGS.screenMargin,
-                                  static_cast<uint8_t>(topStatusBarHeight + ReaderUtils::STATUS_BAR_TEXT_PADDING));
+  const int topStatusBarReservedHeight = ReaderUtils::getTopClockStatusBarReservedHeight();
+  if (topStatusBarReservedHeight > 0) {
+    orientedMarginTop += std::max(static_cast<int>(SETTINGS.screenMargin),
+                                  topStatusBarReservedHeight + ReaderUtils::STATUS_BAR_TEXT_PADDING);
   } else {
     orientedMarginTop += SETTINGS.screenMargin;
   }
