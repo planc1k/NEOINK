@@ -235,10 +235,9 @@ void KOReaderSyncActivity::performSync() {
         int refinedPage = std::max(remotePosition.pageNumber, static_cast<int>(*paragraphPage));
         if (nextParagraphPage.has_value()) {
           const int lutSpan = static_cast<int>(*nextParagraphPage) - static_cast<int>(*paragraphPage);
-          // Only cap when the LUT span is >1. A span of 1 means the LUT granularity is too
-          // coarse to trust over the intra-spine position (e.g. a stale cache where the paragraph
-          // occupies different pages than at build time).
-          if (lutSpan > 1 && refinedPage >= static_cast<int>(*nextParagraphPage)) {
+          // Keep the percentage-derived page inside the paragraph's cached page range.
+          // A one-page paragraph should not allow byte-percentage drift to jump to later paragraphs.
+          if (lutSpan > 0 && refinedPage >= static_cast<int>(*nextParagraphPage)) {
             refinedPage = static_cast<int>(*nextParagraphPage) - 1;
           }
         }
