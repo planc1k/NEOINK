@@ -21,6 +21,7 @@ struct MenuResult {
   int action = -1;
   uint8_t orientation = 0;
   bool settingsChanged = false;
+  uint8_t pageTurnOption = 0;
 };
 
 struct ChapterResult {
@@ -38,6 +39,11 @@ struct IntervalResult {
 
 struct PageResult {
   uint32_t page = 0;
+};
+
+struct ProgressChangeResult {
+  int spineIndex = 0;
+  int page = 0;
 };
 
 struct SyncResult {
@@ -70,8 +76,8 @@ struct FilePathResult {
 };
 
 using ResultVariant = std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult,
-                                   IntervalResult, PageResult, SyncResult, NetworkModeResult, FootnoteResult,
-                                   BookmarkResult, FileBrowserActionResult, FilePathResult>;
+                                   IntervalResult, PageResult, ProgressChangeResult, SyncResult, NetworkModeResult,
+                                   FootnoteResult, BookmarkResult, FileBrowserActionResult, FilePathResult>;
 
 struct ActivityResult {
   bool isCancelled = false;

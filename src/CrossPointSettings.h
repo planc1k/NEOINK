@@ -172,11 +172,10 @@ class CrossPointSettings {
   // Auto-sleep timeout options (in minutes)
   enum SLEEP_TIMEOUT {
     SLEEP_1_MIN = 0,
-    SLEEP_3_MIN = 1,
-    SLEEP_5_MIN = 2,
-    SLEEP_10_MIN = 3,
-    SLEEP_15_MIN = 4,
-    SLEEP_30_MIN = 5,
+    SLEEP_5_MIN = 1,
+    SLEEP_10_MIN = 2,
+    SLEEP_15_MIN = 3,
+    SLEEP_30_MIN = 4,
     SLEEP_TIMEOUT_COUNT
   };
 
@@ -415,7 +414,8 @@ class CrossPointSettings {
   static constexpr uint16_t POWER_BUTTON_WAKE_SHORT_MS = 10;
   static constexpr uint16_t POWER_BUTTON_LONG_PRESS_MS = 400;
   static constexpr uint8_t MIN_SLEEP_TIMEOUT_MINUTES = 1;
-  static constexpr uint8_t MAX_SLEEP_TIMEOUT_MINUTES = 30;
+  static constexpr uint8_t SLEEP_TIMEOUT_NEVER_MINUTES = 31;
+  static constexpr uint8_t MAX_SLEEP_TIMEOUT_MINUTES = SLEEP_TIMEOUT_NEVER_MINUTES;
   static constexpr uint8_t SD_FONT_MAX_SIZE_STEPS = 8;
   static constexpr uint8_t MIN_LINE_HEIGHT_PERCENT = 70;
   static constexpr uint8_t MAX_LINE_HEIGHT_PERCENT = 200;

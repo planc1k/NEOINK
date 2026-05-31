@@ -81,7 +81,7 @@ bool deleteBookmarkStorePath(const std::string& path, const std::string& reasonT
     return true;
   }
   if (!Storage.remove(path.c_str())) {
-    LOG_ERR("BKS", "Failed to delete %s bookmark file: %s", reasonTag, path.c_str());
+    LOG_ERR("BKS", "Failed to delete %s bookmark file: %s", reasonTag.c_str(), path.c_str());
     return false;
   }
   return true;

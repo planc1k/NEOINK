@@ -217,7 +217,8 @@ for size in ${UI_FONT_SIZES[@]}; do
     font_name="inter_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
     font_path="../builtinFonts/source/Inter/Inter-${style}.ttf"
     output_path="../builtinFonts/${font_name}.h"
-    python fontconvert.py $font_name $size $font_path > $output_path
+    python fontconvert.py $font_name $size $font_path $hebrew_path \
+      --additional-intervals 0x05D0,0x05EA > $output_path
     echo "Generated $output_path"
   done
 done

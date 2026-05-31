@@ -66,7 +66,9 @@ void IntervalSelectionActivity::render(RenderLock&&) {
                  readerActivity);
 
   char formattedValue[32];
-  if (showPercentValue) {
+  if (maxBoundaryLabelId != StrId::STR_NONE_OPT && value == maxValue) {
+    snprintf(formattedValue, sizeof(formattedValue), "%s", I18N.get(maxBoundaryLabelId));
+  } else if (showPercentValue) {
     snprintf(formattedValue, sizeof(formattedValue), "%d%%", value);
   } else if (valueFormatId != StrId::STR_NONE_OPT) {
     snprintf(formattedValue, sizeof(formattedValue), I18N.get(valueFormatId), static_cast<unsigned int>(value));
@@ -94,7 +96,7 @@ void IntervalSelectionActivity::render(RenderLock&&) {
   renderer.drawCenteredText(SMALL_FONT_ID, barY + 30, I18N.get(stepHintId), true);
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), "-", "+");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, true);
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, readerActivity);
 
   renderer.displayBuffer();
 }
