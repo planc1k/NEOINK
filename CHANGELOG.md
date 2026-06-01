@@ -17,6 +17,7 @@
 - Reduced Home menu heap churn and skipped Lyra Carousel frame caching when heap is low to avoid crash risk on memory-constrained builds.
 - Fixed Vietnamese settings labels showing replacement diamonds after one over-escaped translation shifted generated string offsets.
 - Fixed KOReader Sync applying chapter-start progress a few pages into the chapter instead of landing at the start.
+- Fixed KOReader Sync error popups so connection problems show more specific guidance instead of a generic network error.
 - Fixed EPUB bookmark migration so bookmark files saved under the old unstable path hash are recovered, merged with any newer bookmark file, rewritten to the stable on-disk format, and kept working when finished books move into `/Read`.
 
 ## [v1.3.1] - 2026-05-28

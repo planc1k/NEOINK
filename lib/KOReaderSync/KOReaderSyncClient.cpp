@@ -5,15 +5,18 @@
 #include <ArduinoJsonStringCompat.h>
 #endif
 #include <HTTPClient.h>
+#include <I18n.h>
 #include <Logging.h>
 #ifdef SIMULATOR
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #else
 #include <esp_crt_bundle.h>
+#include <esp_err.h>
 #include <esp_http_client.h>
 #endif
 
+#include <cstdio>
 #include <cstring>
 #include <ctime>
 #include <memory>
@@ -21,11 +24,50 @@
 #include "KOReaderCredentialStore.h"
 
 int KOReaderSyncClient::lastHttpCode = 0;
+int KOReaderSyncClient::lastTransportError = 0;
 
 namespace {
 // Device identifier for CrossPoint reader
 constexpr char DEVICE_NAME[] = "CrossPoint";
 constexpr char DEVICE_ID[] = "crosspoint-reader";
+
+std::string formatHttpStatusMessage(int httpCode) {
+  char buffer[96];
+  snprintf(buffer, sizeof(buffer), tr(STR_KOREADER_SYNC_HTTP_STATUS_FORMAT), httpCode);
+  return std::string(buffer);
+}
+
+std::string networkErrorMessage() {
+#ifdef SIMULATOR
+  switch (KOReaderSyncClient::lastTransportError) {
+    case HTTPC_ERROR_CONNECTION_REFUSED:
+    case HTTPC_ERROR_NOT_CONNECTED:
+    case HTTPC_ERROR_NO_HTTP_SERVER:
+      return tr(STR_KOREADER_SYNC_NETWORK_REFUSED);
+    case HTTPC_ERROR_CONNECTION_LOST:
+    case HTTPC_ERROR_READ_TIMEOUT:
+      return tr(STR_KOREADER_SYNC_NETWORK_TIMEOUT);
+    default:
+      return tr(STR_KOREADER_SYNC_NETWORK_ERROR);
+  }
+#else
+  switch (KOReaderSyncClient::lastTransportError) {
+    case ESP_ERR_HTTP_CONNECT:
+    case ESP_ERR_HTTP_CONNECTING:
+    case ESP_ERR_HTTP_CONNECTION_CLOSED:
+      return tr(STR_KOREADER_SYNC_NETWORK_REFUSED);
+    case ESP_ERR_HTTP_FETCH_HEADER:
+    case ESP_ERR_HTTP_EAGAIN:
+    case ESP_ERR_HTTP_READ_TIMEOUT:
+    case ESP_ERR_HTTP_INCOMPLETE_DATA:
+      return tr(STR_KOREADER_SYNC_NETWORK_TIMEOUT);
+    case ESP_ERR_HTTP_INVALID_TRANSPORT:
+      return tr(STR_KOREADER_SYNC_NETWORK_TLS);
+    default:
+      return tr(STR_KOREADER_SYNC_NETWORK_ERROR);
+  }
+#endif
+}
 
 const char* classifyJsonBody(const char* body) {
   if (!body || body[0] == '\0') return "empty response";
@@ -175,6 +217,7 @@ esp_http_client_handle_t createClient(const char* url, ResponseBuffer* buf,
 
 KOReaderSyncClient::Error KOReaderSyncClient::authenticate() {
   lastHttpCode = 0;
+  lastTransportError = 0;
   if (!KOREADER_STORE.hasCredentials()) {
     LOG_DBG("KOSync", "No credentials configured");
     return NO_CREDENTIALS;
@@ -204,6 +247,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::authenticate() {
 
   const int httpCode = http.GET();
   lastHttpCode = httpCode;
+  lastTransportError = (httpCode < 0) ? httpCode : 0;
 
   LOG_DBG("KOSync", "Auth response: %d", httpCode);
 
@@ -222,12 +266,16 @@ KOReaderSyncClient::Error KOReaderSyncClient::authenticate() {
   ResponseBuffer buf;
   logHeapStats("Before auth client", url.c_str());
   esp_http_client_handle_t client = createClient(url.c_str(), &buf);
-  if (!client) return NETWORK_ERROR;
+  if (!client) {
+    lastTransportError = ESP_ERR_NO_MEM;
+    return NETWORK_ERROR;
+  }
 
   logHeapStats("Before auth perform");
   esp_err_t err = esp_http_client_perform(client);
   const int httpCode = esp_http_client_get_status_code(client);
   lastHttpCode = httpCode;
+  lastTransportError = static_cast<int>(err);
   logHeapStats("After auth perform");
   esp_http_client_cleanup(client);
 
@@ -243,6 +291,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::authenticate() {
 KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& documentHash,
                                                           KOReaderProgress& outProgress) {
   lastHttpCode = 0;
+  lastTransportError = 0;
   if (!KOREADER_STORE.hasCredentials()) {
     LOG_DBG("KOSync", "No credentials configured");
     return NO_CREDENTIALS;
@@ -272,6 +321,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
 
   const int httpCode = http.GET();
   lastHttpCode = httpCode;
+  lastTransportError = (httpCode < 0) ? httpCode : 0;
 
   if (httpCode == 200) {
     String responseBody = http.getString();
@@ -307,12 +357,16 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
   ResponseBuffer buf;
   logHeapStats("Before get client", url.c_str());
   esp_http_client_handle_t client = createClient(url.c_str(), &buf);
-  if (!client) return NETWORK_ERROR;
+  if (!client) {
+    lastTransportError = ESP_ERR_NO_MEM;
+    return NETWORK_ERROR;
+  }
 
   logHeapStats("Before get perform");
   esp_err_t err = esp_http_client_perform(client);
   const int httpCode = esp_http_client_get_status_code(client);
   lastHttpCode = httpCode;
+  lastTransportError = static_cast<int>(err);
   logHeapStats("After get perform");
   esp_http_client_cleanup(client);
 
@@ -348,6 +402,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
 
 KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgress& progress) {
   lastHttpCode = 0;
+  lastTransportError = 0;
   if (!KOREADER_STORE.hasCredentials()) {
     LOG_DBG("KOSync", "No credentials configured");
     return NO_CREDENTIALS;
@@ -391,6 +446,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
 
   const int httpCode = http.PUT(body.c_str());
   lastHttpCode = httpCode;
+  lastTransportError = (httpCode < 0) ? httpCode : 0;
   http.end();
 
   LOG_DBG("KOSync", "Update progress response: %d", httpCode);
@@ -403,11 +459,15 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
   ResponseBuffer buf;
   logHeapStats("Before put client", url.c_str());
   esp_http_client_handle_t client = createClient(url.c_str(), &buf, HTTP_METHOD_PUT);
-  if (!client) return NETWORK_ERROR;
+  if (!client) {
+    lastTransportError = ESP_ERR_NO_MEM;
+    return NETWORK_ERROR;
+  }
 
   if (esp_http_client_set_header(client, "Content-Type", "application/json") != ESP_OK ||
       esp_http_client_set_post_field(client, body.c_str(), body.length()) != ESP_OK) {
     LOG_ERR("KOSync", "Failed to set request body");
+    lastTransportError = ESP_ERR_INVALID_STATE;
     esp_http_client_cleanup(client);
     return NETWORK_ERROR;
   }
@@ -417,6 +477,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
   esp_err_t err = esp_http_client_perform(client);
   const int httpCode = esp_http_client_get_status_code(client);
   lastHttpCode = httpCode;
+  lastTransportError = static_cast<int>(err);
   logHeapStats("After put perform");
   esp_http_client_cleanup(client);
 
@@ -429,27 +490,29 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
 #endif
 }
 
-const char* KOReaderSyncClient::errorString(Error error) {
+std::string KOReaderSyncClient::errorString(Error error) {
   switch (error) {
     case OK:
       return "Success";
     case NO_CREDENTIALS:
-      return "No credentials configured";
+      return tr(STR_NO_CREDENTIALS_MSG);
     case NETWORK_ERROR:
-      return "Network error";
+      return networkErrorMessage();
     case AUTH_FAILED:
-      return "Authentication failed";
+      return tr(STR_KOREADER_SYNC_AUTH_REJECTED);
     case SERVER_ERROR:
-      return "Server error (try again later)";
+      if (lastHttpCode == 404) return tr(STR_KOREADER_SYNC_HTTP_404);
+      if (lastHttpCode > 0) return formatHttpStatusMessage(lastHttpCode);
+      return tr(STR_KOREADER_SYNC_SERVER_ERROR);
     case JSON_ERROR:
-      return "JSON parse error";
+      return tr(STR_KOREADER_SYNC_BAD_RESPONSE);
     case NOT_FOUND:
-      return "No progress found";
+      return tr(STR_NO_REMOTE_MSG);
     case INVALID_AUTH_RESPONSE:
-      return "Invalid auth response";
+      return tr(STR_KOREADER_SYNC_BAD_RESPONSE);
     case LOW_MEMORY:
-      return "Not enough memory for sync - please retry";
+      return tr(STR_KOREADER_SYNC_LOW_MEMORY);
     default:
-      return "Unknown error";
+      return tr(STR_UNKNOWN_ERROR);
   }
 }
