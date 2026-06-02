@@ -2517,7 +2517,7 @@ void EpubReaderActivity::renderStatusBar() const {
   char timeLeftLabel[24] = {};
   const char* timeLeft = formatTimeLeftLabel(timeLeftLabel, sizeof(timeLeftLabel)) ? timeLeftLabel : nullptr;
   GUI.drawStatusBar(renderer, bookProgress, currentPage, pageCount, title, 0, textYOffset, bookmarked, timeLeft);
-  GUI.drawTopStatusBarClock(renderer);
+  GUI.drawTopStatusBarClock(renderer, UITheme::getInstance().getMetrics().topPadding);
 }
 
 void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool savePosition) {

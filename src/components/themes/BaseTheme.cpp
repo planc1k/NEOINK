@@ -368,14 +368,14 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
                            const bool readerContext) const {
   // Hide last battery draw
   constexpr int maxBatteryWidth = 80;
-  renderer.fillRect(rect.x + rect.width - maxBatteryWidth, rect.y + 5, maxBatteryWidth,
+  renderer.fillRect(rect.x + rect.width - maxBatteryWidth, rect.y + homeHeaderTopInset, maxBatteryWidth,
                     BaseMetrics::values.batteryHeight + 10, false);
 
   const bool showBatteryPercentage =
       SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
   // Position icon at right edge, drawBatteryRight will place text to the left
   const int batteryX = rect.x + rect.width - 12 - BaseMetrics::values.batteryWidth;
-  const int batteryY = rect.y + (title == nullptr ? homeHeaderTopInset : 5);
+  const int batteryY = rect.y + homeHeaderTopInset;
   drawBatteryRight(renderer,
                    Rect{batteryX, batteryY, BaseMetrics::values.batteryWidth, BaseMetrics::values.batteryHeight},
                    showBatteryPercentage);

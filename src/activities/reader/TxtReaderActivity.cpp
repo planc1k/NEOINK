@@ -444,7 +444,7 @@ void TxtReaderActivity::renderPage() {
   // BW rendering
   renderLines();
   renderStatusBar();
-  GUI.drawTopStatusBarClock(renderer);
+  GUI.drawTopStatusBarClock(renderer, UITheme::getInstance().getMetrics().topPadding);
 
   ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
 
