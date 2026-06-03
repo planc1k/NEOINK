@@ -442,7 +442,13 @@ bool CrossPointSettings::loadFromBinaryFile() {
     if (++settingsRead >= fileSettingsCount) break;
     readAndValidate(inputFile, sideButtonLayout, SIDE_BUTTON_LAYOUT_COUNT);
     if (++settingsRead >= fileSettingsCount) break;
-    readAndValidate(inputFile, fontFamily, FONT_FAMILY_COUNT);
+    {
+      uint8_t legacyFontFamily;
+      serialization::readPod(inputFile, legacyFontFamily);
+      if (legacyFontFamily < BUILTIN_FONT_COUNT) {
+        fontFamily = legacyFontFamily;
+      }
+    }
     if (++settingsRead >= fileSettingsCount) break;
     readAndValidate(inputFile, fontSize, getActiveReaderFontSizeCount());
     if (++settingsRead >= fileSettingsCount) break;

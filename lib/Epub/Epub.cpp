@@ -346,6 +346,30 @@ bool Epub::parseTocNavFile() const {
   return true;
 }
 
+void Epub::discoverCssFilesFromZip() {
+  const std::string& opfDir = contentBasePath;
+  ZipFile zf(filepath);
+
+  if (!zf.enumerateFilePaths([&](std::string_view filePath) {
+        if (!opfDir.empty() && filePath.find(opfDir) != 0) {
+          return;
+        }
+
+        if (!FsHelpers::hasCssExtension(filePath)) {
+          return;
+        }
+
+        if (std::find(cssFiles.begin(), cssFiles.end(), filePath) != cssFiles.end()) {
+          return;
+        }
+
+        LOG_DBG("EBP", "Discovered CSS file via ZIP enumeration: %.*s", (int)filePath.size(), filePath.data());
+        cssFiles.push_back(std::string{filePath});
+      })) {
+    LOG_ERR("EBP", "Failed to enumerate ZIP file paths for CSS discovery");
+  }
+}
+
 Epub::CssParseStatus Epub::parseCssFiles(const bool forceRebuild) const {
   // Maximum CSS file size we'll attempt to parse (uncompressed)
   // Larger files risk memory exhaustion on ESP32
@@ -500,6 +524,8 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
         if (!parseContentOpf(cachedMetadata, /*writeSpineEntries=*/false)) {
           LOG_ERR("EBP", "Could not parse content.opf from cached bookMetadata for CSS files");
           // continue anyway - book will work without CSS and we'll still load any inline style CSS
+        } else {
+          discoverCssFilesFromZip();
         }
         bookMetadataCache.reset();
         const CssParseStatus cssStatus = parseCssFiles(forceCssRebuild);
@@ -551,6 +577,7 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
     LOG_ERR("EBP", "Could not parse content.opf");
     return false;
   }
+  discoverCssFilesFromZip();
   if (!bookMetadataCache->endContentOpfPass()) {
     LOG_ERR("EBP", "Could not end writing content.opf pass");
     return false;
@@ -610,6 +637,7 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
 
   if (!skipLoadingCss) {
     // Parse CSS before reloading book.bin to keep heap as open as possible for rule-table growth.
+    bookMetadataCache.reset();
     if (parseCssFiles() != CssParseStatus::Failed) {
       Storage.removeDir((cachePath + "/sections").c_str());
     } else {

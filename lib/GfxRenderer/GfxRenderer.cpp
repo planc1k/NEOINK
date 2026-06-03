@@ -163,6 +163,8 @@ bool GfxRenderer::ensureBitmapScratchBuffers(const size_t outputRowSize, const s
   return true;
 }
 
+bool GfxRenderer::isFontCacheScanning() const { return fontCacheManager_ && fontCacheManager_->isScanning(); }
+
 void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) {
   auto result = fontMap.insert({fontId, font});
   if (!result.second) {
