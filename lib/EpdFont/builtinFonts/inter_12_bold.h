@@ -3,7 +3,7 @@
  * name: inter_12_bold
  * size: 12
  * mode: 1-bit
- * Command used: fontconvert.py inter_12_bold 12 ../builtinFonts/source/Inter/Inter-Bold.ttf
+ * Command used: fontconvert.py inter_12_bold 12 ../builtinFonts/source/Inter/Inter-Bold.ttf --additional-intervals 0x05D0,0x05EA
  */
 #pragma once
 #include "EpdFontData.h"

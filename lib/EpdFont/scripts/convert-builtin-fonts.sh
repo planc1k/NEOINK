@@ -10,8 +10,7 @@ PHM_FONT="../builtinFonts/source/NotoSansCJKsc/NotoSansCJKsc-Regular.otf"
 
 # Additional Unicode intervals to include beyond the default Latin/Cyrillic/math set.
 # 0x2669-0x266F: Music notes and accidentals (♩♪♫♬♭♮♯)
-# 0x1F600-0x1F637, 0x1F641-0x1F644, 0x1F64F: Emoticons subset.
-#   Omits U+1F638-1F640, U+1F645-1F647, and U+1F648-1F64E.
+# Emoticons subset, excluding lower-value faces to keep firmware size down.
 # 0x1F44B-0x1F44F: Hand gesture emojis (👋👌👍👎👏)
 # 0x2764: Heart symbol (❤️)
 # 0x03BB: Greek lambda (λ)
@@ -43,9 +42,18 @@ COMMON_FALLBACK_INTERVALS=(
 
 EMOJI_ONLY_INTERVALS=(
   --additional-intervals 0x2669,0x266F
-  --additional-intervals 0x1F600,0x1F637
-  --additional-intervals 0x1F641,0x1F644
-  --additional-intervals 0x1F64F,0x1F64F
+  --additional-intervals 0x1F600,0x1F607
+  --additional-intervals 0x1F609,0x1F614
+  --additional-intervals 0x1F618,0x1F618
+  --additional-intervals 0x1F61A,0x1F61A
+  --additional-intervals 0x1F61C,0x1F61D
+  --additional-intervals 0x1F620,0x1F622
+  --additional-intervals 0x1F624,0x1F625
+  --additional-intervals 0x1F629,0x1F629
+  --additional-intervals 0x1F62C,0x1F62E
+  --additional-intervals 0x1F631,0x1F635
+  --additional-intervals 0x1F641,0x1F642
+  --additional-intervals 0x1F644,0x1F644
   --additional-intervals 0x1F44B,0x1F44F
   --additional-intervals 0x2764,0x2764
 )
@@ -97,9 +105,18 @@ CHAREINK_FALLBACK_RANGES=(
 )
 
 EMOJI_FALLBACK_RANGES=(
-  0x1F600,0x1F637
-  0x1F641,0x1F644
-  0x1F64F,0x1F64F
+  0x1F600,0x1F607
+  0x1F609,0x1F614
+  0x1F618,0x1F618
+  0x1F61A,0x1F61A
+  0x1F61C,0x1F61D
+  0x1F620,0x1F622
+  0x1F624,0x1F625
+  0x1F629,0x1F629
+  0x1F62C,0x1F62E
+  0x1F631,0x1F635
+  0x1F641,0x1F642
+  0x1F644,0x1F644
   0x1F44B,0x1F44F
   0x2764,0x2764
 )

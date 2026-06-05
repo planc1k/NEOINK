@@ -3,7 +3,7 @@
  * name: inter_10_regular
  * size: 10
  * mode: 1-bit
- * Command used: fontconvert.py inter_10_regular 10 ../builtinFonts/source/Inter/Inter-Regular.ttf
+ * Command used: fontconvert.py inter_10_regular 10 ../builtinFonts/source/Inter/Inter-Regular.ttf --additional-intervals 0x05D0,0x05EA
  */
 #pragma once
 #include "EpdFontData.h"
