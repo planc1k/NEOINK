@@ -2,7 +2,6 @@
 
 // Reading fonts have generated variants with identical variable names:
 //   default: emoji/symbol fallback + PHM CJK fallback
-//   OMIT_PHM: emoji/symbol fallback, no PHM CJK
 //   OMIT_EMOJI_FONTS: primary fonts only, no emoji and no PHM CJK
 //
 // Generate the variants with lib/EpdFont/scripts/convert-builtin-fonts.sh.
@@ -18,8 +17,6 @@
 //   OMIT_HUGE_FONT   - excludes 20px (Huge) reading fonts; used by all firmware envs except env:xlarge
 #ifdef OMIT_EMOJI_FONTS
 #define BUILTIN_READING_FONT_HEADER(name) <builtinFonts/noemoji/name.h>
-#elif defined(OMIT_PHM)
-#define BUILTIN_READING_FONT_HEADER(name) <builtinFonts/nophm/name.h>
 #else
 #define BUILTIN_READING_FONT_HEADER(name) <builtinFonts/name.h>
 #endif
