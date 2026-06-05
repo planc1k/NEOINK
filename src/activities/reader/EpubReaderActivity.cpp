@@ -469,26 +469,7 @@ bool EpubReaderActivity::estimateBookTimeLeftSecondsFromProgress(uint32_t& secon
     return false;
   }
 
-  const size_t bookSize = epub->getBookSize();
-  if (bookSize == 0) {
-    return false;
-  }
-
-  const size_t prevChapterSize = currentSpineIndex >= 1 ? epub->getCumulativeSpineItemSize(currentSpineIndex - 1) : 0;
-  const size_t cumulativeSize = epub->getCumulativeSpineItemSize(currentSpineIndex);
-  if (cumulativeSize <= prevChapterSize) {
-    return false;
-  }
-
-  const float chapterSize = static_cast<float>(cumulativeSize - prevChapterSize);
-  const float completedCurrentChapter =
-      (static_cast<float>(section->currentPage + 1) / static_cast<float>(section->pageCount)) * chapterSize;
-  const float completedBookSize = static_cast<float>(prevChapterSize) + completedCurrentChapter;
-  if (completedBookSize <= 0.0f || completedBookSize >= static_cast<float>(bookSize)) {
-    return false;
-  }
-
-  const float bookProgress = completedBookSize / static_cast<float>(bookSize);
+  const float bookProgress = getCurrentBookProgressPercent() / 100.0f;
   if (bookProgress < MIN_BOOK_PROGRESS_FOR_TIME_LEFT || bookProgress >= 1.0f) {
     return false;
   }
