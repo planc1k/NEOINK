@@ -86,7 +86,8 @@ bool readBoundedString(FsFile& file, std::string& s) {
 
 }  // namespace
 
-void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int x, const int y) const {
+void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int x, const int y,
+                       const bool foregroundBlack) const {
   // Validate iterator bounds before rendering
   const bool hasBionic = !wordBionicBoundary.empty();
   const bool hasGuideDots = !wordGuideDotXOffset.empty();
@@ -135,15 +136,15 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
       const size_t boldLen = std::min<size_t>({static_cast<size_t>(boundary), words[i].size(), sizeof(boldBuf) - 1});
       memcpy(boldBuf, words[i].c_str(), boldLen);
       boldBuf[boldLen] = '\0';
-      renderer.drawText(fontId, wordX, wordY, boldBuf, true, boldStyle, baseDir);
+      renderer.drawText(fontId, wordX, wordY, boldBuf, foregroundBlack, boldStyle, baseDir);
       const int suffixX = wordX + wordBionicSuffixX[i];
-      renderer.drawText(fontId, suffixX, wordY, words[i].c_str() + boldLen, true, currentStyle, baseDir);
+      renderer.drawText(fontId, suffixX, wordY, words[i].c_str() + boldLen, foregroundBlack, currentStyle, baseDir);
     } else {
-      renderer.drawText(fontId, wordX, wordY, words[i].c_str(), true, currentStyle, baseDir);
+      renderer.drawText(fontId, wordX, wordY, words[i].c_str(), foregroundBlack, currentStyle, baseDir);
     }
 
     if (hasGuideDots && wordGuideDotXOffset[i] > 0) {
-      renderer.drawText(fontId, wordX + wordGuideDotXOffset[i], y, "\xc2\xb7", true, EpdFontFamily::REGULAR);
+      renderer.drawText(fontId, wordX + wordGuideDotXOffset[i], y, "\xc2\xb7", foregroundBlack, EpdFontFamily::REGULAR);
     }
 
     if (!scanning && (currentStyle & EpdFontFamily::UNDERLINE) != 0) {
@@ -165,7 +166,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
         underlineWidth = visibleWidth;
       }
 
-      renderer.drawLine(startX, underlineY, startX + underlineWidth, underlineY, 3, true);
+      renderer.drawLine(startX, underlineY, startX + underlineWidth, underlineY, 3, foregroundBlack);
     }
 
     if ((currentStyle & EpdFontFamily::STRIKETHROUGH) != 0) {
@@ -190,7 +191,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
         strikeWidth = visibleWidth;
       }
 
-      renderer.drawLine(startX, strikeY, startX + strikeWidth, strikeY, 3, true);
+      renderer.drawLine(startX, strikeY, startX + strikeWidth, strikeY, 3, foregroundBlack);
     }
   }
 }

@@ -368,8 +368,9 @@ void TxtReaderActivity::render(RenderLock&&) {
   }
 
   if (pageOffsets.empty()) {
-    renderer.clearScreen();
-    renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_EMPTY_FILE), true, EpdFontFamily::BOLD);
+    renderer.clearScreen(ReaderUtils::readerBackgroundColor());
+    renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_EMPTY_FILE), ReaderUtils::readerForegroundBlack(),
+                              EpdFontFamily::BOLD);
     renderer.displayBuffer();
     return;
   }
@@ -384,7 +385,7 @@ void TxtReaderActivity::render(RenderLock&&) {
   currentPageLines.clear();
   loadPageAtOffset(offset, currentPageLines, nextOffset);
 
-  renderer.clearScreen();
+  renderer.clearScreen(ReaderUtils::readerBackgroundColor());
   renderPage();
 
   // Save progress
@@ -429,7 +430,7 @@ void TxtReaderActivity::renderPage() {
             break;
         }
 
-        renderer.drawText(cachedFontId, x, y, line.c_str());
+        renderer.drawText(cachedFontId, x, y, line.c_str(), ReaderUtils::readerForegroundBlack());
       }
       y += lineHeight;
     }
@@ -444,11 +445,12 @@ void TxtReaderActivity::renderPage() {
   // BW rendering
   renderLines();
   renderStatusBar();
-  GUI.drawTopStatusBarClock(renderer, UITheme::getInstance().getMetrics().topPadding);
+  GUI.drawTopStatusBarClock(renderer, UITheme::getInstance().getMetrics().topPadding, nullptr, true, 0,
+                            ReaderUtils::readerDarkModeEnabled());
 
   ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
 
-  if (SETTINGS.textAntiAliasing) {
+  if (SETTINGS.textAntiAliasing && ReaderUtils::readerForegroundBlack()) {
     ReaderUtils::renderAntiAliased(renderer, [&renderLines]() { renderLines(); });
   }
   // scope destructor clears font cache via FontCacheManager
@@ -460,7 +462,8 @@ void TxtReaderActivity::renderStatusBar() const {
   if (SETTINGS.statusBarTitle != CrossPointSettings::STATUS_BAR_TITLE::HIDE_TITLE) {
     title = txt->getTitle();
   }
-  GUI.drawStatusBar(renderer, progress, currentPage + 1, totalPages, title);
+  GUI.drawStatusBar(renderer, progress, currentPage + 1, totalPages, title, 0, 0, false, nullptr,
+                    ReaderUtils::readerDarkModeEnabled());
 }
 
 void TxtReaderActivity::saveProgress() const {
@@ -777,7 +780,7 @@ bool TxtReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, Gfx
   if (pageLines.empty()) return false;
 
   // Render lines to frame buffer (no displayBuffer call)
-  renderer.clearScreen();
+  renderer.clearScreen(ReaderUtils::readerBackgroundColor());
   int y = marginTop;
   for (const auto& line : pageLines) {
     if (!line.empty()) {
@@ -792,7 +795,7 @@ bool TxtReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, Gfx
         default:
           break;
       }
-      renderer.drawText(fontId, x, y, line.c_str());
+      renderer.drawText(fontId, x, y, line.c_str(), ReaderUtils::readerForegroundBlack());
     }
     y += lineHeight;
   }

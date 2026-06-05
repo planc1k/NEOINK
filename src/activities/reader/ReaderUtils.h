@@ -38,6 +38,12 @@ inline void applyOrientation(GfxRenderer& renderer, const uint8_t orientation) {
 
 inline bool shouldShowTopClockStatusBar() { return halClock.isAvailable() && SETTINGS.shouldShowClockInReader(); }
 
+inline bool readerDarkModeEnabled() { return SETTINGS.readerDarkMode != 0; }
+
+inline uint8_t readerBackgroundColor() { return readerDarkModeEnabled() ? 0x00 : 0xFF; }
+
+inline bool readerForegroundBlack() { return !readerDarkModeEnabled(); }
+
 inline int getTopClockStatusBarHeight() {
   if (!shouldShowTopClockStatusBar()) {
     return 0;

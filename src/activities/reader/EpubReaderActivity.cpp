@@ -77,8 +77,8 @@ struct TiledGrayscaleTimings {
 };
 
 bool runTiledGrayscalePass(GfxRenderer& renderer, const Page& page, const int fontId, const int marginLeft,
-                           const int marginTop, const bool needsTextGrayscale, const bool needsImageGrayscale,
-                           TiledGrayscaleTimings& timings) {
+                           const int marginTop, const bool foregroundBlack, const bool needsTextGrayscale,
+                           const bool needsImageGrayscale, TiledGrayscaleTimings& timings) {
   if ((!needsTextGrayscale && !needsImageGrayscale) || !renderer.supportsStripGrayscale()) {
     return false;
   }
@@ -103,7 +103,7 @@ bool runTiledGrayscalePass(GfxRenderer& renderer, const Page& page, const int fo
       renderer.beginStripTarget(scratch.get(), y, rows);
       renderer.clearScreen(0x00);
       if (needsTextGrayscale) {
-        page.render(renderer, fontId, marginLeft, marginTop);
+        page.render(renderer, fontId, marginLeft, marginTop, foregroundBlack);
       } else {
         page.renderImages(renderer, fontId, marginLeft, marginTop);
       }
@@ -145,7 +145,7 @@ void drawToast(const GfxRenderer& renderer, const char* msg) {
 }
 
 void drawPublisherPageMarkers(const GfxRenderer& renderer, const Page& page, const int contentTop,
-                              const int contentBottom) {
+                              const int contentBottom, const bool foregroundBlack = true) {
   if (!SETTINGS.publisherPageNumbers || page.publisherPageMarkers.empty()) {
     return;
   }
@@ -188,7 +188,7 @@ void drawPublisherPageMarkers(const GfxRenderer& renderer, const Page& page, con
       const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, label);
       const int maxY = contentBottom - lineHeight;
       const int y = maxY < contentTop ? contentTop : std::min(std::max(contentTop + marker.yPos, contentTop), maxY);
-      renderer.drawTextRotated90CW(SMALL_FONT_ID, x, y + textWidth, label);
+      renderer.drawTextRotated90CW(SMALL_FONT_ID, x, y + textWidth, label, foregroundBlack);
       continue;
     }
 
@@ -204,7 +204,7 @@ void drawPublisherPageMarkers(const GfxRenderer& renderer, const Page& page, con
       }
       const char ch[2] = {*p, '\0'};
       const int charWidth = renderer.getTextWidth(SMALL_FONT_ID, ch);
-      renderer.drawText(SMALL_FONT_ID, x + (maxCharWidth - charWidth) / 2, y + row * lineStep, ch);
+      renderer.drawText(SMALL_FONT_ID, x + (maxCharWidth - charWidth) / 2, y + row * lineStep, ch, foregroundBlack);
       row++;
     }
   }
@@ -2263,11 +2263,12 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     }
   }
 
-  renderer.clearScreen();
+  renderer.clearScreen(ReaderUtils::readerBackgroundColor());
 
   if (section->pageCount == 0) {
     LOG_DBG("ERS", "No pages to render");
-    renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_EMPTY_CHAPTER), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_EMPTY_CHAPTER), ReaderUtils::readerForegroundBlack(),
+                              EpdFontFamily::BOLD);
     renderStatusBar();
     renderer.displayBuffer();
     automaticPageTurnActive = false;
@@ -2277,7 +2278,8 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 
   if (section->currentPage < 0 || section->currentPage >= section->pageCount) {
     LOG_DBG("ERS", "Page out of bounds: %d (max %d)", section->currentPage, section->pageCount);
-    renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_OUT_OF_BOUNDS), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_OUT_OF_BOUNDS), ReaderUtils::readerForegroundBlack(),
+                              EpdFontFamily::BOLD);
     renderStatusBar();
     renderer.displayBuffer();
     automaticPageTurnActive = false;
@@ -2300,8 +2302,9 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       }
 
       LOG_ERR("ERS", "Failed to load page from SD after %d retries", pageLoadRetryCount);
-      renderer.clearScreen();
-      renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_PAGE_LOAD_ERROR), true, EpdFontFamily::BOLD);
+      renderer.clearScreen(ReaderUtils::readerBackgroundColor());
+      renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_PAGE_LOAD_ERROR), ReaderUtils::readerForegroundBlack(),
+                                EpdFontFamily::BOLD);
       renderStatusBar();
       renderer.displayBuffer();
       automaticPageTurnActive = false;
@@ -2430,23 +2433,24 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
       largestBlockPercent(heapBefore), largestBlockPercent(heapAfter));
 
   const bool pageHasImages = page->hasImages();
+  const bool foregroundBlack = ReaderUtils::readerForegroundBlack();
   const bool needsImageGrayscale = pageHasImages;
-  const bool needsTextGrayscale = SETTINGS.textAntiAliasing;
+  const bool needsTextGrayscale = SETTINGS.textAntiAliasing && foregroundBlack;
   const bool needsAnyGrayscale = needsTextGrayscale || needsImageGrayscale;
   const int contentBottom = renderer.getScreenHeight() - orientedMarginBottom;
 
   const auto finalizeBufferComposition = [&]() {
-    drawPublisherPageMarkers(renderer, *page, orientedMarginTop, contentBottom);
+    drawPublisherPageMarkers(renderer, *page, orientedMarginTop, contentBottom, foregroundBlack);
   };
 
   const auto composePageBuffer = [&]() {
-    page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+    page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop, foregroundBlack);
     finalizeBufferComposition();
   };
 
   const auto composeGrayscaleBuffer = [&]() {
     if (needsTextGrayscale) {
-      page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+      page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop, foregroundBlack);
     } else {
       page->renderImages(renderer, fontId, orientedMarginLeft, orientedMarginTop);
     }
@@ -2524,8 +2528,8 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
   const auto tDisplay = millis();
 
   TiledGrayscaleTimings tiledTimings;
-  if (runTiledGrayscalePass(renderer, *page, fontId, orientedMarginLeft, orientedMarginTop, needsTextGrayscale,
-                            needsImageGrayscale, tiledTimings)) {
+  if (runTiledGrayscalePass(renderer, *page, fontId, orientedMarginLeft, orientedMarginTop, foregroundBlack,
+                            needsTextGrayscale, needsImageGrayscale, tiledTimings)) {
     const auto tEnd = millis();
     LOG_DBG("ERS",
             "Page render (tiled): prewarm=%lums bw_render=%lums display=%lums "
@@ -2644,8 +2648,10 @@ void EpubReaderActivity::renderStatusBar() const {
                                                        section->pageCount > 0 ? section->pageCount : 1);
   char timeLeftLabel[24] = {};
   const char* timeLeft = formatTimeLeftLabel(timeLeftLabel, sizeof(timeLeftLabel)) ? timeLeftLabel : nullptr;
-  GUI.drawStatusBar(renderer, bookProgress, currentPage, pageCount, title, 0, textYOffset, bookmarked, timeLeft);
-  GUI.drawTopStatusBarClock(renderer, UITheme::getInstance().getMetrics().topPadding);
+  GUI.drawStatusBar(renderer, bookProgress, currentPage, pageCount, title, 0, textYOffset, bookmarked, timeLeft,
+                    ReaderUtils::readerDarkModeEnabled());
+  GUI.drawTopStatusBarClock(renderer, UITheme::getInstance().getMetrics().topPadding, nullptr, true, 0,
+                            ReaderUtils::readerDarkModeEnabled());
 }
 
 void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool savePosition) {
@@ -2832,9 +2838,10 @@ bool EpubReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, Gf
     return false;
   }
 
-  renderer.clearScreen();
-  page->render(renderer, renderFontId, marginLeft, marginTop);
-  drawPublisherPageMarkers(renderer, *page, marginTop, renderer.getScreenHeight() - marginBottom);
+  renderer.clearScreen(ReaderUtils::readerBackgroundColor());
+  page->render(renderer, renderFontId, marginLeft, marginTop, ReaderUtils::readerForegroundBlack());
+  drawPublisherPageMarkers(renderer, *page, marginTop, renderer.getScreenHeight() - marginBottom,
+                           ReaderUtils::readerForegroundBlack());
   // No displayBuffer call; caller (SleepActivity) handles that after compositing the overlay.
   return true;
 }

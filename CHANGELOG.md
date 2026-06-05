@@ -4,6 +4,7 @@
 
 ### Added
 - Added the current date to the top-right Settings header on X3 devices with an RTC.
+- Added a Dark Reader Mode setting for EPUB and TXT reading screens.
 - Added a File Browser folder action to use a selected folder for sleep images instead of only `/.sleep` or `/sleep`.
 - Added additionl X3 reading stats including reading streaks, time-of-day/day-of-week reading-time charts, and editable start/finished book dates.
 - Added a `Minimal Stats` sleep screen option that reuses the Minimal layout and adds X3-only streak and reader-type footer stats.
