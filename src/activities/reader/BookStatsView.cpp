@@ -9,6 +9,7 @@
 #include <cstdio>
 
 #include "MappedInputManager.h"
+#include "components/HeaderDate.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -16,6 +17,7 @@ namespace {
 constexpr int kStatsButtonHintTopGap = 10;
 constexpr int kStandaloneNoRtcMaxTopCardHeightDivisor = 2;
 constexpr int kStandaloneNoRtcMaxVerticalOffset = 32;
+constexpr int kPerBookRtcTopCardMaxExtra = 84;
 
 struct StatsLayout {
   int headerHeight;
@@ -112,6 +114,18 @@ int statsBottomInset(const ThemeMetrics& metrics, const bool showButtonHints) {
   return metrics.verticalSpacing + (showButtonHints ? metrics.buttonHintsHeight + kStatsButtonHintTopGap : 0);
 }
 
+int perBookRtcTopCardHeight(const StatsLayout& layout, const int extraHeight) {
+  return layout.topCardH + std::min(extraHeight, kPerBookRtcTopCardMaxExtra);
+}
+
+int globalRtcCardHeightForPerBookRowSpacing(const StatsLayout& layout, const int perBookExtraHeight) {
+  constexpr int perBookDataRowCount = 3;
+  constexpr int globalDataRowCount = 2;
+  const int perBookDataRowH =
+      (perBookRtcTopCardHeight(layout, perBookExtraHeight) - layout.topCardTitleH) / perBookDataRowCount;
+  return std::max(layout.globalCardH, layout.topCardTitleH + perBookDataRowH * globalDataRowCount);
+}
+
 const StatsLayout& getStatsLayout(GfxRenderer& renderer, const bool globalPage, const bool showButtonHints,
                                   const bool showRtcStats) {
   const auto& metrics = UITheme::getInstance().getMetrics();
@@ -202,7 +216,8 @@ float pagesPerMinute(const uint32_t totalPagesTurned, const uint32_t totalReadin
   return static_cast<float>(totalPagesTurned) * 60.0f / static_cast<float>(totalReadingSeconds);
 }
 
-void drawHeaderTitle(GfxRenderer& renderer, const char* title, const int headerDrawHeight = 67) {
+void drawHeaderTitle(GfxRenderer& renderer, const char* title, const int headerDrawHeight = 67,
+                     const bool showDate = false) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int screenWidth = renderer.getScreenWidth();
   constexpr int titleLiftPx = 5;
@@ -213,11 +228,18 @@ void drawHeaderTitle(GfxRenderer& renderer, const char* title, const int headerD
   const int availableH = visibleHeaderHeight - metrics.batteryBarHeight;
   const int titleX = metrics.contentSidePadding;
   const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
-  const int titleY = metrics.topPadding + metrics.batteryBarHeight + (availableH - lineHeight) / 2 - titleLiftPx;
+  const int titleY = showDate
+                         ? headerDateLineBottomY(renderer, metrics, visibleHeaderHeight) - lineHeight
+                         : metrics.topPadding + metrics.batteryBarHeight + (availableH - lineHeight) / 2 - titleLiftPx;
   const int batteryStartX = screenWidth - metrics.contentSidePadding - metrics.batteryWidth;
-  const int maxTitleWidth = batteryStartX - titleX - metrics.contentSidePadding;
+  const int dateStartX = showDate ? screenWidth - headerDateReservedWidth(renderer) : screenWidth;
+  const int titleRightX = std::min(batteryStartX, dateStartX) - metrics.contentSidePadding;
+  const int maxTitleWidth = std::max(1, titleRightX - titleX);
   const std::string truncTitle = renderer.truncatedText(UI_12_FONT_ID, title, maxTitleWidth, EpdFontFamily::BOLD);
   renderer.drawText(UI_12_FONT_ID, titleX, titleY, truncTitle.c_str(), true, EpdFontFamily::BOLD);
+  if (showDate) {
+    drawHeaderDate(renderer, screenWidth, metrics, visibleHeaderHeight);
+  }
 }
 
 void drawCenteredLabel(GfxRenderer& renderer, const int fontId, const int x, const int w, const int y, const char* text,
@@ -444,7 +466,7 @@ void renderPerBookStatsPage(GfxRenderer& renderer, const MappedInputManager* map
   const bool showRtcStats = shouldShowRtcBasedStats();
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto& layout = getStatsLayout(renderer, false, showButtonHints, showRtcStats);
-  drawHeaderTitle(renderer, tr(STR_READING_STATS), layout.headerDrawHeight);
+  drawHeaderTitle(renderer, tr(STR_READING_STATS), layout.headerDrawHeight, true);
   const int screenW = renderer.getScreenWidth();
   const int cardX = metrics.contentSidePadding;
   const int cardW = screenW - metrics.contentSidePadding * 2;
@@ -459,7 +481,7 @@ void renderPerBookStatsPage(GfxRenderer& renderer, const MappedInputManager* map
     const int compactContentHeight = std::min(metrics.headerHeight, layout.headerHeight) + layout.topGap +
                                      layout.topCardH + layout.cardGap + timeOfDayH + layout.cardGap + dayOfWeekH;
     const int extraHeight = std::max(0, availableHeight - compactContentHeight);
-    const int extraTopCardHeight = std::min(extraHeight, 84);
+    const int extraTopCardHeight = std::min(extraHeight, kPerBookRtcTopCardMaxExtra);
     const int remainingExtraHeight = extraHeight - extraTopCardHeight;
     const int timeOfDayExtraHeight = (remainingExtraHeight * 4) / 11;
     const int dayOfWeekExtraHeight = remainingExtraHeight - timeOfDayExtraHeight;
@@ -525,7 +547,11 @@ void renderGlobalStatsPage(GfxRenderer& renderer, const MappedInputManager* mapp
     const int compactContentHeight = std::min(metrics.headerHeight, layout.headerHeight) + layout.topGap +
                                      layout.globalCardH + layout.cardGap + timeOfDayH + layout.cardGap + dayOfWeekH;
     const int extraHeight = std::max(0, availableHeight - compactContentHeight);
-    const int extraTopCardHeight = std::min(extraHeight, 48);
+    const int perBookCompactContentHeight = std::min(metrics.headerHeight, layout.headerHeight) + layout.topGap +
+                                            layout.topCardH + layout.cardGap + timeOfDayH + layout.cardGap + dayOfWeekH;
+    const int perBookExtraHeight = std::max(0, availableHeight - perBookCompactContentHeight);
+    const int targetGlobalCardH = globalRtcCardHeightForPerBookRowSpacing(layout, perBookExtraHeight);
+    const int extraTopCardHeight = std::min(extraHeight, std::max(0, targetGlobalCardH - layout.globalCardH));
     const int remainingExtraHeight = extraHeight - extraTopCardHeight;
     const int timeOfDayExtraHeight = (remainingExtraHeight * 4) / 11;
     const int dayOfWeekExtraHeight = remainingExtraHeight - timeOfDayExtraHeight;
