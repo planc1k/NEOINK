@@ -71,8 +71,6 @@ constexpr int kStatsFooterSideInset = 48;
 constexpr int kStatsFooterColumnGap = 18;
 int homeButtonHintSelection = -1;
 
-const char* dayCountText(const uint16_t days) { return days == 1 ? tr(STR_STATS_DAY) : tr(STR_STATS_DAYS); }
-
 bool dominantReaderTypeBucket(const GlobalReadingStats& globalStats, ReadingTimeBucket& bucketOut) {
   const auto& values = globalStats.timeOfDaySeconds;
   const uint32_t totalSeconds = std::accumulate(values.begin(), values.end(), 0u);
@@ -142,7 +140,7 @@ void formatStreakStat(const GlobalReadingStats& globalStats, char* buf, const si
     return;
   }
 
-  snprintf(buf, len, tr(STR_STATS_DAY_STREAK_FORMAT), static_cast<unsigned>(streak), dayCountText(streak));
+  snprintf(buf, len, tr(STR_STATS_DAY_STREAK_FORMAT), static_cast<unsigned>(streak));
 }
 
 void drawStatsFooter(const GfxRenderer& renderer, const GlobalReadingStats& globalStats) {
