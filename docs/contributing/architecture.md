@@ -182,7 +182,7 @@ Endpoint reference: `docs/webserver-endpoints.md`.
 
 Some sources are generated and should not be edited manually.
 
-- `scripts/build_html.py` generates `src/network/html/*.generated.h` from `src/network/html/*.html`
+- `scripts/build_web.py` generates the web portal headers `src/network/html/*.generated.h` from the `web/` sources (`web/templates/base.html` + `web/pages/<slug>.{html,css,js}` + shared `web/assets/style.css` and `web/assets/logo.png`). Preview the pages in a browser without flashing via `python3 scripts/preview_web.py` (http://localhost:8000), which live-renders from `web/` and serves mock API data.
 - `scripts/generate_hyphenation_trie.py` generates hyphenation headers under `lib/Epub/Epub/hyphenation/generated/`
 
 When editing related source assets, regenerate via normal build steps/scripts.

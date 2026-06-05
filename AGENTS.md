@@ -75,7 +75,7 @@ Project: Open-source e-reader firmware for Xteink X4 (ESP32-C3).
 ## Generated Files
 
 - Do not edit generated files directly.
-- HTML headers under `src/network/html/*.generated.h` come from `data/html/*.html` via `scripts/build_html.py`.
+- Web portal headers under `src/network/html/*.generated.h` are built by `scripts/build_web.py` from sources in `web/`: pages compose `web/templates/base.html` (shared chrome) with `web/pages/<slug>.{html,css,js}`, plus shared assets `web/assets/style.css` (served at `/style.css`) and `web/assets/logo.png` (served at `/logo.png`). Edit the `web/` sources, never the generated headers.
 - I18n generated files under `lib/I18n/` come from `lib/I18n/translations/*.yaml` via `scripts/gen_i18n.py`.
 
 ## Cache Format

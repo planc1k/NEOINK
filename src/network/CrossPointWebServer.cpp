@@ -26,7 +26,9 @@
 #include "html/FilesPageHtml.generated.h"
 #include "html/FontsPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
+#include "html/LogoPng.generated.h"
 #include "html/SettingsPageHtml.generated.h"
+#include "html/StyleCss.generated.h"
 #include "html/js/jszip_minJs.generated.h"
 #include "util/BookCacheUtils.h"
 #include "util/StringUtils.h"
@@ -177,6 +179,8 @@ void CrossPointWebServer::begin() {
   server->on("/", HTTP_GET, [this] { handleRoot(); });
   server->on("/files", HTTP_GET, [this] { handleFileList(); });
   server->on("/js/jszip.min.js", HTTP_GET, [this] { handleJszip(); });
+  server->on("/style.css", HTTP_GET, [this] { handleStyleCss(); });
+  server->on("/logo.png", HTTP_GET, [this] { handleLogo(); });
 
   server->on("/api/status", HTTP_GET, [this] { handleStatus(); });
   server->on("/api/files", HTTP_GET, [this] { handleFileListData(); });
@@ -390,6 +394,22 @@ void CrossPointWebServer::handleJszip() const {
   server->sendHeader("Content-Encoding", "gzip");
   server->send_P(200, "application/javascript", jszip_minJs, jszip_minJsCompressedSize);
   LOG_DBG("WEB", "Served jszip.min.js");
+}
+
+// Shared stylesheet and logo are referenced with a content-hashed ?v= query,
+// so they can be cached aggressively: a new build changes the URL.
+void CrossPointWebServer::handleStyleCss() const {
+  server->sendHeader("Content-Encoding", "gzip");
+  server->sendHeader("Cache-Control", "public, max-age=31536000, immutable");
+  server->send_P(200, "text/css", StyleCss, StyleCssCompressedSize);
+  LOG_DBG("WEB", "Served style.css");
+}
+
+void CrossPointWebServer::handleLogo() const {
+  // Raw PNG (already compressed); no Content-Encoding.
+  server->sendHeader("Cache-Control", "public, max-age=31536000, immutable");
+  server->send_P(200, "image/png", LogoPng, LogoPngSize);
+  LOG_DBG("WEB", "Served logo.png");
 }
 
 void CrossPointWebServer::handleNotFound() const {
