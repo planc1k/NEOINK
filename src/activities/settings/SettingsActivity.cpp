@@ -279,7 +279,8 @@ void SettingsActivity::closeSubmenu() {
 }
 
 bool SettingsActivity::currentSettingUsesOptionMenu(const SettingInfo& setting) const {
-  return selectedCategoryIndex == 2 && setting.type == SettingType::ENUM && settingEnumOptionCount(setting) > 2 &&
+  return (selectedCategoryIndex == 0 || selectedCategoryIndex == 2) && setting.type == SettingType::ENUM &&
+         settingEnumOptionCount(setting) > 2 &&
          (setting.valuePtr != nullptr || (setting.valueGetter && setting.valueSetter));
 }
 

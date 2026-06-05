@@ -247,22 +247,22 @@ inline SettingInfo buildFontFamilySetting(const SdCardFontRegistry* registry) {
 inline SettingInfo buildSleepScreenSetting() {
   SettingInfo s =
       SettingInfo::Enum(StrId::STR_SLEEP_SCREEN, &CrossPointSettings::sleepScreen,
-                        {StrId::STR_DARK, StrId::STR_LIGHT, StrId::STR_CUSTOM, StrId::STR_COVER, StrId::STR_NONE_OPT,
+                        {StrId::STR_NONE_OPT, StrId::STR_DARK, StrId::STR_LIGHT, StrId::STR_CUSTOM, StrId::STR_COVER,
                          StrId::STR_COVER_CUSTOM, StrId::STR_PAGE_OVERLAY, StrId::STR_READING_STATS,
-                         StrId::STR_THEME_MINIMAL, StrId::STR_QUICK_RESUME, StrId::STR_THEME_MINIMAL_STATS},
+                         StrId::STR_THEME_MINIMAL, StrId::STR_THEME_MINIMAL_STATS, StrId::STR_QUICK_RESUME},
                         "sleepScreen", StrId::STR_CAT_DISPLAY);
   s.withEnumRawValues({
+      static_cast<uint8_t>(CrossPointSettings::BLANK),
       static_cast<uint8_t>(CrossPointSettings::DARK),
       static_cast<uint8_t>(CrossPointSettings::LIGHT),
       static_cast<uint8_t>(CrossPointSettings::CUSTOM),
       static_cast<uint8_t>(CrossPointSettings::COVER),
-      static_cast<uint8_t>(CrossPointSettings::BLANK),
       static_cast<uint8_t>(CrossPointSettings::COVER_CUSTOM),
       static_cast<uint8_t>(CrossPointSettings::OVERLAY),
       static_cast<uint8_t>(CrossPointSettings::READING_STATS_SLEEP),
       static_cast<uint8_t>(CrossPointSettings::MINIMAL_SLEEP),
-      static_cast<uint8_t>(CrossPointSettings::QUICK_RESUME),
       static_cast<uint8_t>(CrossPointSettings::MINIMAL_STATS_SLEEP),
+      static_cast<uint8_t>(CrossPointSettings::QUICK_RESUME),
   });
   return s;
 }
@@ -296,21 +296,23 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           {StrId::STR_NEVER, StrId::STR_IN_READER, StrId::STR_ALWAYS}, "hideBatteryPercentage",
                           StrId::STR_CAT_DISPLAY));
     add(SettingInfo::Enum(StrId::STR_CLOCK, &CrossPointSettings::statusBarClock,
-                          {StrId::STR_ALWAYS, StrId::STR_NEVER, StrId::STR_IN_READER}, "statusBarClock",
+                          {StrId::STR_NEVER, StrId::STR_IN_READER, StrId::STR_ALWAYS}, "statusBarClock",
                           StrId::STR_CAT_DISPLAY)
-            .withEnumRawValues({CrossPointSettings::CLOCK_ALWAYS, CrossPointSettings::CLOCK_NEVER,
-                                CrossPointSettings::CLOCK_IN_READER}));
+            .withEnumRawValues({CrossPointSettings::CLOCK_NEVER, CrossPointSettings::CLOCK_IN_READER,
+                                CrossPointSettings::CLOCK_ALWAYS}));
     add(SettingInfo::Enum(
         StrId::STR_REFRESH_FREQ, &CrossPointSettings::refreshFrequency,
         {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15, StrId::STR_PAGES_30},
         "refreshFrequency", StrId::STR_CAT_DISPLAY));
-    add(SettingInfo::Enum(StrId::STR_UI_THEME, &CrossPointSettings::uiTheme,
-                          {StrId::STR_THEME_CLASSIC, StrId::STR_THEME_LYRA, StrId::STR_THEME_LYRA_EXTENDED,
-                           StrId::STR_THEME_ROUNDEDRAFF, StrId::STR_THEME_LYRA_CAROUSEL, StrId::STR_THEME_MINIMAL},
-                          "uiTheme", StrId::STR_CAT_DISPLAY)
-            .withEnumRawValues({CrossPointSettings::UI_THEME::CLASSIC, CrossPointSettings::UI_THEME::LYRA,
-                                CrossPointSettings::UI_THEME::LYRA_3_COVERS, CrossPointSettings::UI_THEME::ROUNDEDRAFF,
-                                CrossPointSettings::UI_THEME::LYRA_CAROUSEL, CrossPointSettings::UI_THEME::MINIMAL}));
+    add(SettingInfo::Enum(
+            StrId::STR_UI_THEME, &CrossPointSettings::uiTheme,
+            {StrId::STR_THEME_CLASSIC, StrId::STR_THEME_MINIMAL, StrId::STR_THEME_LYRA, StrId::STR_THEME_LYRA_EXTENDED,
+             StrId::STR_THEME_LYRA_CAROUSEL, StrId::STR_THEME_ROUNDEDRAFF},
+            "uiTheme", StrId::STR_CAT_DISPLAY)
+            .withEnumRawValues({CrossPointSettings::UI_THEME::CLASSIC, CrossPointSettings::UI_THEME::MINIMAL,
+                                CrossPointSettings::UI_THEME::LYRA, CrossPointSettings::UI_THEME::LYRA_3_COVERS,
+                                CrossPointSettings::UI_THEME::LYRA_CAROUSEL,
+                                CrossPointSettings::UI_THEME::ROUNDEDRAFF}));
     add(SettingInfo::Enum(StrId::STR_RECENT_BOOKS_VIEW, &CrossPointSettings::recentBooksView,
                           {StrId::STR_LIST_VIEW, StrId::STR_GRID_VIEW}, "recentBooksView", StrId::STR_CAT_DISPLAY));
     add(SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
