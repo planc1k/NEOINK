@@ -28,7 +28,7 @@ class NearbyStatsSyncActivity final : public Activity {
   void enqueueEspNowPacket(const uint8_t* sourceMac, const uint8_t* data, int length);
 
  private:
-  enum class PacketType : uint8_t { HELLO = 1, STATS = 2, ACK = 3 };
+  enum class PacketType : uint8_t { HELLO = 1, STATS = 2, ACK = 3, INVALID_STATS = 0xFF };
 
   struct SyncEvent {
     PacketType type = PacketType::HELLO;

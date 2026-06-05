@@ -394,3 +394,5 @@ STR_TINY: "Maličký"
 STR_TITLE: "Název"
 STR_TOP: "Nahoru"
 STR_XTC_STATUS_BAR: "Stavový řádek XTC"
+
+STR_NEARBY_STATS_VERSION_MISMATCH: "Version mismatch. Stats not synced"

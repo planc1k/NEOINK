@@ -295,21 +295,27 @@ void NearbyStatsSyncActivity::enqueueEspNowPacket(const uint8_t* sourceMac, cons
   if (data[4] != PROTOCOL_VERSION) return;
 
   SyncEvent event;
-  event.type = static_cast<PacketType>(data[5]);
+  const PacketType packetType = static_cast<PacketType>(data[5]);
+  event.type = packetType;
   event.statsSize = data[6];
   std::copy(sourceMac, sourceMac + event.sourceMac.size(), event.sourceMac.begin());
   std::copy(data + 8, data + 14, event.deviceMac.begin());
 
   const int expectedLength = PACKET_HEADER_BYTES + (event.type == PacketType::STATS ? event.statsSize : 0);
-  if (length != expectedLength) return;
-  if (event.type != PacketType::HELLO && event.type != PacketType::STATS && event.type != PacketType::ACK) return;
+  if (packetType != PacketType::HELLO && packetType != PacketType::STATS && packetType != PacketType::ACK) return;
   if (event.deviceMac == localDeviceMac_) return;
-  if (event.type == PacketType::STATS) {
-    if (event.statsSize > event.stats.size() || !isValidStatsPayload(data + PACKET_HEADER_BYTES, event.statsSize))
-      return;
-    std::copy(data + PACKET_HEADER_BYTES, data + PACKET_HEADER_BYTES + event.statsSize, event.stats.begin());
-  } else if (event.statsSize != 0) {
+  if (packetType == PacketType::STATS) {
+    if (length != expectedLength || event.statsSize > event.stats.size() ||
+        !isValidStatsPayload(data + PACKET_HEADER_BYTES, event.statsSize)) {
+      event.type = PacketType::INVALID_STATS;
+      event.statsSize = 0;
+    } else {
+      std::copy(data + PACKET_HEADER_BYTES, data + PACKET_HEADER_BYTES + event.statsSize, event.stats.begin());
+    }
+  } else if (length != expectedLength) {
     return;
+  } else if (packetType == PacketType::HELLO || packetType == PacketType::ACK) {
+    if (event.statsSize != 0) return;
   }
 
   if (xSemaphoreTake(eventMutex_, 0) != pdTRUE) return;
@@ -379,6 +385,11 @@ void NearbyStatsSyncActivity::handleEvent(const SyncEvent& event) {
 
   if (!localStatsReady_ && !prepareLocalStats()) return;
   if (state_ == State::READY || state_ == State::DISCOVERING || state_ == State::SYNCED) setState(State::SYNCING);
+
+  if (event.type == PacketType::INVALID_STATS) {
+    setError(tr(STR_NEARBY_STATS_VERSION_MISMATCH));
+    return;
+  }
 
   if (event.type == PacketType::HELLO) {
     sendLocalStats();

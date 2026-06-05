@@ -462,3 +462,5 @@ STR_THEME_MINIMAL: "Minimal"
 STR_THEME_ROUNDEDRAFF: "RoundedRaff"
 STR_TOP: "Trên cùng"
 STR_XTC_STATUS_BAR: "Thanh trạng thái XTC"
+
+STR_NEARBY_STATS_VERSION_MISMATCH: "Version mismatch. Stats not synced"

@@ -458,3 +458,5 @@ STR_TINY: "Liten"
 STR_TOGGLE_BIONIC_READING: "Bionic läsning"
 STR_TOGGLE_BOOKMARK: "Växla bokmärke"
 STR_TOGGLE_GUIDE_DOTS: "Guide prickar"
+
+STR_NEARBY_STATS_VERSION_MISMATCH: "Version mismatch. Stats not synced"

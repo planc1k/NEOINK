@@ -401,3 +401,5 @@ STR_TOGGLE_BOOKMARK: "Kapcsolja be a Könyvjelzőt"
 STR_TOGGLE_GUIDE_DOTS: "Útmutató pontok"
 STR_TOP: "Top"
 STR_XTC_STATUS_BAR: "XTC állapotsor"
+
+STR_NEARBY_STATS_VERSION_MISMATCH: "Version mismatch. Stats not synced"

@@ -389,3 +389,5 @@ STR_TOGGLE_BOOKMARK: "Vaihda kirjanmerkki"
 STR_TOGGLE_GUIDE_DOTS: "Opaspisteet"
 STR_TOP: "Yläosa"
 STR_XTC_STATUS_BAR: "XTC-tilapalkki"
+
+STR_NEARBY_STATS_VERSION_MISMATCH: "Version mismatch. Stats not synced"

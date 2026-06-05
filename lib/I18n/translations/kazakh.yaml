@@ -401,3 +401,5 @@ STR_TOGGLE_BOOKMARK: "Бетбелгі қосу/өшіру"
 STR_TOGGLE_GUIDE_DOTS: "Нұсқау нүктелері"
 STR_TOP: "Жоғарғы"
 STR_XTC_STATUS_BAR: "XTC күй жолағы"
+
+STR_NEARBY_STATS_VERSION_MISMATCH: "Version mismatch. Stats not synced"

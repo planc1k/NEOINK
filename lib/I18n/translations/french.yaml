@@ -401,3 +401,5 @@ STR_TOGGLE_BOOKMARK: "Basculer le signet"
 STR_TOGGLE_GUIDE_DOTS: "Points guides"
 STR_TOP: "Haut"
 STR_XTC_STATUS_BAR: "Barre d'état XTC"
+
+STR_NEARBY_STATS_VERSION_MISMATCH: "Version mismatch. Stats not synced"

@@ -389,3 +389,5 @@ STR_TOGGLE_BOOKMARK: "Alternar marcador"
 STR_TOGGLE_GUIDE_DOTS: "Pontos guia"
 STR_TOP: "Superior"
 STR_XTC_STATUS_BAR: "Barra de status XTC"
+
+STR_NEARBY_STATS_VERSION_MISMATCH: "Version mismatch. Stats not synced"

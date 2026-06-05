@@ -460,3 +460,5 @@ STR_TINY: "diminuto"
 STR_TOGGLE_BIONIC_READING: "Lectura biónica"
 STR_TOGGLE_BOOKMARK: "Alternar marcador"
 STR_TOGGLE_GUIDE_DOTS: "Puntos guía"
+
+STR_NEARBY_STATS_VERSION_MISMATCH: "Version mismatch. Stats not synced"

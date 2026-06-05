@@ -401,3 +401,5 @@ STR_TOGGLE_BOOKMARK: "Skift bogmærke"
 STR_TOGGLE_GUIDE_DOTS: "Vejledende prikker"
 STR_TOP: "Øverst"
 STR_XTC_STATUS_BAR: "XTC statuslinje"
+
+STR_NEARBY_STATS_VERSION_MISMATCH: "Version mismatch. Stats not synced"
