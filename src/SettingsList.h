@@ -1,6 +1,7 @@
 #pragma once
 
 #include <HalClock.h>
+#include <HalGPIO.h>
 #include <HalTiltSensor.h>
 #include <I18n.h>
 #include <SdCardFontRegistry.h>
@@ -101,6 +102,19 @@ inline void insertEnumOptionAfter(SettingInfo& setting, const StrId after, const
   setting.enumValues.insert(it + 1, option);
   if (!setting.enumRawValues.empty()) {
     setting.enumRawValues.insert(setting.enumRawValues.begin() + insertIndex, rawValue);
+  }
+}
+
+inline void removeEnumRawValue(SettingInfo& setting, const uint8_t rawValue) {
+  const auto it = std::find(setting.enumRawValues.begin(), setting.enumRawValues.end(), rawValue);
+  if (it == setting.enumRawValues.end()) {
+    return;
+  }
+
+  const size_t index = static_cast<size_t>(std::distance(setting.enumRawValues.begin(), it));
+  setting.enumRawValues.erase(it);
+  if (index < setting.enumValues.size()) {
+    setting.enumValues.erase(setting.enumValues.begin() + index);
   }
 }
 
@@ -555,6 +569,13 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         std::find_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_FONT_SIZE; });
     if (fontSizeIt != v.end()) {
       *fontSizeIt = buildFontSizeSetting(registry);
+    }
+  }
+  if (!gpio.deviceIsX3()) {
+    auto sleepScreenIt =
+        std::find_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_SLEEP_SCREEN; });
+    if (sleepScreenIt != v.end()) {
+      removeEnumRawValue(*sleepScreenIt, static_cast<uint8_t>(CrossPointSettings::MINIMAL_STATS_SLEEP));
     }
   }
   return v;

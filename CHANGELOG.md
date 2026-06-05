@@ -7,7 +7,7 @@
 - Added a Dark Reader Mode setting for EPUB and TXT reading screens.
 - Added a File Browser folder action to use a selected folder for sleep images instead of only `/.sleep` or `/sleep`.
 - Added additionl X3 reading stats including reading streaks, time-of-day/day-of-week reading-time charts, and editable start/finished book dates.
-- Added a `Minimal Stats` sleep screen option that reuses the Minimal layout and adds X3-only streak and reader-type footer stats.
+- Added an X3-only `Minimal Stats` sleep screen option that reuses the Minimal layout and adds streak and reader-type footer stats.
 - Added `Backup Reading Stats` in Settings > System > Files & Cache, plus X3 automatic daily backups written to `/.crossink-stats-backup/` so cumulative stats survive `/.crosspoint/` cleanup.
 
 ### Changed
