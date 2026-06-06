@@ -8,7 +8,7 @@
 - File Browser long-press folder action for choosing a custom sleep-image folder instead of only `/.sleep` or `/sleep`.
 - Additional X3 reading stats, including reading streaks, time-of-day and day-of-week charts, and editable started/finished book dates.
 - X3-only `Minimal Stats` sleep screen option that reuses the Minimal layout and adds streak and reader-type stats.
-- `Backup Reading Stats` in Settings > System > Files & Cache, plus automatic X3 daily backups in `/.crossink-stats-backup/` so cumulative stats survive `/.crosspoint/` cleanup.
+- `Backup Global Reading Stats` in Settings > System > Files & Cache, plus automatic X3 daily backups in `/.crossink-stats-backup/` so cumulative stats survive `/.crosspoint/` cleanup.
 
 ### Changed
 - Display, Reader, and Controls settings now open choice menus instead of cycling through options one by one.
