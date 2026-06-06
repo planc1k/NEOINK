@@ -138,6 +138,13 @@ void TxtReaderActivity::onExit() {
 }
 
 void TxtReaderActivity::loop() {
+  if (consumeLongPowerButtonRelease()) {
+    return;
+  }
+  if (executeDarkModePowerButtonAction()) {
+    return;
+  }
+
   // Long press BACK (1s+) goes to file selection
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS) {
     activityManager.goToFileBrowser(txt ? txt->getPath() : "");
@@ -226,6 +233,47 @@ void TxtReaderActivity::loop() {
       onGoHome();
     }
   }
+}
+
+void TxtReaderActivity::toggleDarkMode() {
+  SETTINGS.readerDarkMode = !SETTINGS.readerDarkMode;
+  SETTINGS.saveToFile();
+  requestUpdate();
+}
+
+bool TxtReaderActivity::consumeLongPowerButtonRelease() {
+  if (!mappedInput.wasReleased(MappedInputManager::Button::Power) || !longPowerButtonHandled) {
+    return false;
+  }
+
+  longPowerButtonHandled = false;
+  return true;
+}
+
+bool TxtReaderActivity::consumeLongPowerButtonHold() {
+  if (longPowerButtonHandled || !mappedInput.isPressed(MappedInputManager::Button::Power) ||
+      mappedInput.getHeldTime() < SETTINGS.getPowerButtonLongPressDuration()) {
+    return false;
+  }
+
+  longPowerButtonHandled = true;
+  return true;
+}
+
+bool TxtReaderActivity::executeDarkModePowerButtonAction() {
+  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::TOGGLE_DARK_MODE &&
+      mappedInput.wasReleased(MappedInputManager::Button::Power) &&
+      mappedInput.getHeldTime() < SETTINGS.getPowerButtonLongPressDuration()) {
+    toggleDarkMode();
+    return true;
+  }
+
+  if (SETTINGS.longPwrBtn == CrossPointSettings::SHORT_PWRBTN::TOGGLE_DARK_MODE && consumeLongPowerButtonHold()) {
+    toggleDarkMode();
+    return true;
+  }
+
+  return false;
 }
 
 void TxtReaderActivity::initializeReader() {

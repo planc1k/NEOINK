@@ -15,6 +15,7 @@ class TxtReaderActivity final : public Activity {
   int pagesUntilFullRefresh = 0;
   bool sideButtonLongPressHandled = false;
   bool frontButtonLongPressHandled = false;
+  bool longPowerButtonHandled = false;
 
   // Streaming text reader - stores file offsets for each page
   std::vector<size_t> pageOffsets;  // File offset for start of each page
@@ -42,6 +43,10 @@ class TxtReaderActivity final : public Activity {
   void savePageIndexCache() const;
   void saveProgress() const;
   void loadProgress();
+  void toggleDarkMode();
+  bool consumeLongPowerButtonRelease();
+  bool consumeLongPowerButtonHold();
+  bool executeDarkModePowerButtonAction();
 
  public:
   explicit TxtReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Txt> txt)

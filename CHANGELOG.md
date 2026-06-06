@@ -5,6 +5,7 @@
 ### Added
 - Current date in the top-right Settings header on X3 devices.
 - Dark Reader Mode for EPUB and TXT reading screens.
+- Dark Mode shortcut option for power-button actions and the front-button long-press menu action.
 - File Browser long-press folder action for choosing a custom sleep-image folder instead of only `/.sleep` or `/sleep`.
 - Additional X3 reading stats, including reading streaks, time-of-day and day-of-week charts, and editable started/finished book dates.
 - X3-only `Minimal Stats` sleep screen option that reuses the Minimal layout and adds streak and reader-type stats.
