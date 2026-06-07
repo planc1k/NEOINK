@@ -27,6 +27,8 @@
 #include "SettingsList.h"
 #include "StatusBarSettingsActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
+#include "activities/reader/GlobalReadingStats.h"
+#include "activities/util/ConfirmationActivity.h"
 #include "activities/util/IntervalSelectionActivity.h"
 #include "activities/util/OptionSelectionActivity.h"
 #include "components/HeaderDate.h"
@@ -77,6 +79,19 @@ std::string formatUtcOffset(uint8_t biasedQ) {
   const int absMinutes = neg ? -totalMinutes : totalMinutes;
   char buf[16];
   snprintf(buf, sizeof(buf), "UTC%c%d:%02d", neg ? '-' : '+', absMinutes / 60, absMinutes % 60);
+  return buf;
+}
+
+std::string formatCompactDuration(const uint32_t seconds) {
+  char buf[24];
+  if (seconds < 60) {
+    snprintf(buf, sizeof(buf), "%lus", static_cast<unsigned long>(seconds));
+  } else if (seconds % 60 == 0) {
+    snprintf(buf, sizeof(buf), "%lum", static_cast<unsigned long>(seconds / 60));
+  } else {
+    snprintf(buf, sizeof(buf), "%lum %lus", static_cast<unsigned long>(seconds / 60),
+             static_cast<unsigned long>(seconds % 60));
+  }
   return buf;
 }
 
@@ -132,6 +147,9 @@ std::string formatSettingValue(const SettingInfo& setting) {
   if (setting.valuePtr == &CrossPointSettings::lineHeightPercent) {
     return std::to_string(SETTINGS.*(setting.valuePtr)) + "%";
   }
+  if (setting.valuePtr == &CrossPointSettings::readingIdleTimeThresholdUnits) {
+    return formatCompactDuration(SETTINGS.getReadingIdleTimeThresholdSeconds());
+  }
   if (setting.valuePtr == &CrossPointSettings::clockUtcOffsetQ) {
     return formatUtcOffset(SETTINGS.*(setting.valuePtr));
   }
@@ -172,6 +190,8 @@ void SettingsActivity::rebuildSettingsLists() {
   systemSettings.clear();
   systemDeviceSettings.clear();
   systemFilesCacheSettings.clear();
+  systemReadingStatsSettings.clear();
+  systemGlobalStatsSettings.clear();
 
   // Pick up any fonts uploaded/deleted over the web server since the last
   // reader activity ran — otherwise the font-family picker shows stale list.
@@ -186,6 +206,8 @@ void SettingsActivity::rebuildSettingsLists() {
   systemSettings = buildSystemSettingsParentList(allSettings);
   systemDeviceSettings = buildSystemDeviceSettingsList(allSettings);
   systemFilesCacheSettings = buildSystemFilesCacheSettingsList(allSettings);
+  systemReadingStatsSettings = buildSystemReadingStatsSettingsList(allSettings);
+  systemGlobalStatsSettings = buildSystemGlobalStatsSettingsList(allSettings);
   controlsSettings = buildControlsSettingsParentList(allSettings);
   controlsPowerSettings = buildControlsPowerSettingsList(allSettings);
   controlsFrontButtonSettings = buildControlsFrontButtonSettingsList(allSettings);
@@ -244,6 +266,12 @@ void SettingsActivity::setCurrentSettingsForCategory() {
         case SettingAction::SystemFilesCache:
           currentSettings = &systemFilesCacheSettings;
           break;
+        case SettingAction::SystemReadingStats:
+          currentSettings = &systemReadingStatsSettings;
+          break;
+        case SettingAction::SystemGlobalStats:
+          currentSettings = &systemGlobalStatsSettings;
+          break;
         default:
           currentSettings = &systemSettings;
           break;
@@ -256,6 +284,7 @@ void SettingsActivity::setCurrentSettingsForCategory() {
 void SettingsActivity::enterCategory(int categoryIndex) {
   selectedCategoryIndex = categoryIndex;
   activeSubmenu = SettingAction::None;
+  parentSubmenu = SettingAction::None;
   setCurrentSettingsForCategory();
 }
 
@@ -277,12 +306,17 @@ StrId SettingsActivity::activeSubmenuTitleId() const {
       return StrId::STR_SYSTEM_DEVICE;
     case SettingAction::SystemFilesCache:
       return StrId::STR_SYSTEM_FILES_CACHE;
+    case SettingAction::SystemReadingStats:
+      return StrId::STR_READING_STATS;
+    case SettingAction::SystemGlobalStats:
+      return StrId::STR_ALL_TIME_STATS;
     default:
       return StrId::STR_NONE_OPT;
   }
 }
 
 void SettingsActivity::openSubmenu(SettingAction action) {
+  parentSubmenu = activeSubmenu;
   activeSubmenu = action;
   setCurrentSettingsForCategory();
   selectedSettingIndex = 1;
@@ -293,7 +327,8 @@ void SettingsActivity::openSubmenu(SettingAction action) {
 }
 
 void SettingsActivity::closeSubmenu() {
-  activeSubmenu = SettingAction::None;
+  activeSubmenu = parentSubmenu;
+  parentSubmenu = SettingAction::None;
   setCurrentSettingsForCategory();
   selectedSettingIndex = 1;
 }
@@ -389,6 +424,7 @@ void SettingsActivity::onEnter() {
   selectedCategoryIndex = 0;
   selectedSettingIndex = 0;
   activeSubmenu = SettingAction::None;
+  parentSubmenu = SettingAction::None;
   preserveQuickResumeTimeoutOn =
       SETTINGS.quickResumeSleepScreen == CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT;
   quickResumeTimeoutAutoEnabled = false;
@@ -507,6 +543,10 @@ void SettingsActivity::toggleCurrentSetting() {
     openScreenMarginPicker(setting);
     return;
   }
+  if (setting.valuePtr == &CrossPointSettings::readingIdleTimeThresholdUnits) {
+    openIdleTimeThresholdPicker();
+    return;
+  }
   if (setting.valuePtr == &CrossPointSettings::clockUtcOffsetQ) {
     startActivityForResult(std::make_unique<ClockOffsetActivity>(renderer, mappedInput), [this](const ActivityResult&) {
       SETTINGS.saveToFile();
@@ -586,6 +626,17 @@ void SettingsActivity::toggleCurrentSetting() {
       case SettingAction::BackupStats:
         startActivityForResult(std::make_unique<BackupStatsActivity>(renderer, mappedInput), resultHandler);
         break;
+      case SettingAction::ResetGlobalStats:
+        startActivityForResult(
+            std::make_unique<ConfirmationActivity>(renderer, mappedInput, tr(STR_RESET_ALL_TIME_STATS),
+                                                   tr(STR_RESET_ALL_TIME_STATS_CONFIRM)),
+            [this](const ActivityResult& result) {
+              if (!result.isCancelled && !GlobalReadingStats::resetLocal()) {
+                LOG_ERR("SET", "Failed to reset all-time reading stats");
+              }
+              requestUpdate();
+            });
+        break;
       case SettingAction::ClearCache:
         startActivityForResult(std::make_unique<ClearCacheActivity>(renderer, mappedInput), resultHandler);
         break;
@@ -615,6 +666,8 @@ void SettingsActivity::toggleCurrentSetting() {
       case SettingAction::ControlsSideButtons:
       case SettingAction::SystemDevice:
       case SettingAction::SystemFilesCache:
+      case SettingAction::SystemReadingStats:
+      case SettingAction::SystemGlobalStats:
       case SettingAction::DisplaySleepScreen:
       case SettingAction::None:
         // Do nothing
@@ -683,6 +736,26 @@ void SettingsActivity::openLineHeightPicker() {
         if (!result.isCancelled) {
           SETTINGS.lineHeightPercent = CrossPointSettings::clampedLineHeightPercent(
               static_cast<uint8_t>(std::get<IntervalResult>(result.data).value));
+          SETTINGS.saveToFile();
+        }
+        requestUpdate();
+      });
+}
+
+void SettingsActivity::openIdleTimeThresholdPicker() {
+  startActivityForResult(
+      std::make_unique<IntervalSelectionActivity>(
+          renderer, mappedInput, "IdleTimeThresholdInterval", StrId::STR_IDLE_TIME_THRESHOLD,
+          StrId::STR_IDLE_TIME_THRESHOLD_STEP_HINT, SETTINGS.getReadingIdleTimeThresholdSeconds(),
+          CrossPointSettings::MIN_READING_IDLE_TIME_THRESHOLD_SECONDS,
+          CrossPointSettings::MAX_READING_IDLE_TIME_THRESHOLD_SECONDS,
+          CrossPointSettings::READING_IDLE_TIME_THRESHOLD_UNIT_SECONDS, 60, StrId::STR_SECONDS_VALUE_FORMAT,
+          /*readerActivity=*/false, /*allowPowerAsConfirm=*/false, /*ignoreInitialConfirmRelease=*/false,
+          /*showPercentValue=*/false),
+      [this](const ActivityResult& result) {
+        if (!result.isCancelled) {
+          SETTINGS.readingIdleTimeThresholdUnits = CrossPointSettings::readingIdleTimeThresholdUnitsForSeconds(
+              static_cast<uint16_t>(std::get<IntervalResult>(result.data).value));
           SETTINGS.saveToFile();
         }
         requestUpdate();
@@ -769,6 +842,8 @@ void SettingsActivity::render(RenderLock&&) {
                       (*currentSettings)[selectedSettingIndex - 1].nameId == StrId::STR_FONT_FAMILY ||
                       (*currentSettings)[selectedSettingIndex - 1].nameId == StrId::STR_TIME_TO_SLEEP ||
                       (*currentSettings)[selectedSettingIndex - 1].valuePtr == &CrossPointSettings::lineHeightPercent ||
+                      (*currentSettings)[selectedSettingIndex - 1].valuePtr ==
+                          &CrossPointSettings::readingIdleTimeThresholdUnits ||
                       (*currentSettings)[selectedSettingIndex - 1].valuePtr == &CrossPointSettings::screenMargin)
                  ? tr(STR_SELECT)
                  : tr(STR_TOGGLE));

@@ -28,8 +28,11 @@ enum class SettingAction {
   ControlsSideButtons,
   SystemDevice,
   SystemFilesCache,
+  SystemReadingStats,
+  SystemGlobalStats,
   Network,
   BackupStats,
+  ResetGlobalStats,
   ClearCache,
   CheckForUpdates,
   SdFirmwareUpdate,
@@ -234,11 +237,14 @@ class SettingsActivity final : public Activity {
   std::vector<SettingInfo> systemSettings;
   std::vector<SettingInfo> systemDeviceSettings;
   std::vector<SettingInfo> systemFilesCacheSettings;
+  std::vector<SettingInfo> systemReadingStatsSettings;
+  std::vector<SettingInfo> systemGlobalStatsSettings;
   const std::vector<SettingInfo>* currentSettings = nullptr;
 
   bool preserveQuickResumeTimeoutOn = false;
   bool quickResumeTimeoutAutoEnabled = false;
   SettingAction activeSubmenu = SettingAction::None;
+  SettingAction parentSubmenu = SettingAction::None;
 
   static constexpr int categoryCount = 4;
   static const StrId categoryNames[categoryCount];
@@ -251,6 +257,7 @@ class SettingsActivity final : public Activity {
   bool currentSettingUsesOptionMenu(const SettingInfo& setting) const;
   void openEnumOptionPicker(const SettingInfo& setting);
   void openScreenMarginPicker(const SettingInfo& setting);
+  void openIdleTimeThresholdPicker();
   void toggleCurrentSetting();
   void openSleepTimeoutPicker();
   void openLineHeightPicker();
