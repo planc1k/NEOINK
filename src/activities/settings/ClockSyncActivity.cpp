@@ -10,12 +10,14 @@
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
+#include "SdCardFontSystem.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
 void ClockSyncActivity::onEnter() {
   Activity::onEnter();
+  sdFontSystem.releaseLoadedFont(renderer);
   syncedTime[0] = '\0';
   state = SYNCING;
 

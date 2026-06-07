@@ -64,6 +64,7 @@ void NearbyStatsSyncActivity::setState(const State state) {
 #include <string>
 
 #include "MappedInputManager.h"
+#include "SdCardFontSystem.h"
 #include "activities/reader/GlobalReadingStats.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -189,6 +190,7 @@ NearbyStatsSyncActivity::~NearbyStatsSyncActivity() {
 
 void NearbyStatsSyncActivity::onEnter() {
   Activity::onEnter();
+  sdFontSystem.releaseLoadedFont(renderer);
   setState(State::STARTING);
 
   if (esp_efuse_mac_get_default(localDeviceMac_.data()) != ESP_OK) {

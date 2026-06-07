@@ -73,6 +73,7 @@ class WifiSelectionActivity final : public Activity {
 
   // Whether we are attempting to auto-connect
   bool autoConnecting = false;
+  bool tearDownWifiOnExit = false;
 
   // Save/forget prompt selection (0 = Yes, 1 = No)
   int savePromptSelection = 0;

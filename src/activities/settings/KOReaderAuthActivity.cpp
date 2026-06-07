@@ -7,6 +7,7 @@
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncClient.h"
 #include "MappedInputManager.h"
+#include "SdCardFontSystem.h"
 #include "SilentRestart.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
@@ -51,6 +52,7 @@ void KOReaderAuthActivity::performAuthentication() {
 
 void KOReaderAuthActivity::onEnter() {
   Activity::onEnter();
+  sdFontSystem.releaseLoadedFont(renderer);
 
   // Check if already connected
   if (WiFi.status() == WL_CONNECTED) {

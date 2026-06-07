@@ -13,6 +13,7 @@
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
+#include "SdCardFontSystem.h"
 #include "WifiCredentialStore.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
@@ -167,6 +168,7 @@ const char* wifiAuthName(const int authMode) {
 
 void WifiSelectionActivity::onEnter() {
   Activity::onEnter();
+  sdFontSystem.releaseLoadedFont(renderer);
   ensureWifiEventLoggingRegistered();
 
   // Load saved WiFi credentials - SD card operations need lock as we use SPI
@@ -185,6 +187,7 @@ void WifiSelectionActivity::onEnter() {
   connectionError.clear();
   enteredPassword.clear();
   usedSavedPassword = false;
+  tearDownWifiOnExit = false;
   savePromptSelection = 0;
   forgetPromptSelection = 0;
   autoConnecting = false;
@@ -230,9 +233,18 @@ void WifiSelectionActivity::onExit() {
   WiFi.scanDelete();
   LOG_DBG("WIFI", "Free heap after scanDelete: %d bytes", ESP.getFreeHeap());
 
-  // Note: We do NOT disconnect WiFi here - the parent activity
-  // (CrossPointWebServerActivity) manages WiFi connection state. We just clean
-  // up the scan and task.
+  // Successful connections leave WiFi up for the parent activity. Canceled
+  // flows own their cleanup because no parent may be present to tear WiFi down.
+  if (tearDownWifiOnExit) {
+    LOG_DBG("WIFI", "Tearing down WiFi after cancelled selection...");
+#ifndef SIMULATOR
+    sConnectionAttemptLoggingActive = false;
+#endif
+    WiFi.disconnect(false);
+    delay(30);
+    WiFi.mode(WIFI_OFF);
+    LOG_DBG("WIFI", "Free heap after WiFi off: %d bytes", ESP.getFreeHeap());
+  }
 
   LOG_DBG("WIFI", "Free heap at onExit end: %d bytes", ESP.getFreeHeap());
 }
@@ -932,6 +944,7 @@ void WifiSelectionActivity::renderForgetPrompt(const Rect* screen, const ThemeMe
 }
 
 void WifiSelectionActivity::onComplete(const bool connected) {
+  tearDownWifiOnExit = !connected;
   ActivityResult result;
   result.isCancelled = !connected;
   if (connected) {

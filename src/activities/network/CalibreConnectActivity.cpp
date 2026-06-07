@@ -7,6 +7,7 @@
 #include <esp_task_wdt.h>
 
 #include "MappedInputManager.h"
+#include "SdCardFontSystem.h"
 #include "SilentRestart.h"
 #include "WifiSelectionActivity.h"
 #include "components/UITheme.h"
@@ -18,6 +19,7 @@ constexpr const char* HOSTNAME = "crosspoint";
 
 void CalibreConnectActivity::onEnter() {
   Activity::onEnter();
+  sdFontSystem.releaseLoadedFont(renderer);
 
   requestUpdate();
   state = CalibreConnectState::WIFI_SELECTION;

@@ -17,6 +17,7 @@
 #include "KOReaderDocumentId.h"
 #include "MappedInputManager.h"
 #include "ReaderUtils.h"
+#include "SdCardFontSystem.h"
 #include "SilentRestart.h"
 #include "activities/ActivityManager.h"
 #include "activities/network/WifiSelectionActivity.h"
@@ -328,6 +329,7 @@ void KOReaderSyncActivity::onEnter() {
   }
 
   // Past this point every path uses WiFi.
+  sdFontSystem.releaseLoadedFont(renderer);
   wifiActivated = true;
 
   // Check if already connected (e.g. from settings page auth)
