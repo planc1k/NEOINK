@@ -319,6 +319,7 @@ void FontDownloadActivity::resolveInstalledFamilyName(ManifestFamily& family) co
 
 void FontDownloadActivity::downloadAll() {
   cancelRequested_ = false;
+  hasRetryFamily_ = false;
   for (size_t i = 0; i < families_.size(); i++) {
     if (families_[i].installed) continue;
     downloadFamily(families_[i]);
@@ -333,6 +334,7 @@ void FontDownloadActivity::downloadAll() {
 
 void FontDownloadActivity::updateAll() {
   cancelRequested_ = false;
+  hasRetryFamily_ = false;
   for (size_t i = 0; i < families_.size(); i++) {
     if (!families_[i].hasUpdate) continue;
     downloadFamily(families_[i]);
@@ -407,6 +409,63 @@ bool FontDownloadActivity::computeFileCrc32(const char* path, uint32_t& outCrc) 
   return true;
 }
 
+void FontDownloadActivity::downloadSelectedFamily(const int familyIndex) {
+  if (familyIndex < 0 || familyIndex >= static_cast<int>(families_.size())) {
+    return;
+  }
+
+  ManifestFamily family = families_[familyIndex];
+  retryFamily_ = ManifestFamily();
+  hasRetryFamily_ = false;
+  manifestReloadNeeded_ = true;
+  activeDownloadFamilyName_ = family.name;
+  selectedIndex_ = 0;
+
+  families_.clear();
+  families_.shrink_to_fit();
+
+  downloadFamily(family);
+  if (state_ == ERROR) {
+    retryFamily_ = family;
+    hasRetryFamily_ = true;
+  } else if (state_ == COMPLETE) {
+    hasRetryFamily_ = false;
+    retryFamily_ = ManifestFamily();
+  } else if (state_ == FAMILY_LIST && manifestReloadNeeded_) {
+    returnToFamilyList();
+  }
+}
+
+void FontDownloadActivity::returnToFamilyList() {
+  hasRetryFamily_ = false;
+  retryFamily_ = ManifestFamily();
+  activeDownloadFamilyName_.clear();
+
+  if (manifestReloadNeeded_) {
+    {
+      RenderLock lock(*this);
+      state_ = LOADING_MANIFEST;
+      errorMessage_.clear();
+      errorHint_.clear();
+    }
+    requestUpdateAndWait();
+
+    if (!fetchAndParseManifest()) {
+      RenderLock lock(*this);
+      state_ = ERROR;
+      return;
+    }
+
+    manifestReloadNeeded_ = false;
+  }
+
+  {
+    RenderLock lock(*this);
+    state_ = FAMILY_LIST;
+    selectedIndex_ = 0;
+  }
+}
+
 void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
   const auto failDownload = [this, &family](const std::string& message, const std::string& hint) {
     fontInstaller_.refreshRegistry();
@@ -428,10 +487,18 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
     requestUpdate(true);
   };
 
+  activeDownloadFamilyName_ = family.name;
+  downloadingFamilyIndex_ = -1;
+  for (size_t i = 0; i < families_.size(); ++i) {
+    if (&families_[i] == &family) {
+      downloadingFamilyIndex_ = static_cast<int>(i);
+      break;
+    }
+  }
+
   {
     RenderLock lock(*this);
     state_ = DOWNLOADING;
-    downloadingFamilyIndex_ = static_cast<int>(&family - families_.data());
     currentFileIndex_ = 0;
     currentFileTotal_ = family.files.size();
     fileProgress_ = 0;
@@ -703,11 +770,12 @@ void FontDownloadActivity::loop() {
           }
           updateAll();
         } else {
-          auto& family = families_[familyIndexFromList(selectedIndex_)];
+          const int familyIndex = familyIndexFromList(selectedIndex_);
+          auto& family = families_[familyIndex];
           if (!family.installed || family.hasUpdate) {
             currentFileIndex_ = 0;
             currentFileTotal_ = family.files.size();
-            downloadFamily(family);
+            downloadSelectedFamily(familyIndex);
           } else {
             promptDeleteSelectedFamily();
             return;
@@ -720,29 +788,34 @@ void FontDownloadActivity::loop() {
   } else if (state_ == COMPLETE) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
         mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      {
-        RenderLock lock(*this);
-        state_ = FAMILY_LIST;
-      }
+      returnToFamilyList();
       requestUpdate();
     }
   } else if (state_ == ERROR) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      {
-        RenderLock lock(*this);
-        state_ = FAMILY_LIST;
-      }
+      returnToFamilyList();
       requestUpdate();
     } else if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      if (downloadingFamilyIndex_ >= 0 && downloadingFamilyIndex_ < static_cast<int>(families_.size())) {
+      if (hasRetryFamily_) {
+        currentFileIndex_ = 0;
+        currentFileTotal_ = retryFamily_.files.size();
+        downloadFamily(retryFamily_);
+        if (state_ == ERROR) {
+          hasRetryFamily_ = true;
+        } else if (state_ == FAMILY_LIST && manifestReloadNeeded_) {
+          returnToFamilyList();
+        } else {
+          hasRetryFamily_ = false;
+          retryFamily_ = ManifestFamily();
+        }
+        requestUpdateAndWait();
+        return;
+      } else if (downloadingFamilyIndex_ >= 0 && downloadingFamilyIndex_ < static_cast<int>(families_.size())) {
         downloadFamily(families_[downloadingFamilyIndex_]);
         requestUpdateAndWait();
         return;
       } else {
-        {
-          RenderLock lock(*this);
-          state_ = FAMILY_LIST;
-        }
+        returnToFamilyList();
         requestUpdate();
       }
     }
@@ -908,9 +981,9 @@ void FontDownloadActivity::render(RenderLock&&) {
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     }
   } else if (state_ == DOWNLOADING) {
-    const auto& family = families_[downloadingFamilyIndex_];
+    const char* familyName = activeDownloadFamilyName_.empty() ? "" : activeDownloadFamilyName_.c_str();
 
-    std::string statusText = std::string(tr(STR_DOWNLOADING)) + " " + family.name + " (" +
+    std::string statusText = std::string(tr(STR_DOWNLOADING)) + " " + familyName + " (" +
                              std::to_string(currentFileIndex_ + 1) + "/" + std::to_string(currentFileTotal_) + ")";
     renderer.drawCenteredText(UI_10_FONT_ID, centerY - lineHeight, statusText.c_str());
     if (downloadAttemptTotal_ > 1) {

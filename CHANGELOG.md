@@ -27,6 +27,7 @@
 - KOReader Sync at chapter starts now land at the proper place instead of a few pages in.
 - KOReader Sync connection problems now show more specific guidance instead of a generic network error.
 - EPUB bookmarks saved under the old unstable path hash now show up again. Also applies to books that were moved to `/Read` folder.
+- SD-card font downloads now free the full font catalog before fetching the selected font, improving GitHub download reliability on low-memory devices.
 
 ## [v1.3.1] - 2026-05-28
 

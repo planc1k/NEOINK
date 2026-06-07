@@ -82,6 +82,10 @@ class FontDownloadActivity : public Activity {
   std::string baseUrl_;
   std::vector<ManifestFamily> families_;
   int selectedIndex_ = 0;
+  ManifestFamily retryFamily_;
+  bool hasRetryFamily_ = false;
+  bool manifestReloadNeeded_ = false;
+  std::string activeDownloadFamilyName_;
 
   // Download progress
   size_t currentFileIndex_ = 0;
@@ -102,6 +106,8 @@ class FontDownloadActivity : public Activity {
                            std::string* resolvedFamilyName = nullptr) const;
   void resolveInstalledFamilyName(ManifestFamily& family) const;
   void downloadFamily(ManifestFamily& family);
+  void downloadSelectedFamily(int familyIndex);
+  void returnToFamilyList();
   void downloadAll();
   void updateAll();
   static bool computeFileCrc32(const char* path, uint32_t& outCrc);
