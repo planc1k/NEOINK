@@ -25,9 +25,8 @@ constexpr SideLayoutMap kSideLayouts[] = {
     {kNoButton, kNoButton, HalGPIO::BTN_UP, HalGPIO::BTN_DOWN},
 };
 
-bool isReaderLandscapeOrientation() {
-  return SETTINGS.orientation == CrossPointSettings::LANDSCAPE_CW ||
-         SETTINGS.orientation == CrossPointSettings::LANDSCAPE_CCW;
+bool shouldSwapReaderSideButtons(const bool readerMode) {
+  return readerMode && SETTINGS.sideButtonOrientationAware && SETTINGS.orientation != CrossPointSettings::PORTRAIT;
 }
 
 bool shouldSwapReaderFrontNavButtons(const CrossPointSettings::FRONT_BUTTON_ORIENTATION_AWARE orientationMode) {
@@ -82,7 +81,7 @@ ButtonIndex mapFrontButtonForReaderOrientation(const ButtonIndex button, const B
 }
 
 SideLayoutMap mapSideLayoutForReaderOrientation(SideLayoutMap side, const bool readerMode) {
-  if (readerMode && SETTINGS.sideButtonOrientationAware && isReaderLandscapeOrientation()) {
+  if (shouldSwapReaderSideButtons(readerMode)) {
     const bool hasPageBack = side.pageBackPrimary != kNoButton || side.pageBackSecondary != kNoButton;
     const bool hasPageForward = side.pageForwardPrimary != kNoButton || side.pageForwardSecondary != kNoButton;
     if (hasPageBack && hasPageForward) {
@@ -91,6 +90,19 @@ SideLayoutMap mapSideLayoutForReaderOrientation(SideLayoutMap side, const bool r
     }
   }
   return side;
+}
+
+ButtonIndex mapSideButtonForReaderOrientation(const ButtonIndex button, const bool readerMode) {
+  if (!shouldSwapReaderSideButtons(readerMode)) {
+    return button;
+  }
+  if (button == HalGPIO::BTN_UP) {
+    return HalGPIO::BTN_DOWN;
+  }
+  if (button == HalGPIO::BTN_DOWN) {
+    return HalGPIO::BTN_UP;
+  }
+  return button;
 }
 
 bool readMappedSideButtons(const HalGPIO& gpio, bool (HalGPIO::*fn)(uint8_t) const, const ButtonIndex primary,
@@ -128,11 +140,11 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
     case Button::Right:
       return (gpio.*fn)(mappedRight);
     case Button::Up:
-      // Side buttons remain fixed for Up/Down.
-      return (gpio.*fn)(HalGPIO::BTN_UP);
+      // Reader menus should follow the same top/bottom side-button orientation as reader page turns.
+      return (gpio.*fn)(mapSideButtonForReaderOrientation(HalGPIO::BTN_UP, readerMode));
     case Button::Down:
-      // Side buttons remain fixed for Up/Down.
-      return (gpio.*fn)(HalGPIO::BTN_DOWN);
+      // Reader menus should follow the same top/bottom side-button orientation as reader page turns.
+      return (gpio.*fn)(mapSideButtonForReaderOrientation(HalGPIO::BTN_DOWN, readerMode));
     case Button::Power:
       // Power button bypasses remapping.
       return (gpio.*fn)(HalGPIO::BTN_POWER);

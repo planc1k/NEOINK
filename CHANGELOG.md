@@ -19,6 +19,7 @@
 
 ### Fixed
 - Restored the missing side-button disable option from upstream CrossPoint.
+- Inverted reader menus now honor orientation-aware side-button navigation.
 - EPUB book time-left estimates no longer drop optimistically after rapid forward paging, chapter starts, or non-linear jumps.
 - X3 clock UTC offset picker now makes the editable sign, hour, and minute fields clearer.
 - `Sync Clock Now` is now `Sync Date/Time` and tries saved WiFi networks automatically if a Wifi network has already been saved instead of stopping with a "connect first" message.
