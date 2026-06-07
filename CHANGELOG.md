@@ -19,6 +19,7 @@
 - Web portal pages now use shared templates, stylesheet, and logo assets, reducing on-device page size and improving browser caching.
 - Already-cached EPUBs now open directly to the first page without an extra book-loading popup refresh. First-time opens still show the popup while the cache is built.
 - EPUB silent next-chapter indexing diagnostics now report trigger timing, existing caches, and low-memory skips.
+- Changed Reader font-size choices to show point sizes like `10 pt` instead of names like `Tiny`
 
 ### Fixed
 - Restored the missing side-button disable option from upstream CrossPoint.

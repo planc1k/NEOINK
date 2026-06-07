@@ -17,58 +17,36 @@
 #include "KOReaderCredentialStore.h"
 #include "activities/settings/SettingsActivity.h"
 
-inline StrId fontSizeLabelForPointSize(const uint8_t pointSize) {
-  switch (pointSize) {
-    case 8:
-      return StrId::STR_TEENSY;
-    case 9:
-      return StrId::STR_ITTY_BITTY;
-    case 10:
-      return StrId::STR_TINY;
-    case 12:
-      return StrId::STR_SMALL;
-    case 14:
-      return StrId::STR_MEDIUM;
-    case 16:
-      return StrId::STR_LARGE;
-    case 18:
-      return StrId::STR_X_LARGE;
-    case 20:
-      return StrId::STR_HUGE;
-    default:
-      return StrId::STR_NONE_OPT;
-  }
+inline std::string fontSizePointLabel(const uint8_t pointSize) { return std::to_string(pointSize) + " pt"; }
+
+inline void appendBuiltinFontSizeOption(SettingInfo& setting, const CrossPointSettings::FONT_SIZE size) {
+  const uint8_t stored = CrossPointSettings::getStoredReaderFontSize(size);
+  if (stored == UINT8_MAX) return;
+
+  setting.enumStringValues.push_back(fontSizePointLabel(CrossPointSettings::getReaderFontPointSize(size)));
+  setting.enumRawValues.push_back(stored);
 }
 
 inline SettingInfo buildBuiltinFontSizeSetting() {
-  return SettingInfo::Enum(StrId::STR_FONT_SIZE, &CrossPointSettings::fontSize,
-                           {
-#ifndef OMIT_TINY_FONT
-                               StrId::STR_TINY,
-#endif
-#ifndef OMIT_SMALL_FONT
-                               StrId::STR_SMALL,
-#endif
-#ifndef OMIT_MEDIUM_FONT
-                               StrId::STR_MEDIUM,
-#endif
-#ifndef OMIT_LARGE_FONT
-                               StrId::STR_LARGE,
-#endif
-#ifndef OMIT_XLARGE_FONT
-                               StrId::STR_X_LARGE,
-#endif
-#ifndef OMIT_TEENSY_FONT
-                               StrId::STR_TEENSY,
-#endif
-#ifndef OMIT_HUGE_FONT
-                               StrId::STR_HUGE,
-#endif
-#ifndef OMIT_ITTY_BITTY_FONT
-                               StrId::STR_ITTY_BITTY,
-#endif
-                           },
-                           "fontSize", StrId::STR_CAT_READER);
+  SettingInfo s;
+  s.nameId = StrId::STR_FONT_SIZE;
+  s.type = SettingType::ENUM;
+  s.valuePtr = &CrossPointSettings::fontSize;
+  s.key = "fontSize";
+  s.category = StrId::STR_CAT_READER;
+  s.enumStringValues.reserve(CrossPointSettings::FONT_SIZE_COUNT);
+  s.enumRawValues.reserve(CrossPointSettings::FONT_SIZE_COUNT);
+
+  appendBuiltinFontSizeOption(s, CrossPointSettings::TEENSY);
+  appendBuiltinFontSizeOption(s, CrossPointSettings::ITTY_BITTY);
+  appendBuiltinFontSizeOption(s, CrossPointSettings::TINY);
+  appendBuiltinFontSizeOption(s, CrossPointSettings::SMALL);
+  appendBuiltinFontSizeOption(s, CrossPointSettings::MEDIUM);
+  appendBuiltinFontSizeOption(s, CrossPointSettings::LARGE);
+  appendBuiltinFontSizeOption(s, CrossPointSettings::EXTRA_LARGE);
+  appendBuiltinFontSizeOption(s, CrossPointSettings::HUGE_SIZE);
+
+  return s;
 }
 
 inline SettingInfo buildSdFontSizeSetting(const SdCardFontFamilyInfo& family) {
@@ -83,8 +61,7 @@ inline SettingInfo buildSdFontSizeSetting(const SdCardFontFamilyInfo& family) {
   s.enumStringValues.reserve(sizes.size());
   s.enumRawValues.reserve(sizes.size());
   for (size_t i = 0; i < sizes.size(); i++) {
-    const StrId labelId = fontSizeLabelForPointSize(sizes[i]);
-    s.enumStringValues.push_back(labelId != StrId::STR_NONE_OPT ? I18N.get(labelId) : std::to_string(sizes[i]) + " pt");
+    s.enumStringValues.push_back(fontSizePointLabel(sizes[i]));
     s.enumRawValues.push_back(static_cast<uint8_t>(i));
   }
   return s;
