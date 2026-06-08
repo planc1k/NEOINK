@@ -26,6 +26,7 @@
 namespace {
 
 constexpr int FONT_DOWNLOAD_MAX_ATTEMPTS = 3;
+constexpr int FONT_MANIFEST_MAX_ATTEMPTS = 5;
 constexpr uint32_t FONT_DOWNLOAD_RETRY_DELAY_MS = 500;
 
 bool isGitHubReleaseAssetBaseUrl(const std::string& baseUrl) {
@@ -164,7 +165,21 @@ bool FontDownloadActivity::fetchAndParseManifest() {
   // TLS buffers and the full JSON string in RAM simultaneously.
   static constexpr const char* MANIFEST_TMP = "/fonts_manifest.tmp";
 
-  auto result = HttpDownloader::downloadToFile(FONT_MANIFEST_URL, MANIFEST_TMP, nullptr);
+  baseUrl_.clear();
+  clearManifestFamilies();
+
+  Storage.remove(MANIFEST_TMP);
+  HttpDownloader::DownloadError result = HttpDownloader::HTTP_ERROR;
+  for (int attempt = 1; attempt <= FONT_MANIFEST_MAX_ATTEMPTS; ++attempt) {
+    if (attempt > 1) {
+      LOG_DBG("FONT", "Retrying font manifest download (%d/%d)", attempt, FONT_MANIFEST_MAX_ATTEMPTS);
+      delay(FONT_DOWNLOAD_RETRY_DELAY_MS);
+    }
+    result = HttpDownloader::downloadToFile(FONT_MANIFEST_URL, MANIFEST_TMP);
+    if (result == HttpDownloader::OK) break;
+    LOG_ERR("FONT", "Font manifest download attempt failed (%d/%d, error=%d)", attempt, FONT_MANIFEST_MAX_ATTEMPTS,
+            result);
+  }
   if (result != HttpDownloader::OK) {
     LOG_ERR("FONT", "Failed to fetch manifest from %s", FONT_MANIFEST_URL);
     errorMessage_ = "Failed to fetch font list";
@@ -317,33 +332,64 @@ void FontDownloadActivity::resolveInstalledFamilyName(ManifestFamily& family) co
 
 // --- Download ---
 
-void FontDownloadActivity::downloadAll() {
+void FontDownloadActivity::clearManifestFamilies() { std::vector<ManifestFamily>().swap(families_); }
+
+void FontDownloadActivity::downloadAll() { downloadBatch(false); }
+
+void FontDownloadActivity::updateAll() { downloadBatch(true); }
+
+void FontDownloadActivity::downloadBatch(bool updatesOnly) {
   cancelRequested_ = false;
   hasRetryFamily_ = false;
-  for (size_t i = 0; i < families_.size(); i++) {
-    if (families_[i].installed) continue;
-    downloadFamily(families_[i]);
-    if (state_ == ERROR || cancelRequested_) return;
-  }
+  retryFamily_ = ManifestFamily();
+  manifestReloadNeeded_ = true;
 
-  {
-    RenderLock lock(*this);
-    state_ = COMPLETE;
-  }
-}
+  while (true) {
+    int nextFamilyIndex = -1;
+    for (int i = 0; i < static_cast<int>(families_.size()); i++) {
+      const auto& family = families_[i];
+      if (updatesOnly ? family.hasUpdate : !family.installed) {
+        nextFamilyIndex = i;
+        break;
+      }
+    }
 
-void FontDownloadActivity::updateAll() {
-  cancelRequested_ = false;
-  hasRetryFamily_ = false;
-  for (size_t i = 0; i < families_.size(); i++) {
-    if (!families_[i].hasUpdate) continue;
-    downloadFamily(families_[i]);
-    if (state_ == ERROR || cancelRequested_) return;
-  }
+    if (nextFamilyIndex < 0) {
+      RenderLock lock(*this);
+      state_ = COMPLETE;
+      manifestReloadNeeded_ = false;
+      return;
+    }
 
-  {
-    RenderLock lock(*this);
-    state_ = COMPLETE;
+    ManifestFamily family = families_[nextFamilyIndex];
+    activeDownloadFamilyName_ = family.name;
+    selectedIndex_ = 0;
+    clearManifestFamilies();
+
+    downloadFamily(family);
+    if (state_ == ERROR) {
+      retryFamily_ = family;
+      hasRetryFamily_ = true;
+      return;
+    }
+    if (cancelRequested_ || state_ == FAMILY_LIST) {
+      return;
+    }
+
+    family = ManifestFamily();
+    {
+      RenderLock lock(*this);
+      state_ = LOADING_MANIFEST;
+      errorMessage_.clear();
+      errorHint_.clear();
+    }
+    requestUpdateAndWait();
+
+    if (!fetchAndParseManifest()) {
+      RenderLock lock(*this);
+      state_ = ERROR;
+      return;
+    }
   }
 }
 
@@ -421,8 +467,7 @@ void FontDownloadActivity::downloadSelectedFamily(const int familyIndex) {
   activeDownloadFamilyName_ = family.name;
   selectedIndex_ = 0;
 
-  families_.clear();
-  families_.shrink_to_fit();
+  clearManifestFamilies();
 
   downloadFamily(family);
   if (state_ == ERROR) {
@@ -793,7 +838,23 @@ void FontDownloadActivity::loop() {
     }
   } else if (state_ == ERROR) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      returnToFamilyList();
+      if (manifestReloadNeeded_) {
+        returnToFamilyList();
+        requestUpdate();
+        return;
+      }
+      hasRetryFamily_ = false;
+      retryFamily_ = ManifestFamily();
+      manifestReloadNeeded_ = false;
+      activeDownloadFamilyName_.clear();
+      errorMessage_.clear();
+      errorHint_.clear();
+      if (families_.empty()) {
+        finish();
+      } else {
+        RenderLock lock(*this);
+        state_ = FAMILY_LIST;
+      }
       requestUpdate();
     } else if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       if (hasRetryFamily_) {

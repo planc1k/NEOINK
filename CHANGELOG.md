@@ -33,7 +33,7 @@
 - KOReader Sync at chapter starts now land at the proper place instead of a few pages in.
 - KOReader Sync connection problems now show more specific guidance instead of a generic network error.
 - EPUB bookmarks saved under the old unstable path hash now show up again. Also applies to books that were moved to `/Read` folder.
-- SD-card font downloads now free the full font catalog before fetching the selected font, improving GitHub download reliability on low-memory devices.
+- SD-card font downloads now use versioned direct S3-hosted HTTP endpoints with CRC validation, avoiding GitHub release redirects and ESP32-C3 TLS stalls when loading the font catalog.
 - WiFi activities now release the active SD-card font before starting network services, reducing low-memory freezes when many fonts are installed.
 - Cancelled WiFi selection now turns WiFi fully off after deleting scan results so Settings does not keep network memory allocated.
 

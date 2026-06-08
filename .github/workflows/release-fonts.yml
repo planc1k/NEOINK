@@ -1,17 +1,26 @@
 name: Build & Publish SD Card Fonts
 
 # Fonts change rarely — run manually when font sources or the conversion
-# pipeline are updated.  Publishes .cpfont files + fonts.json manifest as
-# GitHub Release assets on the crosspoint-fonts repo so font releases don't
-# clutter the firmware releases page.
+# pipeline are updated.  Publishes .cpfont files + fonts.json manifest to S3
+# for device downloads, and as GitHub Release assets on the crossink-fonts repo
+# so font releases don't clutter the firmware releases page.
 #
 # Requires a repository secret FONTS_REPO_TOKEN — a fine-grained PAT (or
 # classic PAT) with contents:write permission on the target fonts repo.
+# Requires a repository secret FONT_S3_UPLOAD_ROLE_ARN — an AWS role ARN with
+# permission to sync objects into the public font bucket.
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+  id-token: write
+
 env:
   FONTS_REPO: uxjulia/crossink-fonts
+  FONT_S3_BUCKET: crossink-fonts
+  FONT_S3_REGION: us-east-1
+  FONT_S3_BASE_URL: http://crossink-fonts.s3.us-east-1.amazonaws.com
 
 jobs:
   build-fonts:
@@ -67,9 +76,24 @@ jobs:
         run: |
           python3 scripts/generate-font-manifest.py \
             --input dist \
-            --base-url "https://github.com/${{ env.FONTS_REPO }}/releases/download/${{ steps.tags.outputs.base }}/" \
+            --base-url "${{ env.FONT_S3_BASE_URL }}/${{ steps.tags.outputs.base }}/" \
             --output dist/fonts.json \
             --descriptions-from lib/EpdFont/scripts/sd-fonts.yaml
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.FONT_S3_UPLOAD_ROLE_ARN }}
+          aws-region: ${{ env.FONT_S3_REGION }}
+
+      - name: Publish versioned font endpoint to S3
+        run: |
+          S3_PREFIX="s3://${{ env.FONT_S3_BUCKET }}/${{ steps.tags.outputs.base }}"
+          aws s3 sync dist "$S3_PREFIX/" --delete --only-show-errors
+          aws s3 cp dist/fonts.json "$S3_PREFIX/fonts.json" \
+            --content-type "application/json" \
+            --cache-control "no-cache" \
+            --only-show-errors
 
       - name: Publish versioned release to fonts repo
         env:

@@ -17,14 +17,14 @@ struct Rect;
 #define FONTS_MANIFEST_VERSION 1
 
 #ifndef FONT_MANIFEST_URL
-// Manifest + .cpfont assets are published by .github/workflows/release-fonts.yml
-// to the crossink-fonts repo under the "sd-fonts-m<META>-b<BIN>" tag. The tag
-// pattern must stay in sync with the workflow; it derives its version numbers
-// from lib/EpdFont/scripts/cpfont_version.py.
+// Default hosted SD-font manifest. Use plain HTTP for this public S3 bucket:
+// HTTPS stalls inside esp_http_client on ESP32-C3, and downloaded .cpfont files
+// are still validated by CRC before install. The versioned prefix must stay in
+// sync with .github/workflows/release-fonts.yml and cpfont_version.py.
 #define FONT_MANIFEST_URL_STRINGIFY_INNER(x) #x
 #define FONT_MANIFEST_URL_STRINGIFY(x) FONT_MANIFEST_URL_STRINGIFY_INNER(x)
-#define FONT_MANIFEST_URL                                                                               \
-  "https://github.com/uxjulia/crossink-fonts/releases/download/sd-fonts-m" FONT_MANIFEST_URL_STRINGIFY( \
+#define FONT_MANIFEST_URL                                                                    \
+  "http://crossink-fonts.s3.us-east-1.amazonaws.com/sd-fonts-m" FONT_MANIFEST_URL_STRINGIFY( \
       FONTS_MANIFEST_VERSION) "-b" FONT_MANIFEST_URL_STRINGIFY(CPFONT_VERSION) "/fonts.json"
 #endif
 
@@ -105,8 +105,10 @@ class FontDownloadActivity : public Activity {
   bool installedFilesMatch(const char* familyName, const std::vector<ManifestFile>& files, bool& hasUpdate,
                            std::string* resolvedFamilyName = nullptr) const;
   void resolveInstalledFamilyName(ManifestFamily& family) const;
+  void clearManifestFamilies();
   void downloadFamily(ManifestFamily& family);
   void downloadSelectedFamily(int familyIndex);
+  void downloadBatch(bool updatesOnly);
   void returnToFamilyList();
   void downloadAll();
   void updateAll();
