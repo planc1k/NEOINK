@@ -474,4 +474,4 @@ STR_TOGGLE_BIONIC_READING: "Бионическое чтение"
 STR_TOGGLE_BOOKMARK: "Переключить закладку"
 STR_TOGGLE_GUIDE_DOTS: "Направляющие точки"
 
-STR_NEARBY_STATS_VERSION_MISMATCH: "Version mismatch. Stats not synced"
+STR_NEARBY_STATS_VERSION_MISMATCH: "Несовпадение версий. Статистика не синхронизирована"

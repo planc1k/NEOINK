@@ -421,4 +421,4 @@ STR_TOGGLE_GUIDE_DOTS: "Kılavuz Noktaları"
 STR_TOP: "Üst"
 STR_XTC_STATUS_BAR: "XTC Durum Çubuğu"
 
-STR_NEARBY_STATS_VERSION_MISMATCH: "Version mismatch. Stats not synced"
+STR_NEARBY_STATS_VERSION_MISMATCH: "Sürüm uyuşmazlığı. İstatistikler senkronize edilmedi"
