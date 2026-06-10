@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+### Changed
+- The X3 clock visibility setting is now phrased as `Hide Clock`, with existing `Show Clock` preferences migrated to the matching hide behavior.
+
+### Fixed
+- Book settings option lists now return to the submenu they were opened from when pressing Back.
+
 ## [v1.3.2] - 2026-06-10
 
 ### Added
@@ -11,7 +21,6 @@
 
 ### Changed
 - Display, Reader, and Controls settings now open list menus instead of cycling through options one by one.
-- The X3 clock visibility setting is now phrased as `Hide Clock`, with existing `Show Clock` preferences migrated to the matching hide behavior.
 - Reading time and time-left pace tracking now ignore page intervals longer than the configured idle-time threshold.
 - Web portal pages now use shared templates, stylesheet, and logo assets, reducing on-device page size and improving browser caching.
 - Already-cached EPUBs now open directly to the first page without an extra book-loading popup refresh.

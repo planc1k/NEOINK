@@ -107,6 +107,7 @@ void FontSelectionActivity::onExit() { Activity::onExit(); }
 
 void FontSelectionActivity::loop() {
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+    mappedInput.suppressNextBackRelease();
     finish();
     return;
   }

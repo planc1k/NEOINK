@@ -39,6 +39,7 @@ void OptionSelectionActivity::onEnter() {
 
 void OptionSelectionActivity::loop() {
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+    mappedInput.suppressNextBackRelease();
     cancel();
     return;
   }
