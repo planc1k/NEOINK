@@ -286,11 +286,11 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     add(SettingInfo::Enum(StrId::STR_HIDE_BATTERY, &CrossPointSettings::hideBatteryPercentage,
                           {StrId::STR_NEVER, StrId::STR_IN_READER, StrId::STR_ALWAYS}, "hideBatteryPercentage",
                           StrId::STR_CAT_DISPLAY));
-    add(SettingInfo::Enum(StrId::STR_CLOCK, &CrossPointSettings::statusBarClock,
-                          {StrId::STR_NEVER, StrId::STR_IN_READER, StrId::STR_ALWAYS}, "statusBarClock",
+    add(SettingInfo::Enum(StrId::STR_HIDE_CLOCK, &CrossPointSettings::hideClock,
+                          {StrId::STR_NEVER, StrId::STR_IN_READER, StrId::STR_ALWAYS}, "hideClock",
                           StrId::STR_CAT_DISPLAY)
-            .withEnumRawValues({CrossPointSettings::CLOCK_NEVER, CrossPointSettings::CLOCK_IN_READER,
-                                CrossPointSettings::CLOCK_ALWAYS}));
+            .withEnumRawValues({CrossPointSettings::HIDE_CLOCK_NEVER, CrossPointSettings::HIDE_CLOCK_IN_READER,
+                                CrossPointSettings::HIDE_CLOCK_ALWAYS}));
     add(SettingInfo::Enum(
         StrId::STR_REFRESH_FREQ, &CrossPointSettings::refreshFrequency,
         {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15, StrId::STR_PAGES_30},
@@ -737,7 +737,7 @@ inline std::vector<SettingInfo> buildGroupedDisplaySettingsList(const std::vecto
   displaySettings.push_back(SettingInfo::Submenu(StrId::STR_DISPLAY_SLEEP_SCREEN, SettingAction::DisplaySleepScreen));
   addDisplaySetting(StrId::STR_HIDE_BATTERY);
   if (halClock.isAvailable()) {
-    addDisplaySetting(StrId::STR_CLOCK);
+    addDisplaySetting(StrId::STR_HIDE_CLOCK);
   }
   addDisplaySetting(StrId::STR_REFRESH_FREQ);
   addDisplaySetting(StrId::STR_UI_THEME);

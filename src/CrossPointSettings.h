@@ -74,13 +74,7 @@ class CrossPointSettings {
     XTC_STATUS_BAR_TOP = 2,
     XTC_STATUS_BAR_MODE_COUNT
   };
-  enum STATUS_BAR_CLOCK_MODE {
-    CLOCK_NEVER = 0,
-    // Value 1 intentionally matches the legacy Show Clock toggle's "on" value.
-    CLOCK_IN_READER = 1,
-    CLOCK_ALWAYS = 2,
-    STATUS_BAR_CLOCK_MODE_COUNT
-  };
+  enum HIDE_CLOCK_MODE { HIDE_CLOCK_NEVER = 0, HIDE_CLOCK_IN_READER = 1, HIDE_CLOCK_ALWAYS = 2, HIDE_CLOCK_MODE_COUNT };
 
   enum ORIENTATION {
     PORTRAIT = 0,       // 480x800 logical coordinates (current default)
@@ -297,8 +291,8 @@ class CrossPointSettings {
   uint8_t statusBarTimeLeft = TIME_LEFT_HIDE;
   uint8_t statusBarBattery = 1;
   uint8_t xtcStatusBarMode = XTC_STATUS_BAR_HIDE;
-  // Clock display mode (X3 only, requires DS3231 RTC)
-  uint8_t statusBarClock = 0;
+  // Clock visibility mode (X3 only, requires DS3231 RTC)
+  uint8_t hideClock = HIDE_CLOCK_ALWAYS;
   // Clock UTC offset in quarter-hour steps, biased by 48 so it fits in uint8_t.
   // Value 48 = UTC+0, 0 = UTC-12:00, 104 = UTC+14:00.
   // Quarter-hour granularity supports oddball zones like Nepal (+5:45) and Chatham (+12:45).
@@ -446,8 +440,10 @@ class CrossPointSettings {
                                                                     : POWER_BUTTON_LONG_PRESS_MS;
   }
 
-  bool shouldShowClockInReader() const { return statusBarClock == CLOCK_IN_READER || statusBarClock == CLOCK_ALWAYS; }
-  bool shouldShowClockOutsideReader() const { return statusBarClock == CLOCK_ALWAYS; }
+  bool shouldShowClockInReader() const { return hideClock == HIDE_CLOCK_NEVER; }
+  bool shouldShowClockOutsideReader() const {
+    return hideClock == HIDE_CLOCK_NEVER || hideClock == HIDE_CLOCK_IN_READER;
+  }
   bool shouldTrackReadingStats() const {
 #ifdef CROSSINK_ENABLE_READING_STATS_TOGGLE
     return trackReadingStats != 0;

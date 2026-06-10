@@ -299,6 +299,16 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
     }
   }
 
+  if (doc["hideClock"].isNull() && !doc["statusBarClock"].isNull()) {
+    constexpr uint8_t LEGACY_SHOW_CLOCK_NEVER = 0;
+    const uint8_t legacyShowClock =
+        clamp(doc["statusBarClock"] | LEGACY_SHOW_CLOCK_NEVER,
+              static_cast<uint8_t>(CrossPointSettings::HIDE_CLOCK_MODE_COUNT), LEGACY_SHOW_CLOCK_NEVER);
+    s.hideClock = legacyShowClock == LEGACY_SHOW_CLOCK_NEVER ? CrossPointSettings::HIDE_CLOCK_ALWAYS
+                                                             : CrossPointSettings::HIDE_CLOCK_NEVER;
+    if (needsResave) *needsResave = true;
+  }
+
   if (doc["sleepTimeoutMinutes"].isNull() && !doc["sleepTimeout"].isNull()) {
     const uint8_t legacyValue =
         clamp(doc["sleepTimeout"] | (uint8_t)CrossPointSettings::SLEEP_10_MIN, CrossPointSettings::SLEEP_TIMEOUT_COUNT,
