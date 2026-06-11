@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cassert>
 
+#include "CrossPointSettings.h"
 #include "Epub/Section.h"
 #include "EpubReaderUtils.h"
 #include "KOReaderCredentialStore.h"
@@ -294,6 +295,7 @@ void KOReaderSyncActivity::performUpload() {
   progress.document = documentHash;
   progress.progress = localProgress.xpath;
   progress.percentage = localProgress.percentage;
+  progress.device = SETTINGS.getEffectiveDeviceName();
 
   const auto result = KOReaderSyncClient::updateProgress(progress);
 

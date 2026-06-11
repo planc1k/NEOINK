@@ -1,5 +1,6 @@
 #include "CrossPointSettings.h"
 
+#include <HalGPIO.h>
 #include <HalStorage.h>
 #include <JsonSettingsIO.h>
 #include <Logging.h>
@@ -66,6 +67,12 @@ constexpr uint8_t SD_FONT_RANGE_POINT_SIZES[CrossPointSettings::SD_FONT_SIZE_RAN
                                                {8, 9, 10, 12, 14, 16, 18, 20},
 };
 constexpr uint8_t SD_FONT_RANGE_STEP_COUNTS[CrossPointSettings::SD_FONT_SIZE_RANGE_COUNT] = {4, 4, 3, 5, 8};
+
+bool isValidDeviceName(const char* name) {
+  if (!name) return false;
+  const size_t len = std::strlen(name);
+  return len >= CrossPointSettings::MIN_DEVICE_NAME_LENGTH && len <= CrossPointSettings::MAX_DEVICE_NAME_LENGTH;
+}
 
 uint8_t normalizedSdFontRange(uint8_t range) {
   return range < CrossPointSettings::SD_FONT_SIZE_RANGE_COUNT ? range : CrossPointSettings::SD_FONT_RANGE_TINY;
@@ -231,6 +238,16 @@ void applyLegacyFrontButtonLayout(CrossPointSettings& settings) {
 }
 
 }  // namespace
+
+const char* CrossPointSettings::getDefaultDeviceName() {
+  if (gpio.deviceIsX3()) return "CrossInk X3";
+  if (gpio.deviceIsX4()) return "Crossink X4";
+  return "CrossInk";
+}
+
+const char* CrossPointSettings::getEffectiveDeviceName() const {
+  return isValidDeviceName(deviceName) ? deviceName : getDefaultDeviceName();
+}
 
 void CrossPointSettings::validateFrontButtonMapping(CrossPointSettings& settings) {
   const uint8_t mapping[] = {settings.frontButtonBack, settings.frontButtonConfirm, settings.frontButtonLeft,

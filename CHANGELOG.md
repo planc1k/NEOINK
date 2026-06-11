@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Device Name in Settings > System > Device for customizing the KOReader Sync and Nearby Stats Sync device label.
 
 ### Changed
 - The X3 clock visibility setting is now phrased as `Hide Clock`, with existing `Show Clock` preferences migrated to the matching hide behavior.
@@ -11,6 +12,7 @@
 - Book settings option lists now return to the submenu they were opened from when pressing Back.
 - File Browser now previews PNG images instead of trying to open them as EPUBs, and hides macOS `._*` sidecar files.
 - Sleep Screen > Cover now generates the current book cover on demand instead of falling back to the dark sleep screen when the setting is changed after opening a book.
+- File Browser now previews PNG images instead of trying to open them as EPUBs, and hides common macOS and Windows metadata files.
 
 ## [v1.3.2] - 2026-06-10
 

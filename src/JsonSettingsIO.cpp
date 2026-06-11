@@ -253,6 +253,11 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
       }
       strncpy(destPtr, val.c_str(), info.stringMaxLen - 1);
       destPtr[info.stringMaxLen - 1] = '\0';
+      if (std::strcmp(info.key, "deviceName") == 0 &&
+          std::strlen(destPtr) < CrossPointSettings::MIN_DEVICE_NAME_LENGTH) {
+        destPtr[0] = '\0';
+        if (needsResave) *needsResave = true;
+      }
     } else {
       const uint8_t fieldDefault = s.*(info.valuePtr);  // struct-initializer default, read before we overwrite it
       uint8_t v = doc[info.key] | fieldDefault;

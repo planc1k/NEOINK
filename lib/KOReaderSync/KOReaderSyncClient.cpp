@@ -27,9 +27,7 @@ int KOReaderSyncClient::lastHttpCode = 0;
 int KOReaderSyncClient::lastTransportError = 0;
 
 namespace {
-// Device identifier for CrossPoint reader
-constexpr char DEVICE_NAME[] = "CrossPoint";
-constexpr char DEVICE_ID[] = "crosspoint-reader";
+constexpr char DEVICE_ID[] = "crossink-device";
 
 std::string formatHttpStatusMessage(int httpCode) {
   char buffer[96];
@@ -421,7 +419,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
   doc["document"] = progress.document;
   doc["progress"] = progress.progress;
   doc["percentage"] = progress.percentage;
-  doc["device"] = DEVICE_NAME;
+  doc["device"] = progress.device;
   doc["device_id"] = DEVICE_ID;
 
   std::string body;

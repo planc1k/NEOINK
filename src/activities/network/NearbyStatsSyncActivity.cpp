@@ -63,6 +63,7 @@ void NearbyStatsSyncActivity::setState(const State state) {
 #include <cstring>
 #include <string>
 
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "SdCardFontSystem.h"
 #include "activities/reader/GlobalReadingStats.h"
@@ -80,6 +81,7 @@ constexpr uint8_t PROTOCOL_VERSION = 1;
 constexpr uint8_t MIN_STATS_BYTES = static_cast<uint8_t>(GlobalReadingStats::MIN_SUPPORTED_FILE_SIZE);
 constexpr uint8_t MAX_STATS_BYTES = static_cast<uint8_t>(GlobalReadingStats::CURRENT_FILE_SIZE);
 constexpr uint8_t PACKET_HEADER_BYTES = 14;
+constexpr uint8_t MAX_DEVICE_NAME_BYTES = static_cast<uint8_t>(CrossPointSettings::MAX_DEVICE_NAME_LENGTH);
 constexpr uint32_t HELLO_INTERVAL_MS = 750;
 constexpr uint32_t STATS_RETRY_INTERVAL_MS = 750;
 constexpr uint32_t SYNC_TIMEOUT_MS = 12000;
@@ -107,6 +109,8 @@ std::string statsFileNameForDeviceMac(const std::array<uint8_t, 6>& mac) {
 std::string syncedStatsPathForDeviceMac(const std::array<uint8_t, 6>& mac) {
   return std::string(SYNCED_STATS_DIR) + "/" + statsFileNameForDeviceMac(mac);
 }
+
+bool isZeroMac(const std::array<uint8_t, 6>& mac) { return mac == std::array<uint8_t, 6>{}; }
 
 bool isValidStatsPayload(const uint8_t* data, const uint8_t size) {
   return (size == MIN_STATS_BYTES && data[0] == 1) || (size == 17 && data[0] == 2) ||
@@ -280,7 +284,10 @@ void NearbyStatsSyncActivity::startSync() {
   peerStatsSaved_ = false;
   localStatsSent_ = false;
   localStatsAcked_ = false;
+  peerSourceMac_ = {};
+  peerDeviceMac_ = {};
   peerId_.clear();
+  peerName_.clear();
   syncStartedMs_ = millis();
   lastHelloMs_ = 0;
   lastStatsSendMs_ = 0;
@@ -303,8 +310,11 @@ void NearbyStatsSyncActivity::enqueueEspNowPacket(const uint8_t* sourceMac, cons
   std::copy(sourceMac, sourceMac + event.sourceMac.size(), event.sourceMac.begin());
   std::copy(data + 8, data + 14, event.deviceMac.begin());
 
+  const int payloadLength = length - PACKET_HEADER_BYTES;
   const int expectedLength = PACKET_HEADER_BYTES + (event.type == PacketType::STATS ? event.statsSize : 0);
-  if (packetType != PacketType::HELLO && packetType != PacketType::STATS && packetType != PacketType::ACK) return;
+  if (packetType != PacketType::HELLO && packetType != PacketType::STATS && packetType != PacketType::ACK &&
+      packetType != PacketType::NAME)
+    return;
   if (event.deviceMac == localDeviceMac_) return;
   if (packetType == PacketType::STATS) {
     if (length != expectedLength || event.statsSize > event.stats.size() ||
@@ -314,6 +324,13 @@ void NearbyStatsSyncActivity::enqueueEspNowPacket(const uint8_t* sourceMac, cons
     } else {
       std::copy(data + PACKET_HEADER_BYTES, data + PACKET_HEADER_BYTES + event.statsSize, event.stats.begin());
     }
+  } else if (packetType == PacketType::NAME) {
+    if (event.statsSize < CrossPointSettings::MIN_DEVICE_NAME_LENGTH || event.statsSize > MAX_DEVICE_NAME_BYTES ||
+        payloadLength != event.statsSize) {
+      return;
+    }
+    memcpy(event.deviceName.data(), data + PACKET_HEADER_BYTES, event.statsSize);
+    event.deviceName[event.statsSize] = '\0';
   } else if (length != expectedLength) {
     return;
   } else if (packetType == PacketType::HELLO || packetType == PacketType::ACK) {
@@ -367,6 +384,17 @@ void NearbyStatsSyncActivity::processEvents() {
 void NearbyStatsSyncActivity::handleEvent(const SyncEvent& event) {
   if (state_ == State::ERROR) return;
 
+  if (event.type == PacketType::NAME) {
+    if (event.deviceMac == peerDeviceMac_ || isZeroMac(peerDeviceMac_)) {
+      peerSourceMac_ = event.sourceMac;
+      peerDeviceMac_ = event.deviceMac;
+      peerId_ = bytesToHex(peerDeviceMac_.data(), peerDeviceMac_.size());
+      peerName_ = event.deviceName.data();
+      requestUpdate();
+    }
+    return;
+  }
+
   const bool startingPassiveSync = state_ != State::DISCOVERING && state_ != State::SYNCING;
   if (startingPassiveSync) {
     errorMessage_.clear();
@@ -380,6 +408,9 @@ void NearbyStatsSyncActivity::handleEvent(const SyncEvent& event) {
   }
 
   peerSeen_ = true;
+  if (event.deviceMac != peerDeviceMac_) {
+    peerName_.clear();
+  }
   peerSourceMac_ = event.sourceMac;
   peerDeviceMac_ = event.deviceMac;
   peerId_ = bytesToHex(peerDeviceMac_.data(), peerDeviceMac_.size());
@@ -394,6 +425,7 @@ void NearbyStatsSyncActivity::handleEvent(const SyncEvent& event) {
   }
 
   if (event.type == PacketType::HELLO) {
+    sendDeviceName(peerSourceMac_.data());
     sendLocalStats();
     return;
   }
@@ -438,15 +470,24 @@ bool NearbyStatsSyncActivity::sendPacket(const PacketType type, const uint8_t* p
   packet[3] = 'S';
   packet[4] = PROTOCOL_VERSION;
   packet[5] = static_cast<uint8_t>(type);
-  packet[6] = type == PacketType::STATS ? localStatsSize_ : 0;
   packet[7] = 0;
   std::copy(localDeviceMac_.begin(), localDeviceMac_.end(), packet.begin() + 8);
 
   size_t length = PACKET_HEADER_BYTES;
   if (type == PacketType::STATS) {
+    packet[6] = localStatsSize_;
     if (!localStatsReady_ || !isValidStatsPayload(localStats_.data(), localStatsSize_)) return false;
     std::copy(localStats_.begin(), localStats_.begin() + localStatsSize_, packet.begin() + PACKET_HEADER_BYTES);
     length += localStatsSize_;
+  } else if (type == PacketType::NAME) {
+    const char* name = SETTINGS.getEffectiveDeviceName();
+    const size_t nameLength = std::min(std::strlen(name), static_cast<size_t>(MAX_DEVICE_NAME_BYTES));
+    if (nameLength < CrossPointSettings::MIN_DEVICE_NAME_LENGTH) return false;
+    packet[6] = static_cast<uint8_t>(nameLength);
+    memcpy(packet.data() + PACKET_HEADER_BYTES, name, nameLength);
+    length += nameLength;
+  } else {
+    packet[6] = 0;
   }
 
   const esp_err_t result = esp_now_send(peerMac, packet.data(), length);
@@ -462,8 +503,11 @@ bool NearbyStatsSyncActivity::sendHello() {
   return sendPacket(PacketType::HELLO, BROADCAST_MAC);
 }
 
+bool NearbyStatsSyncActivity::sendDeviceName(const uint8_t* peerMac) { return sendPacket(PacketType::NAME, peerMac); }
+
 bool NearbyStatsSyncActivity::sendLocalStats() {
   if (!peerSeen_) return false;
+  sendDeviceName(peerSourceMac_.data());
   lastStatsSendMs_ = millis();
   localStatsSent_ = sendPacket(PacketType::STATS, peerSourceMac_.data());
   return localStatsSent_;
@@ -517,7 +561,8 @@ void NearbyStatsSyncActivity::render(RenderLock&&) {
 
   const int centerY = pageHeight / 2 - 20;
   std::string primary;
-  std::string secondary;
+  std::string detailPrimary;
+  std::string detailSecondary;
 
   switch (state_) {
     case State::STARTING:
@@ -525,27 +570,35 @@ void NearbyStatsSyncActivity::render(RenderLock&&) {
       break;
     case State::READY:
       primary = tr(STR_NEARBY_STATS_READY);
-      secondary = statsFileNameForDeviceMac(localDeviceMac_);
+      detailPrimary = std::string(tr(STR_DEVICE_NAME)) + ": " + SETTINGS.getEffectiveDeviceName();
       break;
     case State::DISCOVERING:
       primary = tr(STR_NEARBY_STATS_SCANNING);
       break;
     case State::SYNCING:
       primary = tr(STR_NEARBY_STATS_SYNCING);
-      secondary = peerId_;
+      detailPrimary = std::string(I18N.get(peerName_.empty() ? StrId::STR_SYSTEM_DEVICE : StrId::STR_DEVICE_NAME)) +
+                      ": " + (peerName_.empty() ? peerId_ : peerName_);
+      if (!isZeroMac(peerDeviceMac_)) {
+        detailSecondary = std::string(tr(STR_FILENAME)) + ": " + statsFileNameForDeviceMac(peerDeviceMac_);
+      }
       break;
     case State::SYNCED:
       primary = tr(STR_NEARBY_STATS_SYNCED);
-      secondary = peerId_;
+      detailPrimary = std::string(I18N.get(peerName_.empty() ? StrId::STR_SYSTEM_DEVICE : StrId::STR_DEVICE_NAME)) +
+                      ": " + (peerName_.empty() ? peerId_ : peerName_);
+      if (!isZeroMac(peerDeviceMac_)) {
+        detailSecondary = std::string(tr(STR_FILENAME)) + ": " + statsFileNameForDeviceMac(peerDeviceMac_);
+      }
       break;
     case State::ERROR:
       primary = tr(STR_ERROR_MSG);
-      secondary = errorMessage_;
+      detailPrimary = errorMessage_;
       break;
   }
 
   if (state_ == State::READY || state_ == State::SYNCED || state_ == State::ERROR) {
-    renderReady(primary, secondary);
+    renderReady(primary, detailPrimary, detailSecondary);
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_NEARBY_STATS_SYNC_BUTTON), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
@@ -553,15 +606,22 @@ void NearbyStatsSyncActivity::render(RenderLock&&) {
   }
 
   renderer.drawCenteredText(UI_10_FONT_ID, centerY, primary.c_str(), true, EpdFontFamily::BOLD);
-  if (!secondary.empty()) {
-    renderer.drawCenteredText(UI_10_FONT_ID, centerY + renderer.getLineHeight(UI_10_FONT_ID) + 8, secondary.c_str());
+  if (!detailPrimary.empty()) {
+    renderer.drawCenteredText(UI_10_FONT_ID, centerY + renderer.getLineHeight(UI_10_FONT_ID) + 8,
+                              detailPrimary.c_str());
+  }
+  if (!detailSecondary.empty()) {
+    renderer.drawCenteredText(
+        SMALL_FONT_ID, centerY + renderer.getLineHeight(UI_10_FONT_ID) + renderer.getLineHeight(SMALL_FONT_ID) + 14,
+        detailSecondary.c_str());
   }
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }
 
-void NearbyStatsSyncActivity::renderReady(const std::string& primary, const std::string& secondary) const {
+void NearbyStatsSyncActivity::renderReady(const std::string& primary, const std::string& detailPrimary,
+                                          const std::string& detailSecondary) const {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
@@ -569,8 +629,14 @@ void NearbyStatsSyncActivity::renderReady(const std::string& primary, const std:
 
   renderer.drawCenteredText(UI_10_FONT_ID, y, primary.c_str(), true, EpdFontFamily::BOLD);
   y += lineHeight + metrics.verticalSpacing;
-  renderer.drawCenteredText(SMALL_FONT_ID, y, secondary.c_str(), true);
-  y += renderer.getLineHeight(SMALL_FONT_ID) + metrics.verticalSpacing;
+  if (!detailPrimary.empty()) {
+    renderer.drawCenteredText(SMALL_FONT_ID, y, detailPrimary.c_str(), true);
+    y += renderer.getLineHeight(SMALL_FONT_ID) + metrics.verticalSpacing;
+  }
+  if (!detailSecondary.empty()) {
+    renderer.drawCenteredText(SMALL_FONT_ID, y, detailSecondary.c_str(), true);
+    y += renderer.getLineHeight(SMALL_FONT_ID) + metrics.verticalSpacing;
+  }
   if (state_ == State::READY) {
     renderer.drawCenteredText(SMALL_FONT_ID, y, tr(STR_NEARBY_STATS_READY_HINT), true);
   }

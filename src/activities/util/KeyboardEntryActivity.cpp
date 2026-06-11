@@ -153,6 +153,7 @@ bool KeyboardEntryActivity::handleKeyPress() {
       case SpecialKeyType::Ok:
         delPressCount = 0;
         hintVisible = false;
+        if (text.length() < minLength) return true;
         onComplete(text);
         return false;
       default:

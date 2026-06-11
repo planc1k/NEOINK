@@ -1,6 +1,7 @@
 #pragma once
 #include <HalStorage.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <iosfwd>
 
@@ -405,6 +406,8 @@ class CrossPointSettings {
   uint8_t tiltPageTurnDirection = TILT_LEFT_RIGHT;
   // Language setting (Language enum index, default 0 = EN)
   uint8_t language = 0;
+  // Custom KOReader sync device display name. Empty means use the hardware default.
+  char deviceName[21] = "";
   // Quick Resume: keep current content visible with moon icon instead of showing a static sleep screen.
   uint8_t quickResumeSleepScreen = QUICK_RESUME_NEVER;
 #ifdef CROSSINK_ENABLE_READING_STATS_TOGGLE
@@ -434,6 +437,8 @@ class CrossPointSettings {
       MIN_READING_IDLE_TIME_THRESHOLD_SECONDS / READING_IDLE_TIME_THRESHOLD_UNIT_SECONDS;
   static constexpr uint8_t MAX_READING_IDLE_TIME_THRESHOLD_UNITS =
       MAX_READING_IDLE_TIME_THRESHOLD_SECONDS / READING_IDLE_TIME_THRESHOLD_UNIT_SECONDS;
+  static constexpr size_t MIN_DEVICE_NAME_LENGTH = 2;
+  static constexpr size_t MAX_DEVICE_NAME_LENGTH = sizeof(deviceName) - 1;
 
   uint16_t getPowerButtonWakeDuration() const {
     return (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) ? POWER_BUTTON_WAKE_SHORT_MS
@@ -451,6 +456,8 @@ class CrossPointSettings {
     return true;
 #endif
   }
+  static const char* getDefaultDeviceName();
+  const char* getEffectiveDeviceName() const;
   uint16_t getReadingIdleTimeThresholdSeconds() const;
 
   // Callback to resolve SD card font IDs. Set by SdCardFontSystem::begin().
