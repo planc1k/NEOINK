@@ -377,44 +377,101 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           "frontButtonOrientationAware", StrId::STR_CAT_CONTROLS));
     add(SettingInfo::Enum(StrId::STR_LONG_PRESS_BEHAVIOR, &CrossPointSettings::longPressButtonBehavior,
                           {StrId::STR_LONG_PRESS_BEHAVIOR_OFF, StrId::STR_LONG_PRESS_BEHAVIOR_SKIP,
-                           StrId::STR_LONG_PRESS_BEHAVIOR_ORIENTATION},
-                          "longPressButtonBehavior", StrId::STR_CAT_CONTROLS));
+                           StrId::STR_CHANGE_FONT_SIZE, StrId::STR_LONG_PRESS_BEHAVIOR_ORIENTATION},
+                          "longPressButtonBehavior", StrId::STR_CAT_CONTROLS)
+            .withEnumRawValues({CrossPointSettings::OFF, CrossPointSettings::CHAPTER_SKIP,
+                                CrossPointSettings::FONT_SIZE_CHANGE, CrossPointSettings::ORIENTATION_CHANGE}));
     add(SettingInfo::Enum(StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
-                          {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_TOGGLE_BOOKMARK,
-                           StrId::STR_READING_STATS, StrId::STR_MARK_FINISHED, StrId::STR_FORCE_REFRESH,
-                           StrId::STR_CHANGE_FONT, StrId::STR_TOGGLE_GUIDE_DOTS, StrId::STR_TOGGLE_BIONIC_READING,
-                           StrId::STR_CYCLE_PAGE_TURN, StrId::STR_SYNC_PROGRESS, StrId::STR_FILE_TRANSFER,
-                           StrId::STR_SCREENSHOT_BUTTON, StrId::STR_READER_DARK_MODE, StrId::STR_FOOTNOTES},
+                          {StrId::STR_IGNORE,
+                           StrId::STR_SLEEP,
+                           StrId::STR_PAGE_TURN,
+                           StrId::STR_TOGGLE_BOOKMARK,
+                           StrId::STR_READING_STATS,
+                           StrId::STR_MARK_FINISHED,
+                           StrId::STR_FORCE_REFRESH,
+                           StrId::STR_CHANGE_FONT,
+                           StrId::STR_TOGGLE_GUIDE_DOTS,
+                           StrId::STR_TOGGLE_BIONIC_READING,
+                           StrId::STR_CYCLE_PAGE_TURN,
+                           StrId::STR_SYNC_PROGRESS,
+                           StrId::STR_FILE_TRANSFER,
+                           StrId::STR_CALIBRE_WIRELESS,
+                           StrId::STR_JOIN_NETWORK,
+                           StrId::STR_CREATE_HOTSPOT,
+                           StrId::STR_SCREENSHOT_BUTTON,
+                           StrId::STR_READER_DARK_MODE,
+                           StrId::STR_FOOTNOTES,
+                           StrId::STR_BROWSE_FILES},
                           "shortPwrBtn", StrId::STR_CAT_CONTROLS)
-            .withEnumRawValues({CrossPointSettings::IGNORE, CrossPointSettings::SLEEP, CrossPointSettings::PAGE_TURN,
-                                CrossPointSettings::TOGGLE_BOOKMARK, CrossPointSettings::READING_STATS,
-                                CrossPointSettings::MARK_FINISHED, CrossPointSettings::FORCE_REFRESH,
-                                CrossPointSettings::TOGGLE_FONT, CrossPointSettings::TOGGLE_GUIDE_DOTS,
-                                CrossPointSettings::TOGGLE_BIONIC_READING, CrossPointSettings::CYCLE_PAGE_TURN,
-                                CrossPointSettings::SYNC_PROGRESS, CrossPointSettings::FILE_TRANSFER,
-                                CrossPointSettings::SCREENSHOT, CrossPointSettings::TOGGLE_DARK_MODE,
-                                CrossPointSettings::FOOTNOTES}));
+            .withEnumRawValues({CrossPointSettings::IGNORE,
+                                CrossPointSettings::SLEEP,
+                                CrossPointSettings::PAGE_TURN,
+                                CrossPointSettings::TOGGLE_BOOKMARK,
+                                CrossPointSettings::READING_STATS,
+                                CrossPointSettings::MARK_FINISHED,
+                                CrossPointSettings::FORCE_REFRESH,
+                                CrossPointSettings::TOGGLE_FONT,
+                                CrossPointSettings::TOGGLE_GUIDE_DOTS,
+                                CrossPointSettings::TOGGLE_BIONIC_READING,
+                                CrossPointSettings::CYCLE_PAGE_TURN,
+                                CrossPointSettings::SYNC_PROGRESS,
+                                CrossPointSettings::FILE_TRANSFER,
+                                CrossPointSettings::CALIBRE_WIRELESS,
+                                CrossPointSettings::JOIN_NETWORK,
+                                CrossPointSettings::CREATE_HOTSPOT,
+                                CrossPointSettings::SCREENSHOT,
+                                CrossPointSettings::TOGGLE_DARK_MODE,
+                                CrossPointSettings::FOOTNOTES,
+                                CrossPointSettings::FILE_BROWSER}));
     add(SettingInfo::Enum(StrId::STR_LONG_PRESS_ACTION, &CrossPointSettings::longPwrBtn,
-                          {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_TOGGLE_BOOKMARK,
-                           StrId::STR_READING_STATS, StrId::STR_MARK_FINISHED, StrId::STR_FORCE_REFRESH,
-                           StrId::STR_CHANGE_FONT, StrId::STR_TOGGLE_GUIDE_DOTS, StrId::STR_TOGGLE_BIONIC_READING,
-                           StrId::STR_CYCLE_PAGE_TURN, StrId::STR_SYNC_PROGRESS, StrId::STR_FILE_TRANSFER,
-                           StrId::STR_SCREENSHOT_BUTTON, StrId::STR_READER_DARK_MODE, StrId::STR_FOOTNOTES},
+                          {StrId::STR_IGNORE,
+                           StrId::STR_SLEEP,
+                           StrId::STR_PAGE_TURN,
+                           StrId::STR_TOGGLE_BOOKMARK,
+                           StrId::STR_READING_STATS,
+                           StrId::STR_MARK_FINISHED,
+                           StrId::STR_FORCE_REFRESH,
+                           StrId::STR_CHANGE_FONT,
+                           StrId::STR_TOGGLE_GUIDE_DOTS,
+                           StrId::STR_TOGGLE_BIONIC_READING,
+                           StrId::STR_CYCLE_PAGE_TURN,
+                           StrId::STR_SYNC_PROGRESS,
+                           StrId::STR_FILE_TRANSFER,
+                           StrId::STR_CALIBRE_WIRELESS,
+                           StrId::STR_JOIN_NETWORK,
+                           StrId::STR_CREATE_HOTSPOT,
+                           StrId::STR_SCREENSHOT_BUTTON,
+                           StrId::STR_READER_DARK_MODE,
+                           StrId::STR_FOOTNOTES,
+                           StrId::STR_BROWSE_FILES},
                           "longPwrBtn", StrId::STR_CAT_CONTROLS)
-            .withEnumRawValues({CrossPointSettings::IGNORE, CrossPointSettings::SLEEP, CrossPointSettings::PAGE_TURN,
-                                CrossPointSettings::TOGGLE_BOOKMARK, CrossPointSettings::READING_STATS,
-                                CrossPointSettings::MARK_FINISHED, CrossPointSettings::FORCE_REFRESH,
-                                CrossPointSettings::TOGGLE_FONT, CrossPointSettings::TOGGLE_GUIDE_DOTS,
-                                CrossPointSettings::TOGGLE_BIONIC_READING, CrossPointSettings::CYCLE_PAGE_TURN,
-                                CrossPointSettings::SYNC_PROGRESS, CrossPointSettings::FILE_TRANSFER,
-                                CrossPointSettings::SCREENSHOT, CrossPointSettings::TOGGLE_DARK_MODE,
-                                CrossPointSettings::FOOTNOTES}));
+            .withEnumRawValues({CrossPointSettings::IGNORE,
+                                CrossPointSettings::SLEEP,
+                                CrossPointSettings::PAGE_TURN,
+                                CrossPointSettings::TOGGLE_BOOKMARK,
+                                CrossPointSettings::READING_STATS,
+                                CrossPointSettings::MARK_FINISHED,
+                                CrossPointSettings::FORCE_REFRESH,
+                                CrossPointSettings::TOGGLE_FONT,
+                                CrossPointSettings::TOGGLE_GUIDE_DOTS,
+                                CrossPointSettings::TOGGLE_BIONIC_READING,
+                                CrossPointSettings::CYCLE_PAGE_TURN,
+                                CrossPointSettings::SYNC_PROGRESS,
+                                CrossPointSettings::FILE_TRANSFER,
+                                CrossPointSettings::CALIBRE_WIRELESS,
+                                CrossPointSettings::JOIN_NETWORK,
+                                CrossPointSettings::CREATE_HOTSPOT,
+                                CrossPointSettings::SCREENSHOT,
+                                CrossPointSettings::TOGGLE_DARK_MODE,
+                                CrossPointSettings::FOOTNOTES,
+                                CrossPointSettings::FILE_BROWSER}));
     add(SettingInfo::Enum(
             StrId::STR_LONG_PRESS_MENU_ACTION, &CrossPointSettings::longPressMenuAction,
             {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_TOGGLE_BOOKMARK, StrId::STR_READING_STATS,
              StrId::STR_MARK_FINISHED, StrId::STR_FORCE_REFRESH, StrId::STR_CHANGE_FONT, StrId::STR_TOGGLE_GUIDE_DOTS,
              StrId::STR_TOGGLE_BIONIC_READING, StrId::STR_CYCLE_PAGE_TURN, StrId::STR_SYNC_PROGRESS,
-             StrId::STR_FILE_TRANSFER, StrId::STR_SCREENSHOT_BUTTON, StrId::STR_READER_DARK_MODE, StrId::STR_FOOTNOTES},
+             StrId::STR_FILE_TRANSFER, StrId::STR_CALIBRE_WIRELESS, StrId::STR_JOIN_NETWORK, StrId::STR_CREATE_HOTSPOT,
+             StrId::STR_SCREENSHOT_BUTTON, StrId::STR_READER_DARK_MODE, StrId::STR_FOOTNOTES, StrId::STR_BROWSE_FILES},
             "longPressMenuAction", StrId::STR_CAT_CONTROLS)
             .withEnumRawValues(
                 {CrossPointSettings::LONG_MENU_OFF, CrossPointSettings::LONG_MENU_SLEEP,
@@ -423,8 +480,29 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                  CrossPointSettings::LONG_MENU_CHANGE_FONT, CrossPointSettings::LONG_MENU_TOGGLE_GUIDE_DOTS,
                  CrossPointSettings::LONG_MENU_TOGGLE_BIONIC, CrossPointSettings::LONG_MENU_CYCLE_PAGE_TURN,
                  CrossPointSettings::LONG_MENU_SYNC_PROGRESS, CrossPointSettings::LONG_MENU_FILE_TRANSFER,
-                 CrossPointSettings::LONG_MENU_SCREENSHOT, CrossPointSettings::LONG_MENU_TOGGLE_DARK_MODE,
-                 CrossPointSettings::LONG_MENU_FOOTNOTES}));
+                 CrossPointSettings::LONG_MENU_CALIBRE_WIRELESS, CrossPointSettings::LONG_MENU_JOIN_NETWORK,
+                 CrossPointSettings::LONG_MENU_CREATE_HOTSPOT, CrossPointSettings::LONG_MENU_SCREENSHOT,
+                 CrossPointSettings::LONG_MENU_TOGGLE_DARK_MODE, CrossPointSettings::LONG_MENU_FOOTNOTES,
+                 CrossPointSettings::LONG_MENU_FILE_BROWSER}));
+    add(SettingInfo::Enum(
+            StrId::STR_LONG_PRESS_BACK_ACTION, &CrossPointSettings::longPressBackAction,
+            {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_TOGGLE_BOOKMARK, StrId::STR_READING_STATS,
+             StrId::STR_MARK_FINISHED, StrId::STR_FORCE_REFRESH, StrId::STR_CHANGE_FONT, StrId::STR_TOGGLE_GUIDE_DOTS,
+             StrId::STR_TOGGLE_BIONIC_READING, StrId::STR_CYCLE_PAGE_TURN, StrId::STR_SYNC_PROGRESS,
+             StrId::STR_FILE_TRANSFER, StrId::STR_CALIBRE_WIRELESS, StrId::STR_JOIN_NETWORK, StrId::STR_CREATE_HOTSPOT,
+             StrId::STR_SCREENSHOT_BUTTON, StrId::STR_READER_DARK_MODE, StrId::STR_FOOTNOTES, StrId::STR_BROWSE_FILES},
+            "longPressBackAction", StrId::STR_CAT_CONTROLS)
+            .withEnumRawValues(
+                {CrossPointSettings::LONG_MENU_OFF, CrossPointSettings::LONG_MENU_SLEEP,
+                 CrossPointSettings::LONG_MENU_TOGGLE_BOOKMARK, CrossPointSettings::LONG_MENU_READING_STATS,
+                 CrossPointSettings::LONG_MENU_MARK_FINISHED, CrossPointSettings::LONG_MENU_REFRESH_SCREEN,
+                 CrossPointSettings::LONG_MENU_CHANGE_FONT, CrossPointSettings::LONG_MENU_TOGGLE_GUIDE_DOTS,
+                 CrossPointSettings::LONG_MENU_TOGGLE_BIONIC, CrossPointSettings::LONG_MENU_CYCLE_PAGE_TURN,
+                 CrossPointSettings::LONG_MENU_SYNC_PROGRESS, CrossPointSettings::LONG_MENU_FILE_TRANSFER,
+                 CrossPointSettings::LONG_MENU_CALIBRE_WIRELESS, CrossPointSettings::LONG_MENU_JOIN_NETWORK,
+                 CrossPointSettings::LONG_MENU_CREATE_HOTSPOT, CrossPointSettings::LONG_MENU_SCREENSHOT,
+                 CrossPointSettings::LONG_MENU_TOGGLE_DARK_MODE, CrossPointSettings::LONG_MENU_FOOTNOTES,
+                 CrossPointSettings::LONG_MENU_FILE_BROWSER}));
     add(SettingInfo::Toggle(StrId::STR_PWR_BTN_FOOTNOTE_BACK, &CrossPointSettings::pwrBtnFootnoteBack,
                             "pwrBtnFootnoteBack", StrId::STR_CAT_CONTROLS));
 
@@ -524,10 +602,12 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     if (halTiltSensor.isAvailable()) {
       for (auto& setting : v) {
         if (setting.nameId == StrId::STR_SHORT_PWR_BTN || setting.nameId == StrId::STR_LONG_PRESS_ACTION ||
-            setting.nameId == StrId::STR_LONG_PRESS_MENU_ACTION) {
-          const uint8_t rawValue = setting.nameId == StrId::STR_LONG_PRESS_MENU_ACTION
-                                       ? static_cast<uint8_t>(CrossPointSettings::LONG_MENU_TOGGLE_TILT_PAGE_TURN)
-                                       : static_cast<uint8_t>(CrossPointSettings::TOGGLE_TILT_PAGE_TURN);
+            setting.nameId == StrId::STR_LONG_PRESS_MENU_ACTION ||
+            setting.nameId == StrId::STR_LONG_PRESS_BACK_ACTION) {
+          const uint8_t rawValue =
+              setting.nameId == StrId::STR_LONG_PRESS_MENU_ACTION || setting.nameId == StrId::STR_LONG_PRESS_BACK_ACTION
+                  ? static_cast<uint8_t>(CrossPointSettings::LONG_MENU_TOGGLE_TILT_PAGE_TURN)
+                  : static_cast<uint8_t>(CrossPointSettings::TOGGLE_TILT_PAGE_TURN);
           insertEnumOptionAfter(setting, StrId::STR_CYCLE_PAGE_TURN, StrId::STR_TILT_PAGE_TURN, rawValue);
         }
       }
@@ -697,7 +777,8 @@ inline std::vector<SettingInfo> buildControlsPowerSettingsList(const std::vector
   addSettingByName(settings, allSettings, StrId::STR_LONG_PRESS_ACTION);
   if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::FOOTNOTES ||
       SETTINGS.longPwrBtn == CrossPointSettings::SHORT_PWRBTN::FOOTNOTES ||
-      SETTINGS.longPressMenuAction == CrossPointSettings::LONG_PRESS_MENU_ACTION::LONG_MENU_FOOTNOTES) {
+      SETTINGS.longPressMenuAction == CrossPointSettings::LONG_PRESS_MENU_ACTION::LONG_MENU_FOOTNOTES ||
+      SETTINGS.longPressBackAction == CrossPointSettings::LONG_PRESS_MENU_ACTION::LONG_MENU_FOOTNOTES) {
     addSettingByName(settings, allSettings, StrId::STR_PWR_BTN_FOOTNOTE_BACK);
   }
   return settings;
@@ -705,12 +786,13 @@ inline std::vector<SettingInfo> buildControlsPowerSettingsList(const std::vector
 
 inline std::vector<SettingInfo> buildControlsFrontButtonSettingsList(const std::vector<SettingInfo>& allSettings) {
   std::vector<SettingInfo> settings;
-  settings.reserve(5);
+  settings.reserve(6);
   settings.push_back(SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons));
   settings.push_back(
       SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS_READER, SettingAction::RemapFrontButtonsReader));
   addSettingByKey(settings, allSettings, "frontButtonOrientationAware");
   addSettingByName(settings, allSettings, StrId::STR_LONG_PRESS_BEHAVIOR);
+  addSettingByName(settings, allSettings, StrId::STR_LONG_PRESS_BACK_ACTION);
   addSettingByName(settings, allSettings, StrId::STR_LONG_PRESS_MENU_ACTION);
   return settings;
 }

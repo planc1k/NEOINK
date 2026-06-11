@@ -3,6 +3,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <utility>
 
 #include "NetworkModeSelectionActivity.h"
 #include "activities/Activity.h"
@@ -30,6 +31,8 @@ enum class WebServerActivityState {
 class CrossPointWebServerActivity final : public Activity {
   WebServerActivityState state = WebServerActivityState::MODE_SELECTION;
   std::string returnBookPath;
+  bool hasInitialNetworkMode = false;
+  NetworkMode initialNetworkMode = NetworkMode::JOIN_NETWORK;
 
   // Network mode
   NetworkMode networkMode = NetworkMode::JOIN_NETWORK;
@@ -67,6 +70,12 @@ class CrossPointWebServerActivity final : public Activity {
   explicit CrossPointWebServerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                        std::string returnBookPath = {})
       : Activity("CrossPointWebServer", renderer, mappedInput), returnBookPath(std::move(returnBookPath)) {}
+  CrossPointWebServerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, NetworkMode initialNetworkMode,
+                              std::string returnBookPath = {})
+      : Activity("CrossPointWebServer", renderer, mappedInput),
+        returnBookPath(std::move(returnBookPath)),
+        hasInitialNetworkMode(true),
+        initialNetworkMode(initialNetworkMode) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

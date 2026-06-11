@@ -21,6 +21,7 @@ class XtcReaderActivity final : public Activity {
   int pagesUntilFullRefresh = 0;
   bool longPowerPageTurnHandled = false;
   bool frontButtonLongPressHandled = false;
+  bool longPressBackHandled = false;
 
   enum class StatusBarOverlayPosition { Bottom, Top };
   struct StatusBarInfo {
@@ -34,6 +35,7 @@ class XtcReaderActivity final : public Activity {
   StatusBarInfo getStatusBarInfo() const;
   void saveProgress() const;
   void loadProgress();
+  bool executeLongPressBackAction();
 
  public:
   explicit XtcReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Xtc> xtc)

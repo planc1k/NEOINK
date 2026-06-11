@@ -386,6 +386,7 @@ STR_REMAP_FRONT_BUTTONS_READER: "Переназначить кнопки (чте
 STR_READING_STATS: "Статистика чтения"
 STR_BOOKMARKS: "Закладки"
 STR_LONG_PRESS_MENU_ACTION: "Действие меню по долгому нажатию"
+STR_LONG_PRESS_BACK_ACTION: "Действие Назад по долгому нажатию"
 STR_CYCLE_PAGE_TURN: "Автоперелистывание"
 STR_LOW_MEMORY_IMAGES_TITLE: "Глава загружена без некоторых или всех изображений"
 STR_LOW_MEMORY_IMAGES_BODY: "Доступной памяти было недостаточно для извлечения всех изображений этой главы."

@@ -204,6 +204,10 @@ class CrossPointSettings {
     TOGGLE_TILT_PAGE_TURN = 14,
     TOGGLE_DARK_MODE = 15,
     FOOTNOTES = 16,
+    FILE_BROWSER = 17,
+    CALIBRE_WIRELESS = 18,
+    JOIN_NETWORK = 19,
+    CREATE_HOTSPOT = 20,
     SHORT_PWRBTN_COUNT
   };
 
@@ -215,6 +219,7 @@ class CrossPointSettings {
     OFF = 0,
     CHAPTER_SKIP = 1,
     ORIENTATION_CHANGE = 2,
+    FONT_SIZE_CHANGE = 3,
     LONG_PRESS_BUTTON_BEHAVIOR_COUNT
   };
 
@@ -260,6 +265,10 @@ class CrossPointSettings {
     LONG_MENU_TOGGLE_TILT_PAGE_TURN = 13,
     LONG_MENU_TOGGLE_DARK_MODE = 14,
     LONG_MENU_FOOTNOTES = 15,
+    LONG_MENU_FILE_BROWSER = 16,
+    LONG_MENU_CALIBRE_WIRELESS = 17,
+    LONG_MENU_JOIN_NETWORK = 18,
+    LONG_MENU_CREATE_HOTSPOT = 19,
     LONG_PRESS_MENU_ACTION_COUNT
   };
 
@@ -401,6 +410,8 @@ class CrossPointSettings {
   uint8_t imageRendering = IMAGES_DISPLAY;
   // Long-press Confirm (menu button) quick action in reader (0 = off)
   uint8_t longPressMenuAction = LONG_MENU_OFF;
+  // Long-press Back quick action in reader (defaults to the historical file browser shortcut)
+  uint8_t longPressBackAction = LONG_MENU_FILE_BROWSER;
   // Tilt-based page turning (X3 only — requires QMI8658 IMU)
   uint8_t tiltPageTurn = TILT_OFF;
   uint8_t tiltPageTurnDirection = TILT_LEFT_RIGHT;

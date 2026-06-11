@@ -16,6 +16,7 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "GlobalActions.h"
 #include "MappedInputManager.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
@@ -83,9 +84,15 @@ void XtcReaderActivity::loop() {
     }
   }
 
-  // Long press BACK (1s+) goes to file selection
-  if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS) {
-    activityManager.goToFileBrowser(xtc ? xtc->getPath() : "");
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back) && longPressBackHandled) {
+    longPressBackHandled = false;
+    return;
+  }
+
+  if (!longPressBackHandled && mappedInput.isPressed(MappedInputManager::Button::Back) &&
+      mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS) {
+    longPressBackHandled = true;
+    executeLongPressBackAction();
     return;
   }
 
@@ -111,6 +118,39 @@ void XtcReaderActivity::loop() {
     longPowerPageTurnHandled = false;
     return;
   }
+  auto executePowerAction = [this](const CrossPointSettings::SHORT_PWRBTN action) {
+    switch (action) {
+      case CrossPointSettings::SHORT_PWRBTN::FILE_TRANSFER:
+        activityManager.goToFileTransfer(xtc ? xtc->getPath() : "");
+        return true;
+      case CrossPointSettings::SHORT_PWRBTN::CALIBRE_WIRELESS:
+        activityManager.goToCalibreWireless(xtc ? xtc->getPath() : "");
+        return true;
+      case CrossPointSettings::SHORT_PWRBTN::JOIN_NETWORK:
+        activityManager.goToJoinNetworkFileTransfer(xtc ? xtc->getPath() : "");
+        return true;
+      case CrossPointSettings::SHORT_PWRBTN::CREATE_HOTSPOT:
+        activityManager.goToHotspotFileTransfer(xtc ? xtc->getPath() : "");
+        return true;
+      case CrossPointSettings::SHORT_PWRBTN::FILE_BROWSER:
+        activityManager.goToFileBrowser(xtc ? xtc->getPath() : "");
+        return true;
+      default:
+        return false;
+    }
+  };
+
+  if (powerReleased && mappedInput.getHeldTime() < SETTINGS.getPowerButtonLongPressDuration() &&
+      executePowerAction(static_cast<CrossPointSettings::SHORT_PWRBTN>(SETTINGS.shortPwrBtn))) {
+    return;
+  }
+  if (!longPowerPageTurnHandled && mappedInput.isPressed(MappedInputManager::Button::Power) &&
+      mappedInput.getHeldTime() >= SETTINGS.getPowerButtonLongPressDuration() &&
+      executePowerAction(static_cast<CrossPointSettings::SHORT_PWRBTN>(SETTINGS.longPwrBtn))) {
+    longPowerPageTurnHandled = true;
+    return;
+  }
+
   const bool shortPowerTurn = SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN && powerReleased &&
                               mappedInput.getHeldTime() < SETTINGS.getPowerButtonLongPressDuration();
   const bool longPowerTurn = SETTINGS.longPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN && powerReleased &&
@@ -125,7 +165,8 @@ void XtcReaderActivity::loop() {
   const bool powerPageTurn = shortPowerTurn || longPowerTurn || timedLongPowerTurn;
   const bool frontNext = mappedInput.wasReleased(MappedInputManager::Button::Right) || powerPageTurn;
 
-  const bool frontLongPressAction = SETTINGS.longPressButtonBehavior == CrossPointSettings::CHAPTER_SKIP;
+  const bool frontLongPressAction = SETTINGS.longPressButtonBehavior == CrossPointSettings::CHAPTER_SKIP ||
+                                    SETTINGS.longPressButtonBehavior == CrossPointSettings::FONT_SIZE_CHANGE;
   if (frontLongPressAction) {
     const bool leftReleased = mappedInput.wasReleased(MappedInputManager::Button::Left);
     const bool rightReleased = mappedInput.wasReleased(MappedInputManager::Button::Right);
@@ -139,6 +180,10 @@ void XtcReaderActivity::loop() {
     const bool nextLongPressed = longPressReady && mappedInput.isPressed(MappedInputManager::Button::Right);
     if (!frontButtonLongPressHandled && (prevLongPressed || nextLongPressed)) {
       frontButtonLongPressHandled = true;
+      if (SETTINGS.longPressButtonBehavior == CrossPointSettings::FONT_SIZE_CHANGE) {
+        return;
+      }
+
       if (currentPage >= xtc->getPageCount()) {
         if (nextLongPressed) {
           onGoHome();
@@ -209,6 +254,35 @@ void XtcReaderActivity::loop() {
       currentPage = xtc->getPageCount();  // Allow showing "End of book"
     }
     requestUpdate();
+  }
+}
+
+bool XtcReaderActivity::executeLongPressBackAction() {
+  switch (static_cast<CrossPointSettings::LONG_PRESS_MENU_ACTION>(SETTINGS.longPressBackAction)) {
+    case CrossPointSettings::LONG_PRESS_MENU_ACTION::LONG_MENU_SLEEP:
+      enterDeepSleep();
+      return true;
+    case CrossPointSettings::LONG_PRESS_MENU_ACTION::LONG_MENU_REFRESH_SCREEN:
+      pagesUntilFullRefresh = 1;
+      requestUpdate();
+      return true;
+    case CrossPointSettings::LONG_PRESS_MENU_ACTION::LONG_MENU_FILE_TRANSFER:
+      activityManager.goToFileTransfer(xtc ? xtc->getPath() : "");
+      return true;
+    case CrossPointSettings::LONG_PRESS_MENU_ACTION::LONG_MENU_CALIBRE_WIRELESS:
+      activityManager.goToCalibreWireless(xtc ? xtc->getPath() : "");
+      return true;
+    case CrossPointSettings::LONG_PRESS_MENU_ACTION::LONG_MENU_JOIN_NETWORK:
+      activityManager.goToJoinNetworkFileTransfer(xtc ? xtc->getPath() : "");
+      return true;
+    case CrossPointSettings::LONG_PRESS_MENU_ACTION::LONG_MENU_CREATE_HOTSPOT:
+      activityManager.goToHotspotFileTransfer(xtc ? xtc->getPath() : "");
+      return true;
+    case CrossPointSettings::LONG_PRESS_MENU_ACTION::LONG_MENU_FILE_BROWSER:
+      activityManager.goToFileBrowser(xtc ? xtc->getPath() : "");
+      return true;
+    default:
+      return false;
   }
 }
 

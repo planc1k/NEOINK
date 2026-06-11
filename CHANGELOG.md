@@ -4,6 +4,7 @@
 
 ### Added
 - Device Name in Settings > System > Device for customizing the KOReader Sync and Nearby Stats Sync device label.
+- Additional shortcut options and new ability to add custom shortcuts for Long-press Back Action
 
 ### Changed
 - The X3 clock visibility setting is now phrased as `Hide Clock`, with existing `Show Clock` preferences migrated to the matching hide behavior.

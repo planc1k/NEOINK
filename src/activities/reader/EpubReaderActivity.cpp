@@ -1164,9 +1164,15 @@ void EpubReaderActivity::loop() {
                            });
   }
 
-  // Long press BACK (1s+) goes to file selection
-  if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS) {
-    activityManager.goToFileBrowser(epub ? epub->getPath() : "");
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back) && longPressBackHandled) {
+    longPressBackHandled = false;
+    return;
+  }
+
+  if (!longPressBackHandled && mappedInput.isPressed(MappedInputManager::Button::Back) &&
+      mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS) {
+    longPressBackHandled = true;
+    executeReaderQuickAction(static_cast<CrossPointSettings::LONG_PRESS_MENU_ACTION>(SETTINGS.longPressBackAction));
     return;
   }
 
@@ -1237,8 +1243,10 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  const bool frontLongPressChangesFont = SETTINGS.longPressButtonBehavior == CrossPointSettings::FONT_SIZE_CHANGE;
   const bool frontLongPressAction = SETTINGS.longPressButtonBehavior == CrossPointSettings::CHAPTER_SKIP ||
-                                    SETTINGS.longPressButtonBehavior == CrossPointSettings::ORIENTATION_CHANGE;
+                                    SETTINGS.longPressButtonBehavior == CrossPointSettings::ORIENTATION_CHANGE ||
+                                    frontLongPressChangesFont;
   if (frontLongPressAction) {
     const bool leftReleased = mappedInput.wasReleased(MappedInputManager::Button::Left);
     const bool rightReleased = mappedInput.wasReleased(MappedInputManager::Button::Right);
@@ -1272,6 +1280,13 @@ void EpubReaderActivity::loop() {
           section.reset();
         }
         requestUpdate();
+        return;
+      }
+
+      if (frontLongPressChangesFont) {
+        if (sdFontSystem.changeReaderFontSize(/*larger=*/nextLongPressed)) {
+          reindexCurrentSection();
+        }
         return;
       }
 
@@ -1890,6 +1905,15 @@ void EpubReaderActivity::executeReaderQuickAction(CrossPointSettings::LONG_PRESS
     case CrossPointSettings::LONG_MENU_FILE_TRANSFER:
       openFileTransfer();
       break;
+    case CrossPointSettings::LONG_MENU_CALIBRE_WIRELESS:
+      activityManager.goToCalibreWireless(epub ? epub->getPath() : "");
+      break;
+    case CrossPointSettings::LONG_MENU_JOIN_NETWORK:
+      activityManager.goToJoinNetworkFileTransfer(epub ? epub->getPath() : "");
+      break;
+    case CrossPointSettings::LONG_MENU_CREATE_HOTSPOT:
+      activityManager.goToHotspotFileTransfer(epub ? epub->getPath() : "");
+      break;
     case CrossPointSettings::LONG_MENU_TOGGLE_TILT_PAGE_TURN:
       if (halTiltSensor.isAvailable()) {
         SETTINGS.tiltPageTurn = SETTINGS.tiltPageTurn == CrossPointSettings::TILT_OFF ? CrossPointSettings::TILT_ON
@@ -1907,6 +1931,9 @@ void EpubReaderActivity::executeReaderQuickAction(CrossPointSettings::LONG_PRESS
       break;
     case CrossPointSettings::LONG_MENU_FOOTNOTES:
       executeFootnoteQuickAction();
+      break;
+    case CrossPointSettings::LONG_MENU_FILE_BROWSER:
+      activityManager.goToFileBrowser(epub ? epub->getPath() : "");
       break;
     case CrossPointSettings::LONG_MENU_OFF:
     default:
@@ -1977,6 +2004,15 @@ bool EpubReaderActivity::executeShortPowerButtonAction() {
     case CrossPointSettings::SHORT_PWRBTN::FILE_TRANSFER:
       executeReaderQuickAction(CrossPointSettings::LONG_MENU_FILE_TRANSFER);
       return true;
+    case CrossPointSettings::SHORT_PWRBTN::CALIBRE_WIRELESS:
+      executeReaderQuickAction(CrossPointSettings::LONG_MENU_CALIBRE_WIRELESS);
+      return true;
+    case CrossPointSettings::SHORT_PWRBTN::JOIN_NETWORK:
+      executeReaderQuickAction(CrossPointSettings::LONG_MENU_JOIN_NETWORK);
+      return true;
+    case CrossPointSettings::SHORT_PWRBTN::CREATE_HOTSPOT:
+      executeReaderQuickAction(CrossPointSettings::LONG_MENU_CREATE_HOTSPOT);
+      return true;
     case CrossPointSettings::SHORT_PWRBTN::TOGGLE_TILT_PAGE_TURN:
       executeReaderQuickAction(CrossPointSettings::LONG_MENU_TOGGLE_TILT_PAGE_TURN);
       return true;
@@ -1985,6 +2021,9 @@ bool EpubReaderActivity::executeShortPowerButtonAction() {
       return true;
     case CrossPointSettings::SHORT_PWRBTN::FOOTNOTES:
       executeFootnoteQuickAction();
+      return true;
+    case CrossPointSettings::SHORT_PWRBTN::FILE_BROWSER:
+      executeReaderQuickAction(CrossPointSettings::LONG_MENU_FILE_BROWSER);
       return true;
     default:
       return false;
@@ -2046,6 +2085,15 @@ bool EpubReaderActivity::executeLongPowerButtonAction() {
     case CrossPointSettings::SHORT_PWRBTN::FILE_TRANSFER:
       executeReaderQuickAction(CrossPointSettings::LONG_MENU_FILE_TRANSFER);
       return true;
+    case CrossPointSettings::SHORT_PWRBTN::CALIBRE_WIRELESS:
+      executeReaderQuickAction(CrossPointSettings::LONG_MENU_CALIBRE_WIRELESS);
+      return true;
+    case CrossPointSettings::SHORT_PWRBTN::JOIN_NETWORK:
+      executeReaderQuickAction(CrossPointSettings::LONG_MENU_JOIN_NETWORK);
+      return true;
+    case CrossPointSettings::SHORT_PWRBTN::CREATE_HOTSPOT:
+      executeReaderQuickAction(CrossPointSettings::LONG_MENU_CREATE_HOTSPOT);
+      return true;
     case CrossPointSettings::SHORT_PWRBTN::TOGGLE_TILT_PAGE_TURN:
       executeReaderQuickAction(CrossPointSettings::LONG_MENU_TOGGLE_TILT_PAGE_TURN);
       return true;
@@ -2054,6 +2102,9 @@ bool EpubReaderActivity::executeLongPowerButtonAction() {
       return true;
     case CrossPointSettings::SHORT_PWRBTN::FOOTNOTES:
       executeFootnoteQuickAction();
+      return true;
+    case CrossPointSettings::SHORT_PWRBTN::FILE_BROWSER:
+      executeReaderQuickAction(CrossPointSettings::LONG_MENU_FILE_BROWSER);
       return true;
     default:
       return false;

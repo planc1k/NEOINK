@@ -12,9 +12,11 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "GlobalActions.h"
 #include "MappedInputManager.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
+#include "SdCardFontSystem.h"
 #include "activities/boot_sleep/SleepCoverAssets.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -141,13 +143,19 @@ void TxtReaderActivity::loop() {
   if (consumeLongPowerButtonRelease()) {
     return;
   }
-  if (executeDarkModePowerButtonAction()) {
+  if (executePowerButtonAction()) {
     return;
   }
 
-  // Long press BACK (1s+) goes to file selection
-  if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS) {
-    activityManager.goToFileBrowser(txt ? txt->getPath() : "");
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back) && longPressBackHandled) {
+    longPressBackHandled = false;
+    return;
+  }
+
+  if (!longPressBackHandled && mappedInput.isPressed(MappedInputManager::Button::Back) &&
+      mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS) {
+    longPressBackHandled = true;
+    executeLongPressBackAction();
     return;
   }
 
@@ -188,7 +196,8 @@ void TxtReaderActivity::loop() {
     }
   }
 
-  if (SETTINGS.longPressButtonBehavior == CrossPointSettings::ORIENTATION_CHANGE) {
+  const bool frontLongPressChangesFont = SETTINGS.longPressButtonBehavior == CrossPointSettings::FONT_SIZE_CHANGE;
+  if (SETTINGS.longPressButtonBehavior == CrossPointSettings::ORIENTATION_CHANGE || frontLongPressChangesFont) {
     const bool leftReleased = mappedInput.wasReleased(MappedInputManager::Button::Left);
     const bool rightReleased = mappedInput.wasReleased(MappedInputManager::Button::Right);
     if (frontButtonLongPressHandled && (leftReleased || rightReleased)) {
@@ -201,6 +210,21 @@ void TxtReaderActivity::loop() {
     const bool nextLongPressed = longPressReady && mappedInput.isPressed(MappedInputManager::Button::Right);
     if (!frontButtonLongPressHandled && (prevLongPressed || nextLongPressed)) {
       frontButtonLongPressHandled = true;
+      if (frontLongPressChangesFont) {
+        if (sdFontSystem.changeReaderFontSize(/*larger=*/nextLongPressed)) {
+          SETTINGS.saveToFile();
+          sdFontSystem.ensureLoaded(renderer);
+          {
+            RenderLock lock(*this);
+            pageOffsets.clear();
+            currentPageLines.clear();
+            initialized = false;
+          }
+          requestUpdate();
+        }
+        return;
+      }
+
       SETTINGS.orientation = ReaderUtils::rotatedOrientation(SETTINGS.orientation, /*clockwise=*/prevLongPressed);
       SETTINGS.saveToFile();
       {
@@ -260,20 +284,74 @@ bool TxtReaderActivity::consumeLongPowerButtonHold() {
   return true;
 }
 
-bool TxtReaderActivity::executeDarkModePowerButtonAction() {
-  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::TOGGLE_DARK_MODE &&
-      mappedInput.wasReleased(MappedInputManager::Button::Power) &&
+bool TxtReaderActivity::executePowerButtonAction() {
+  auto executeAction = [this](const CrossPointSettings::SHORT_PWRBTN action) {
+    switch (action) {
+      case CrossPointSettings::SHORT_PWRBTN::FILE_TRANSFER:
+        activityManager.goToFileTransfer(txt ? txt->getPath() : "");
+        return true;
+      case CrossPointSettings::SHORT_PWRBTN::CALIBRE_WIRELESS:
+        activityManager.goToCalibreWireless(txt ? txt->getPath() : "");
+        return true;
+      case CrossPointSettings::SHORT_PWRBTN::JOIN_NETWORK:
+        activityManager.goToJoinNetworkFileTransfer(txt ? txt->getPath() : "");
+        return true;
+      case CrossPointSettings::SHORT_PWRBTN::CREATE_HOTSPOT:
+        activityManager.goToHotspotFileTransfer(txt ? txt->getPath() : "");
+        return true;
+      case CrossPointSettings::SHORT_PWRBTN::TOGGLE_DARK_MODE:
+        toggleDarkMode();
+        return true;
+      case CrossPointSettings::SHORT_PWRBTN::FILE_BROWSER:
+        activityManager.goToFileBrowser(txt ? txt->getPath() : "");
+        return true;
+      default:
+        return false;
+    }
+  };
+
+  if (mappedInput.wasReleased(MappedInputManager::Button::Power) &&
       mappedInput.getHeldTime() < SETTINGS.getPowerButtonLongPressDuration()) {
-    toggleDarkMode();
-    return true;
+    return executeAction(static_cast<CrossPointSettings::SHORT_PWRBTN>(SETTINGS.shortPwrBtn));
   }
 
-  if (SETTINGS.longPwrBtn == CrossPointSettings::SHORT_PWRBTN::TOGGLE_DARK_MODE && consumeLongPowerButtonHold()) {
-    toggleDarkMode();
-    return true;
+  if (consumeLongPowerButtonHold()) {
+    return executeAction(static_cast<CrossPointSettings::SHORT_PWRBTN>(SETTINGS.longPwrBtn));
   }
 
   return false;
+}
+
+bool TxtReaderActivity::executeLongPressBackAction() {
+  switch (static_cast<CrossPointSettings::LONG_PRESS_MENU_ACTION>(SETTINGS.longPressBackAction)) {
+    case CrossPointSettings::LONG_PRESS_MENU_ACTION::LONG_MENU_SLEEP:
+      enterDeepSleep();
+      return true;
+    case CrossPointSettings::LONG_PRESS_MENU_ACTION::LONG_MENU_REFRESH_SCREEN:
+      pagesUntilFullRefresh = 1;
+      requestUpdate();
+      return true;
+    case CrossPointSettings::LONG_PRESS_MENU_ACTION::LONG_MENU_FILE_TRANSFER:
+      activityManager.goToFileTransfer(txt ? txt->getPath() : "");
+      return true;
+    case CrossPointSettings::LONG_PRESS_MENU_ACTION::LONG_MENU_CALIBRE_WIRELESS:
+      activityManager.goToCalibreWireless(txt ? txt->getPath() : "");
+      return true;
+    case CrossPointSettings::LONG_PRESS_MENU_ACTION::LONG_MENU_JOIN_NETWORK:
+      activityManager.goToJoinNetworkFileTransfer(txt ? txt->getPath() : "");
+      return true;
+    case CrossPointSettings::LONG_PRESS_MENU_ACTION::LONG_MENU_CREATE_HOTSPOT:
+      activityManager.goToHotspotFileTransfer(txt ? txt->getPath() : "");
+      return true;
+    case CrossPointSettings::LONG_PRESS_MENU_ACTION::LONG_MENU_TOGGLE_DARK_MODE:
+      toggleDarkMode();
+      return true;
+    case CrossPointSettings::LONG_PRESS_MENU_ACTION::LONG_MENU_FILE_BROWSER:
+      activityManager.goToFileBrowser(txt ? txt->getPath() : "");
+      return true;
+    default:
+      return false;
+  }
 }
 
 void TxtReaderActivity::initializeReader() {
