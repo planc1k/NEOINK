@@ -28,6 +28,8 @@ bool isSleepImageFile(const std::string& path) {
   return FsHelpers::hasBmpExtension(path) || FsHelpers::hasPngExtension(path);
 }
 
+bool isMacOSSidecarFile(std::string_view filename) { return filename.rfind("._", 0) == 0; }
+
 bool hasFileMetadata(const std::string& path) {
   return FsHelpers::hasEpubExtension(path) || FsHelpers::hasXtcExtension(path) || FsHelpers::hasTxtExtension(path) ||
          FsHelpers::hasMarkdownExtension(path);
@@ -100,7 +102,8 @@ void FileBrowserActivity::loadFiles() {
   char name[500];
   for (auto file = root.openNextFile(); file; file = root.openNextFile()) {
     file.getName(name, sizeof(name));
-    if ((!SETTINGS.showHiddenFiles && name[0] == '.') || strcmp(name, "System Volume Information") == 0) {
+    if (isMacOSSidecarFile(name) || (!SETTINGS.showHiddenFiles && name[0] == '.') ||
+        strcmp(name, "System Volume Information") == 0) {
       continue;
     }
 

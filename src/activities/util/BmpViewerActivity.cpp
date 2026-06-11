@@ -9,8 +9,27 @@
 #include <algorithm>
 
 #include "CrossPointSettings.h"
+#include "Epub/converters/PngToFramebufferConverter.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+
+namespace {
+
+bool isViewableImageFile(const std::string& filename) {
+  return FsHelpers::hasBmpExtension(filename) || FsHelpers::hasPngExtension(filename);
+}
+
+bool isMacOSSidecarFile(const std::string& filename) { return filename.rfind("._", 0) == 0; }
+
+void drawImageError(GfxRenderer& renderer, MappedInputManager& mappedInput, const char* message) {
+  renderer.clearScreen();
+  renderer.drawCenteredText(UI_10_FONT_ID, renderer.getScreenHeight() / 2, message);
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+}
+
+}  // namespace
 
 BmpViewerActivity::BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string path)
     : Activity("BmpViewer", renderer, mappedInput), filePath(std::move(path)) {}
@@ -35,9 +54,9 @@ void BmpViewerActivity::loadSiblingImages() {
   for (auto file = dir.openNextFile(); file; file = dir.openNextFile()) {
     if (!file.isDirectory()) {
       file.getName(name, sizeof(name));
-      if (name[0] != '.') {
+      if (name[0] != '.' && !isMacOSSidecarFile(name)) {
         std::string fname(name);
-        if (fname.length() >= 4 && fname.substr(fname.length() - 4) == ".bmp") {
+        if (isViewableImageFile(fname)) {
           siblingImages.push_back(fname);
         }
       }
@@ -56,6 +75,54 @@ void BmpViewerActivity::loadSiblingImages() {
   }
 }
 
+bool BmpViewerActivity::renderPngImage() {
+  ImageDimensions dims;
+  if (!PngToFramebufferConverter::getDimensionsStatic(filePath, dims)) {
+    drawImageError(renderer, mappedInput, "Invalid PNG File");
+    return false;
+  }
+
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
+  float scale = 1.0f;
+  if (dims.width > pageWidth || dims.height > pageHeight) {
+    const float scaleX = static_cast<float>(pageWidth) / static_cast<float>(dims.width);
+    const float scaleY = static_cast<float>(pageHeight) / static_cast<float>(dims.height);
+    scale = std::min(scaleX, scaleY);
+  }
+
+  const int drawWidth = std::max(1, static_cast<int>(static_cast<float>(dims.width) * scale));
+  const int drawHeight = std::max(1, static_cast<int>(static_cast<float>(dims.height) * scale));
+  const int x = (pageWidth - drawWidth) / 2;
+  const int y = (pageHeight - drawHeight) / 2;
+
+  RenderConfig config;
+  config.x = x;
+  config.y = y;
+  config.maxWidth = drawWidth;
+  config.maxHeight = drawHeight;
+  config.useGrayscale = true;
+  config.useDithering = true;
+  config.performanceMode = false;
+  config.useExactDimensions = true;
+
+  PngToFramebufferConverter converter;
+  renderer.clearScreen();
+  if (!converter.decodeToFramebuffer(filePath, renderer, config)) {
+    drawImageError(renderer, mappedInput, "Invalid PNG File");
+    return false;
+  }
+
+  bool hasPrevious = (siblingImages.size() > 1 && currentImageIndex > 0);
+  bool hasNext = (siblingImages.size() > 1 && currentImageIndex != -1 &&
+                  currentImageIndex < static_cast<int>(siblingImages.size()) - 1);
+
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", (hasPrevious ? "<" : ""), (hasNext ? ">" : ""));
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+  return true;
+}
+
 void BmpViewerActivity::onEnter() {
   Activity::onEnter();
 
@@ -69,6 +136,12 @@ void BmpViewerActivity::onEnter() {
   const auto pageHeight = renderer.getScreenHeight();
   Rect popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
   GUI.fillPopupProgress(renderer, popupRect, 20);  // Initial 20% progress
+
+  if (FsHelpers::hasPngExtension(filePath)) {
+    renderPngImage();
+    return;
+  }
+
   // 1. Open the file
   if (Storage.openFileForRead("BMP", filePath, file)) {
     Bitmap bitmap(file, true);
@@ -119,21 +192,13 @@ void BmpViewerActivity::onEnter() {
 
     } else {
       // Handle file parsing error
-      renderer.clearScreen();
-      renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, "Invalid BMP File");
-      const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
-      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+      drawImageError(renderer, mappedInput, "Invalid BMP File");
     }
 
     file.close();
   } else {
     // Handle file open error
-    renderer.clearScreen();
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, "Could not open file");
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+    drawImageError(renderer, mappedInput, "Could not open file");
   }
 }
 
@@ -186,7 +251,9 @@ void BmpViewerActivity::loop() {
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    doSetSleepCover();
+    if (FsHelpers::hasBmpExtension(filePath)) {
+      doSetSleepCover();
+    }
     return;
   }
 

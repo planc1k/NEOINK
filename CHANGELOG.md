@@ -9,6 +9,7 @@
 
 ### Fixed
 - Book settings option lists now return to the submenu they were opened from when pressing Back.
+- File Browser now previews PNG images instead of trying to open them as EPUBs, and hides macOS `._*` sidecar files.
 
 ## [v1.3.2] - 2026-06-10
 
