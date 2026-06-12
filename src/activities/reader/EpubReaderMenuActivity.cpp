@@ -95,7 +95,7 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
                                                                                      bool isBookCompleted,
                                                                                      bool showReadingPaceReset) {
   std::vector<MenuItem> items;
-  constexpr size_t baseItemCount = 13;
+  constexpr size_t baseItemCount = 14;
   const size_t totalItemCount =
       baseItemCount + (showReadingPaceReset ? 1u : 0u) + (hasFootnotes ? 1u : 0u) + (hasBookmarks ? 2u : 0u);
   items.reserve(totalItemCount);
@@ -116,6 +116,7 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
   }
   items.push_back({MenuAction::SCREENSHOT, StrId::STR_SCREENSHOT_BUTTON});
   items.push_back({MenuAction::DISPLAY_QR, StrId::STR_DISPLAY_QR});
+  items.push_back({MenuAction::DELETE_STATS, StrId::STR_DELETE_BOOK_STATS});
   items.push_back({MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE});
   if (showReadingPaceReset) {
     items.push_back({MenuAction::RESET_READING_PACE, StrId::STR_RESET_READING_PACE});

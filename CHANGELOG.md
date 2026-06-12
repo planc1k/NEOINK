@@ -5,11 +5,13 @@
 ### Added
 - Device Name in Settings > System > Device for customizing the KOReader Sync and Nearby Stats Sync device label.
 - Additional shortcut options and new ability to add custom shortcuts for Long-press Back Action
+- Delete Reading Stats actions in the EPUB reader and book action menus for clearing one book's stats without deleting its cache.
 
 ### Changed
 - The X3 clock visibility setting is now phrased as `Hide Clock`, with existing `Show Clock` preferences migrated to the matching hide behavior.
 
 ### Fixed
+- Clear Reading Cache now preserves per-book reading stats while continuing to leave all-time reading stats untouched.
 - Book settings option lists now return to the submenu they were opened from when pressing Back.
 - Lyra Carousel now refreshes its cached Home icon row after OPDS, Reading Stats, or Bookmarks icons appear or disappear.
 - File Browser now previews PNG images instead of trying to open them as EPUBs, and hides macOS `._*` sidecar files.

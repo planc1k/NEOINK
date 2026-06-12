@@ -81,6 +81,10 @@ bool hasEnoughPaceSamplesForTimeLeft(const BookReadingStats& stats) {
   return stats.avgSecondsPerForwardPage > 0 && stats.paceSampleCount >= MIN_STORED_TIME_LEFT_PACE_SAMPLE_COUNT;
 }
 
+std::string confirmationHeading(const StrId actionLabelId) {
+  return std::string(tr(STR_CONFIRM)) + ": " + std::string(I18N.get(actionLabelId));
+}
+
 uint8_t largestBlockPercent(const MemoryBudget::HeapSnapshot& heap) {
   if (heap.freeHeap == 0) {
     return 0;
@@ -1594,31 +1598,72 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       onGoHome();
       return;
     }
+    case EpubReaderMenuActivity::MenuAction::DELETE_STATS: {
+      pauseReadingPaceTimer("delete_stats_confirm");
+      startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput,
+                                                                    confirmationHeading(StrId::STR_DELETE_BOOK_STATS),
+                                                                    epub ? epub->getTitle() : std::string{}),
+                             [this](const ActivityResult& result) {
+                               bool statsDeleted = false;
+                               if (!result.isCancelled) {
+                                 {
+                                   RenderLock lock(*this);
+                                   if (epub) {
+                                     statsDeleted = BookReadingStats::remove(epub->getCachePath());
+                                     if (statsDeleted) {
+                                       resetCurrentBookStatsAfterDelete();
+                                     }
+                                   }
+                                 }
+                                 if (statsDeleted) {
+                                   drawToast(renderer, tr(STR_BOOK_STATS_DELETED));
+                                   delay(1000);
+                                 } else {
+                                   LOG_ERR("ERS", "Failed to delete book stats");
+                                 }
+                               }
+                               resumeReadingPaceTimer("delete_stats_return");
+                               requestUpdate();
+                             });
+      break;
+    }
     case EpubReaderMenuActivity::MenuAction::DELETE_CACHE: {
-      bool cacheDeleted = false;
-      {
-        RenderLock lock(*this);
-        if (epub && section) {
-          uint16_t backupSpine = currentSpineIndex;
-          uint16_t backupPage = section->currentPage;
-          uint16_t backupPageCount = section->pageCount;
-          if (!saveProgress(backupSpine, backupPage, backupPageCount)) {
-            LOG_ERR("ERS", "Failed to save progress before cache clear");
-          }
-          stats.save(epub->getCachePath());
-          section.reset();
-          cacheDeleted = clearBookCachePreservingUserState(epub->getPath());
-          epub->setupCacheDir();
-          if (cacheDeleted) {
-            drawToast(renderer, tr(STR_BOOK_CACHE_DELETED));
-          }
-        }
-      }
-      if (cacheDeleted) {
-        delay(1000);
-      }
-      onGoHome();
-      return;
+      pauseReadingPaceTimer("delete_cache_confirm");
+      startActivityForResult(
+          std::make_unique<ConfirmationActivity>(renderer, mappedInput, confirmationHeading(StrId::STR_DELETE_CACHE),
+                                                 epub ? epub->getTitle() : std::string{}),
+          [this](const ActivityResult& result) {
+            if (result.isCancelled) {
+              resumeReadingPaceTimer("delete_cache_cancel");
+              requestUpdate();
+              return;
+            }
+
+            bool cacheDeleted = false;
+            {
+              RenderLock lock(*this);
+              if (epub && section) {
+                uint16_t backupSpine = currentSpineIndex;
+                uint16_t backupPage = section->currentPage;
+                uint16_t backupPageCount = section->pageCount;
+                if (!saveProgress(backupSpine, backupPage, backupPageCount)) {
+                  LOG_ERR("ERS", "Failed to save progress before cache clear");
+                }
+                stats.save(epub->getCachePath());
+                section.reset();
+                cacheDeleted = clearBookCachePreservingUserState(epub->getPath());
+                epub->setupCacheDir();
+                if (cacheDeleted) {
+                  drawToast(renderer, tr(STR_BOOK_CACHE_DELETED));
+                }
+              }
+            }
+            if (cacheDeleted) {
+              delay(1000);
+            }
+            onGoHome();
+          });
+      break;
     }
     case EpubReaderMenuActivity::MenuAction::RESET_READING_PACE: {
       resetReadingPaceData();
@@ -1888,6 +1933,17 @@ void EpubReaderActivity::resetReadingPaceData() {
           stats.avgSecondsPerForwardPage, oldCount, stats.paceSampleCount,
           static_cast<unsigned long>(stats.totalReadingSeconds), static_cast<unsigned long>(stats.totalPagesTurned));
 #endif
+}
+
+void EpubReaderActivity::resetCurrentBookStatsAfterDelete() {
+  stats = BookReadingStats{};
+  sessionReadingSeconds = 0;
+  sessionPaceSampleSeconds = 0;
+  sessionPaceSampleCount = 0;
+  pendingReadFolderMove = false;
+  hasSessionStartLocalDateTime = getCurrentLocalReadingStatsDateTime(sessionStartLocalDateTime);
+  armReadingPaceWarmup("book_stats_delete");
+  initializeCompletionPromptTrigger();
 }
 
 void EpubReaderActivity::executeReaderQuickAction(CrossPointSettings::LONG_PRESS_MENU_ACTION action) {

@@ -50,10 +50,13 @@ namespace BookActions {
 std::vector<FileBrowserActionActivity::MenuItem> buildBookActionItems(const std::string& fullPath,
                                                                       const bool includeRemoveFromRecents) {
   std::vector<FileBrowserActionActivity::MenuItem> items;
-  items.reserve(includeRemoveFromRecents ? 4 : 3);
+  items.reserve(includeRemoveFromRecents ? 5 : 4);
   items.push_back({FileBrowserAction::Delete, StrId::STR_DELETE});
   if (hasClearableBookCache(fullPath)) {
     items.push_back({FileBrowserAction::DeleteCache, StrId::STR_DELETE_CACHE});
+  }
+  if (FsHelpers::hasEpubExtension(fullPath)) {
+    items.push_back({FileBrowserAction::DeleteStats, StrId::STR_DELETE_BOOK_STATS});
   }
   if (FsHelpers::hasEpubExtension(fullPath)) {
     items.push_back({FileBrowserAction::ToggleCompleted,
@@ -86,6 +89,18 @@ bool clearBookCache(const std::string& fullPath) {
     return clearBookCachePreservingUserState(fullPath);
   }
   return false;
+}
+
+bool deleteBookStats(const std::string& fullPath) {
+  if (!FsHelpers::hasEpubExtension(fullPath)) {
+    return false;
+  }
+  const Epub epub(fullPath, "/.crosspoint");
+  return BookReadingStats::remove(epub.getCachePath());
+}
+
+std::string confirmationHeading(const StrId actionLabelId) {
+  return std::string(tr(STR_CONFIRM)) + ": " + std::string(I18N.get(actionLabelId));
 }
 
 bool isEpubCompleted(const std::string& fullPath) {

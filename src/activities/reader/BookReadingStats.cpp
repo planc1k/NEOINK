@@ -221,3 +221,15 @@ void BookReadingStats::save(const std::string& cachePath) const {
   f.write(data, STATS_FILE_SIZE);
   f.close();
 }
+
+bool BookReadingStats::remove(const std::string& cachePath) {
+  const std::string statsPath = cachePath + "/stats.bin";
+  if (!Storage.exists(statsPath.c_str())) {
+    return true;
+  }
+  if (!Storage.remove(statsPath.c_str())) {
+    LOG_ERR("STATS", "Could not delete stats.bin");
+    return false;
+  }
+  return true;
+}

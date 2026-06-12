@@ -175,52 +175,75 @@ void RecentBooksActivity::showBookActionMenu(const size_t bookIndex, const bool 
   std::vector<FileBrowserActionActivity::MenuItem> items =
       BookActions::buildBookActionItems(book.path, /*includeRemoveFromRecents=*/true);
 
-  startActivityForResult(std::make_unique<FileBrowserActionActivity>(renderer, mappedInput, book.title,
-                                                                     std::move(items), ignoreInitialConfirmRelease),
-                         [this, book](const ActivityResult& result) {
-                           if (result.isCancelled) {
-                             return;
-                           }
+  startActivityForResult(
+      std::make_unique<FileBrowserActionActivity>(renderer, mappedInput, book.title, std::move(items),
+                                                  ignoreInitialConfirmRelease),
+      [this, book](const ActivityResult& result) {
+        if (result.isCancelled) {
+          return;
+        }
 
-                           const auto* actionResult = std::get_if<FileBrowserActionResult>(&result.data);
-                           if (!actionResult) {
-                             LOG_ERR("RBA", "Book action result missing");
-                             return;
-                           }
+        const auto* actionResult = std::get_if<FileBrowserActionResult>(&result.data);
+        if (!actionResult) {
+          LOG_ERR("RBA", "Book action result missing");
+          return;
+        }
 
-                           switch (static_cast<FileBrowserAction>(actionResult->action)) {
-                             case FileBrowserAction::Delete:
-                               promptDeleteBook(book);
-                               return;
-                             case FileBrowserAction::DeleteCache:
-                               if (!BookActions::clearBookCache(book.path)) {
-                                 LOG_ERR("RBA", "Failed to clear book cache for: %s", book.path.c_str());
-                               } else {
-                                 BookActions::drawToast(renderer, tr(STR_BOOK_CACHE_DELETED));
-                                 delay(1000);
-                               }
-                               reloadAfterBookAction();
-                               return;
-                             case FileBrowserAction::ToggleCompleted: {
-                               bool completed = false;
-                               if (BookActions::toggleEpubCompleted(book.path, book.title, completed)) {
-                                 BookActions::drawToast(
-                                     renderer, completed ? tr(STR_MARKED_FINISHED) : tr(STR_MARKED_UNFINISHED));
-                                 delay(1000);
-                               }
-                               reloadAfterBookAction();
-                               return;
-                             }
-                             case FileBrowserAction::RemoveFromRecents:
-                               promptRemoveBook(book.path, book.title);
-                               return;
-                             case FileBrowserAction::PinFavorite:
-                             case FileBrowserAction::UnpinFavorite:
-                             case FileBrowserAction::SetSleepFolder:
-                             case FileBrowserAction::ClearSleepFolder:
-                               return;
-                           }
-                         });
+        switch (static_cast<FileBrowserAction>(actionResult->action)) {
+          case FileBrowserAction::Delete:
+            promptDeleteBook(book);
+            return;
+          case FileBrowserAction::DeleteCache:
+            startActivityForResult(
+                std::make_unique<ConfirmationActivity>(
+                    renderer, mappedInput, BookActions::confirmationHeading(StrId::STR_DELETE_CACHE), book.title),
+                [this, book](const ActivityResult& confirmation) {
+                  if (!confirmation.isCancelled) {
+                    if (!BookActions::clearBookCache(book.path)) {
+                      LOG_ERR("RBA", "Failed to clear book cache for: %s", book.path.c_str());
+                    } else {
+                      BookActions::drawToast(renderer, tr(STR_BOOK_CACHE_DELETED));
+                      delay(1000);
+                    }
+                  }
+                  reloadAfterBookAction();
+                });
+            return;
+          case FileBrowserAction::DeleteStats:
+            startActivityForResult(
+                std::make_unique<ConfirmationActivity>(
+                    renderer, mappedInput, BookActions::confirmationHeading(StrId::STR_DELETE_BOOK_STATS), book.title),
+                [this, book](const ActivityResult& confirmation) {
+                  if (!confirmation.isCancelled) {
+                    if (!BookActions::deleteBookStats(book.path)) {
+                      LOG_ERR("RBA", "Failed to delete book stats for: %s", book.path.c_str());
+                    } else {
+                      BookActions::drawToast(renderer, tr(STR_BOOK_STATS_DELETED));
+                      delay(1000);
+                    }
+                  }
+                  reloadAfterBookAction();
+                });
+            return;
+          case FileBrowserAction::ToggleCompleted: {
+            bool completed = false;
+            if (BookActions::toggleEpubCompleted(book.path, book.title, completed)) {
+              BookActions::drawToast(renderer, completed ? tr(STR_MARKED_FINISHED) : tr(STR_MARKED_UNFINISHED));
+              delay(1000);
+            }
+            reloadAfterBookAction();
+            return;
+          }
+          case FileBrowserAction::RemoveFromRecents:
+            promptRemoveBook(book.path, book.title);
+            return;
+          case FileBrowserAction::PinFavorite:
+          case FileBrowserAction::UnpinFavorite:
+          case FileBrowserAction::SetSleepFolder:
+          case FileBrowserAction::ClearSleepFolder:
+            return;
+        }
+      });
 }
 
 void RecentBooksActivity::render(RenderLock&&) {

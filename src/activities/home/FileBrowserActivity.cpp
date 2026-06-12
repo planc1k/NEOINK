@@ -288,6 +288,7 @@ void FileBrowserActivity::showDirectoryActionMenu(const std::string& entry, bool
                                clearPreferredSleepFolder();
                                return;
                              case FileBrowserAction::DeleteCache:
+                             case FileBrowserAction::DeleteStats:
                              case FileBrowserAction::ToggleCompleted:
                              case FileBrowserAction::RemoveFromRecents:
                              case FileBrowserAction::PinFavorite:
@@ -394,13 +395,37 @@ void FileBrowserActivity::showFileActionMenu(const std::string& entry, bool igno
             promptDeleteFile(fullPath, entry);
             return;
           case FileBrowserAction::DeleteCache:
-            if (!BookActions::clearBookCache(fullPath)) {
-              LOG_ERR("FileBrowser", "Failed to clear book cache for: %s", fullPath.c_str());
-            } else {
-              BookActions::drawToast(renderer, tr(STR_BOOK_CACHE_DELETED));
-              delay(1000);
-            }
-            requestUpdate();
+            startActivityForResult(std::make_unique<ConfirmationActivity>(
+                                       renderer, mappedInput, BookActions::confirmationHeading(StrId::STR_DELETE_CACHE),
+                                       getFileName(entry)),
+                                   [this, fullPath](const ActivityResult& confirmation) {
+                                     if (!confirmation.isCancelled) {
+                                       if (!BookActions::clearBookCache(fullPath)) {
+                                         LOG_ERR("FileBrowser", "Failed to clear book cache for: %s", fullPath.c_str());
+                                       } else {
+                                         BookActions::drawToast(renderer, tr(STR_BOOK_CACHE_DELETED));
+                                         delay(1000);
+                                       }
+                                     }
+                                     requestUpdate();
+                                   });
+            return;
+          case FileBrowserAction::DeleteStats:
+            startActivityForResult(
+                std::make_unique<ConfirmationActivity>(renderer, mappedInput,
+                                                       BookActions::confirmationHeading(StrId::STR_DELETE_BOOK_STATS),
+                                                       getFileName(entry)),
+                [this, fullPath](const ActivityResult& confirmation) {
+                  if (!confirmation.isCancelled) {
+                    if (!BookActions::deleteBookStats(fullPath)) {
+                      LOG_ERR("FileBrowser", "Failed to delete book stats for: %s", fullPath.c_str());
+                    } else {
+                      BookActions::drawToast(renderer, tr(STR_BOOK_STATS_DELETED));
+                      delay(1000);
+                    }
+                  }
+                  requestUpdate();
+                });
             return;
           case FileBrowserAction::ToggleCompleted:
             if (BookActions::toggleEpubCompleted(fullPath, getFileName(entry), completedFeedbackIsFinished)) {

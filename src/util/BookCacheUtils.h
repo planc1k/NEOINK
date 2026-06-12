@@ -11,5 +11,8 @@ void clearBookCache(const std::string& path);
 // preservation fails.
 bool clearBookCachePreservingUserState(const std::string& path);
 
+// Clears a known book cache directory while preserving per-book stats.
+bool clearBookCacheDirectoryPreservingStats(const std::string& cachePath);
+
 // Returns true if the directory name matches a book cache entry.
 bool isBookCacheDirectoryName(const char* name);

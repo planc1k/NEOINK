@@ -27,6 +27,9 @@ struct BookReadingStats {
   // Saves stats to cachePath/stats.bin.
   void save(const std::string& cachePath) const;
 
+  // Deletes cachePath/stats.bin. Missing files are treated as success.
+  static bool remove(const std::string& cachePath);
+
   // Updates the running reading pace with one forward page dwell sample.
   void recordForwardPageRead(uint32_t seconds);
 

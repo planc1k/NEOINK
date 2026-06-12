@@ -14,6 +14,8 @@ std::vector<FileBrowserActionActivity::MenuItem> buildBookActionItems(const std:
 bool hasClearableBookCache(const std::string& path);
 void clearFileMetadata(const std::string& fullPath);
 bool clearBookCache(const std::string& fullPath);
+bool deleteBookStats(const std::string& fullPath);
+std::string confirmationHeading(StrId actionLabelId);
 bool isEpubCompleted(const std::string& fullPath);
 bool toggleEpubCompleted(const std::string& fullPath, const std::string& displayName, bool& completed);
 void drawToast(const GfxRenderer& renderer, const char* msg);

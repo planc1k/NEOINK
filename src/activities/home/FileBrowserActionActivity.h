@@ -17,6 +17,7 @@ enum class FileBrowserAction : int {
   DeleteCache = 5,
   ToggleCompleted = 6,
   RemoveFromRecents = 7,
+  DeleteStats = 8,
 };
 
 class FileBrowserActionActivity final : public Activity {
