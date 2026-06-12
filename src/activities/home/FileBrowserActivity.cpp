@@ -7,6 +7,7 @@
 #include <I18n.h>
 
 #include <algorithm>
+#include <cstring>
 
 #include "BookActions.h"
 #include "CrossPointSettings.h"
@@ -21,6 +22,8 @@ namespace {
 constexpr unsigned long GO_HOME_MS = 1000;
 constexpr unsigned long COMPLETED_FEEDBACK_MS = 1000;
 constexpr int ROOT_HINT_GAP = 20;
+constexpr uint32_t FILE_BROWSER_APPEND_MIN_FREE_AFTER_ALLOC = 48U * 1024U;
+constexpr uint32_t FILE_BROWSER_APPEND_MIN_MAX_ALLOC_AFTER_ALLOC = 16U * 1024U;
 
 bool isDefaultSleepFolderPath(const std::string& path) { return path == "/sleep" || path == "/.sleep"; }
 
@@ -47,6 +50,27 @@ bool isWindowsMetadataEntry(std::string_view filename) {
   return equalsIgnoreCase(filename, "System Volume Information") || equalsIgnoreCase(filename, "$RECYCLE.BIN") ||
          equalsIgnoreCase(filename, "desktop.ini") || equalsIgnoreCase(filename, "Thumbs.db") ||
          equalsIgnoreCase(filename, "IndexerVolumeGuid") || equalsIgnoreCase(filename, "WPSettings.dat");
+}
+
+size_t estimateNextVectorCapacity(size_t size, size_t capacity) {
+  if (size < capacity) {
+    return capacity;
+  }
+  if (capacity == 0) {
+    return 1;
+  }
+  return capacity * 2;
+}
+
+bool hasHeapForFileEntryAppend(const std::vector<std::string>& files, size_t entryLen) {
+  const size_t nextCapacity = estimateNextVectorCapacity(files.size(), files.capacity());
+  const uint32_t vectorGrowthBytes =
+      (nextCapacity == files.capacity()) ? 0U : static_cast<uint32_t>(nextCapacity * sizeof(std::string));
+  const uint32_t stringBytes = static_cast<uint32_t>(entryLen + 1);
+  const uint32_t largestNeeded = std::max(vectorGrowthBytes, stringBytes);
+
+  return ESP.getFreeHeap() >= vectorGrowthBytes + stringBytes + FILE_BROWSER_APPEND_MIN_FREE_AFTER_ALLOC &&
+         ESP.getMaxAllocHeap() >= largestNeeded + FILE_BROWSER_APPEND_MIN_MAX_ALLOC_AFTER_ALLOC;
 }
 
 bool hasFileMetadata(const std::string& path) {
@@ -110,9 +134,13 @@ std::string getFileName(std::string filename);
 
 void FileBrowserActivity::loadFiles() {
   files.clear();
+  fileListMemoryLimited = false;
 
   auto root = Storage.open(basepath.c_str());
   if (!root || !root.isDirectory()) {
+    if (root) {
+      root.close();
+    }
     return;
   }
 
@@ -122,24 +150,50 @@ void FileBrowserActivity::loadFiles() {
   for (auto file = root.openNextFile(); file; file = root.openNextFile()) {
     file.getName(name, sizeof(name));
     if (isMacOSMetadataEntry(name) || isWindowsMetadataEntry(name) || (!SETTINGS.showHiddenFiles && name[0] == '.')) {
+      file.close();
       continue;
     }
 
+    bool shouldAdd = false;
+    size_t entryLen = std::strlen(name);
     if (file.isDirectory()) {
-      files.emplace_back(std::string(name) + "/");
+      if (entryLen + 1 >= sizeof(name)) {
+        LOG_ERR("FileBrowser", "Skipping oversized directory entry: %s", name);
+        file.close();
+        continue;
+      }
+      name[entryLen++] = '/';
+      name[entryLen] = '\0';
+      shouldAdd = true;
     } else {
       std::string_view filename{name};
       if (mode == Mode::PickFirmware) {
         // Firmware picker: only show .bin files.
-        if (FsHelpers::checkFileExtension(filename, ".bin")) {
-          files.emplace_back(filename);
-        }
+        shouldAdd = FsHelpers::checkFileExtension(filename, ".bin");
       } else if (FsHelpers::hasEpubExtension(filename) || FsHelpers::hasXtcExtension(filename) ||
                  FsHelpers::hasTxtExtension(filename) || FsHelpers::hasMarkdownExtension(filename) ||
                  FsHelpers::hasBmpExtension(filename) || FsHelpers::hasPngExtension(filename)) {
-        files.emplace_back(filename);
+        shouldAdd = true;
       }
     }
+
+    if (!shouldAdd) {
+      file.close();
+      continue;
+    }
+
+    if (!hasHeapForFileEntryAppend(files, entryLen)) {
+      fileListMemoryLimited = true;
+      LOG_ERR("FileBrowser", "Low heap while loading %s (entries=%u free=%u maxAlloc=%u)", basepath.c_str(),
+              static_cast<unsigned>(files.size()), ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+      file.close();
+      root.close();
+      files.clear();
+      return;
+    }
+
+    files.emplace_back(name);
+    file.close();
   }
   root.close();
   FsHelpers::sortFileList(files);
@@ -158,7 +212,13 @@ void FileBrowserActivity::onEnter() {
   if (!root) {
     basepath = "/";
     loadFiles();
-  } else if (!root.isDirectory()) {
+    return;
+  }
+
+  const bool rootIsDirectory = root.isDirectory();
+  root.close();
+
+  if (!rootIsDirectory) {
     lockLongPressBack = mappedInput.isPressed(MappedInputManager::Button::Back);
 
     const std::string oldPath = basepath;
@@ -679,7 +739,9 @@ void FileBrowserActivity::render(RenderLock&&) {
   const int contentHeight =
       pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing - pathReserved;
   if (files.empty()) {
-    const char* emptyMsg = (mode == Mode::PickFirmware) ? tr(STR_NO_BIN_FILES) : tr(STR_NO_FILES_FOUND);
+    const char* emptyMsg = fileListMemoryLimited
+                               ? tr(STR_MEMORY_ERROR)
+                               : ((mode == Mode::PickFirmware) ? tr(STR_NO_BIN_FILES) : tr(STR_NO_FILES_FOUND));
     renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + 20, emptyMsg);
   } else {
     const bool compactFileRows = GUI.usesCompactFileBrowserRows();

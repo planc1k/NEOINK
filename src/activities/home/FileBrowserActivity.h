@@ -47,6 +47,7 @@ class FileBrowserActivity final : public Activity {
   // Files state
   std::string basepath = "/";
   std::vector<std::string> files;
+  bool fileListMemoryLimited = false;
 
   // Data loading
   void loadFiles();
