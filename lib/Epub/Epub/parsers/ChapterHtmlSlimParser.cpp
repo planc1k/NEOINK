@@ -1390,7 +1390,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         entry.hasBackgroundBlack = true;
         entry.backgroundBlack = cssStyle.backgroundBlack;
       }
-      ChapterHtmlSlimParser::applyDirectionToEntry(entry, cssStyle);
+      applyDirectionToEntry(entry, cssStyle);
       self->inlineStyleStack.push_back(entry);
       self->updateEffectiveInlineStyle();
 
@@ -1548,7 +1548,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       entry.hasBackgroundBlack = true;
       entry.backgroundBlack = cssStyle.backgroundBlack;
     }
-    ChapterHtmlSlimParser::applyDirectionToEntry(entry, cssStyle);
+    applyDirectionToEntry(entry, cssStyle);
     self->inlineStyleStack.push_back(entry);
     self->updateEffectiveInlineStyle();
   } else if (matches(name, STRIKETHROUGH_TAGS, std::size(STRIKETHROUGH_TAGS))) {
@@ -1575,7 +1575,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       entry.hasBackgroundBlack = true;
       entry.backgroundBlack = cssStyle.backgroundBlack;
     }
-    ChapterHtmlSlimParser::applyDirectionToEntry(entry, cssStyle);
+    applyDirectionToEntry(entry, cssStyle);
     self->inlineStyleStack.push_back(entry);
     self->updateEffectiveInlineStyle();
   } else if (matches(name, BOLD_TAGS, std::size(BOLD_TAGS))) {
@@ -1604,7 +1604,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       entry.hasBackgroundBlack = true;
       entry.backgroundBlack = cssStyle.backgroundBlack;
     }
-    ChapterHtmlSlimParser::applyDirectionToEntry(entry, cssStyle);
+    applyDirectionToEntry(entry, cssStyle);
     self->inlineStyleStack.push_back(entry);
     self->updateEffectiveInlineStyle();
   } else if (matches(name, ITALIC_TAGS, std::size(ITALIC_TAGS))) {
@@ -1633,7 +1633,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       entry.hasBackgroundBlack = true;
       entry.backgroundBlack = cssStyle.backgroundBlack;
     }
-    ChapterHtmlSlimParser::applyDirectionToEntry(entry, cssStyle);
+    applyDirectionToEntry(entry, cssStyle);
     self->inlineStyleStack.push_back(entry);
     self->updateEffectiveInlineStyle();
   } else if (strcmp(name, "sup") == 0 || strcmp(name, "sub") == 0) {
@@ -1682,6 +1682,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         entry.hasBackgroundBlack = true;
         entry.backgroundBlack = cssStyle.backgroundBlack;
       }
+      applyDirectionToEntry(entry, cssStyle);
       if (cssStyle.hasVerticalAlign()) {
         if (cssStyle.verticalAlign == CssVerticalAlign::Super) {
           entry.hasSup = true;

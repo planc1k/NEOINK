@@ -231,7 +231,7 @@ for size in ${UI_FONT_SIZES[@]}; do
     font_path="../builtinFonts/source/Inter/Inter-${style}.ttf"
     hebrew_path="../builtinFonts/source/IBMPlexSansHebrew/IBMPlexSansHebrew-${style}.ttf"
     output_path="../builtinFonts/${font_name}.h"
-    python fontconvert.py $font_name $size $font_path $hebrew_path \
+    python fontconvert.py $font_name $size $font_path $hebrew_path $viet_path \
       --additional-intervals 0x05D0,0x05EA > $output_path
     echo "Generated $output_path"
   done

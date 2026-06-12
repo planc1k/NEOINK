@@ -155,6 +155,17 @@ families:
       italic:     {url: "https://mirrors.ctan.org/fonts/domitian/opentype/Domitian-Italic.otf"}
       bolditalic: {url: "https://mirrors.ctan.org/fonts/domitian/opentype/Domitian-BoldItalic.otf"}
 
+  - name: LibreBaskerville
+    description: "A serif reimplementing the classic Baskerville (Latin)"
+    languages: "Latin"
+    intervals: latin-ext
+    sizes: [8, 9, 10, 12, 14, 16, 18, 20]
+    styles:
+      regular:    {url: "https://raw.githubusercontent.com/impallari/Libre-Baskerville/master/fonts/ttf/LibreBaskerville-Regular.ttf"}
+      bold:       {url: "https://raw.githubusercontent.com/impallari/Libre-Baskerville/master/fonts/ttf/LibreBaskerville-Bold.ttf"}
+      italic:     {url: "https://raw.githubusercontent.com/impallari/Libre-Baskerville/master/fonts/ttf/LibreBaskerville-Italic.ttf"}
+      bolditalic: {url: "https://raw.githubusercontent.com/impallari/Libre-Baskerville/master/fonts/ttf/LibreBaskerville-BoldItalic.ttf"}
+
 
   # ── Sans-serif ─────────────────────────────────────────────────────────
 

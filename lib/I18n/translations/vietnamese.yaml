@@ -440,7 +440,6 @@ STR_NEARBY_STATS_SCANNING: "Đang tìm máy đọc để trao đổi thống kê
 STR_NEARBY_STATS_SYNCING: "Đang gửi và nhận thống kê"
 STR_NEARBY_STATS_SYNCED: "Cả hai máy đọc đã đồng bộ"
 STR_NEARBY_STATS_SIMULATOR_UNAVAILABLE: "Đồng bộ thống kê gần đây không khả dụng trong trình mô phỏng"
-
 STR_BOTTOM: "Dưới cùng"
 STR_CLOCK: "Hiển thị đồng hồ"
 STR_CLOCK_FORMAT: "Định dạng đồng hồ"
@@ -484,6 +483,5 @@ STR_THEME_MINIMAL: "Minimal"
 STR_THEME_ROUNDEDRAFF: "RoundedRaff"
 STR_TOP: "Trên cùng"
 STR_XTC_STATUS_BAR: "Thanh trạng thái XTC"
-
 STR_NEARBY_STATS_VERSION_MISMATCH: "Phiên bản không khớp. Chưa đồng bộ thống kê"
 STR_PWR_BTN_FOOTNOTE_BACK: "Về nhanh từ chú thích"
