@@ -85,6 +85,7 @@ The File Manager page can:
 
 - Browse SD-card folders
 - Upload files, using WebSocket upload when available and HTTP upload as a fallback
+- Optimize EPUB files before upload
 - Create folders
 - Download files
 - Rename files
@@ -94,6 +95,22 @@ The File Manager page can:
 Existing files with the same name are overwritten by uploads. When EPUB files
 are overwritten, moved, renamed, or deleted through the web server, the matching
 book cache is cleared so stale metadata is not reused.
+
+#### EPUB Optimization
+
+When uploading an EPUB, the upload dialog can optimize the file in the browser
+before sending it to the reader. This is useful for image-heavy books that are
+too large or memory-sensitive for the device.
+
+The default optimization path converts images for e-ink reading, limits them to
+the target device size, saves them as JPEG at 85% quality, and applies basic EPUB
+repairs such as safer SVG handling. Advanced Mode lets you pick the target
+device, JPEG quality, image split or rotation handling, and split overlap.
+
+Optimization changes the EPUB file contents before upload. Note: if you use
+hash-based KOReader sync, this will break the syncing because it changes the epub
+and therefore the hash. If optimization fails, the uploader falls back to sending
+the original file.
 
 ### Settings
 

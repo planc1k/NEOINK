@@ -77,14 +77,27 @@ See [Font Build Variants](./docs/font-build-variants.md) for the full point-size
 
 Reader Options, Bionic Reading, Guide Dots, Force Paragraph Indents, reading stats, and finished-book behavior are documented in [Reader Features](./docs/reader-features.md).
 
-## Custom button actions
+### Custom button actions
 
 CrossInk adds configurable button shortcuts.
 
 See [Controls](./docs/controls.md) for the full action list and defaults.
 
+---
 
-### Development Device Simulator
+## Tips for the best reading experience
+
+CrossInk runs on an ESP32-C3 with limited RAM, so very large folders or complex EPUBs can be slower than they would be on a phone, tablet, or desktop app.
+
+- Keep folders under about 200  files. For the smoothest browsing, aim for 50-100 files per folder.
+- Having 1000+ books on the SD card is fine if they are split into smaller folders, such as by author, series, genre, or read/unread status.
+- Avoid putting every book in the SD card root. The file browser has to scan and sort the current folder before it can show it.
+- Text-first EPUBs are the best fit. Large image-heavy EPUBs, scanned books, comics, and omnibus files with thousands of sections may load slowly or fail under memory pressure.
+- As a rough target, EPUBs under 20 MB tend to work the best. Files over 50 MB may still work, but they are more likely to be slow or memory-sensitive, especially if they contain many large images.
+- If an EPUB is unusually slow, try [optimizing](./docs/webserver.md#epub-optimization) it with the built-in web optimizer (via File Transfer) before copying it to the SD card: remove unused high-resolution images, split very large omnibus files, and avoid embedding multiple full font families when possible.
+- Use a reliable SD card and leave some free space. CrossInk stores settings, reading progress, cache files, stats, and generated book data on the card.
+
+## Development Device Simulator
 
 The [device simulator](https://github.com/uxjulia/crosspoint-simulator) renders the e-ink display in an SDL2 window so firmware changes can be sanity-checked without flashing hardware.
 
