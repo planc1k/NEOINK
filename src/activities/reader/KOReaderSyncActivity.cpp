@@ -351,8 +351,7 @@ void KOReaderSyncActivity::onExit() {
   Activity::onExit();
 
   if (wifiActivated) {
-    WiFi.disconnect(false);
-    delay(30);
+    wifiOff();
     silentRestartToReader();
   }
 }
@@ -471,7 +470,14 @@ void KOReaderSyncActivity::render(RenderLock&&) {
 
   if (state == SYNC_FAILED) {
     UITheme::drawCenteredText(renderer, screen, UI_10_FONT_ID, top, tr(STR_SYNC_FAILED_MSG), true, EpdFontFamily::BOLD);
-    UITheme::drawCenteredText(renderer, screen, UI_10_FONT_ID, top + 40, statusMessage.c_str());
+    const int messageWidth = screen.width - metrics.contentSidePadding * 2;
+    const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+    const auto messageLines = renderer.wrappedText(UI_10_FONT_ID, statusMessage.c_str(), messageWidth, 3);
+    int messageY = top + 40;
+    for (const auto& line : messageLines) {
+      UITheme::drawCenteredText(renderer, screen, UI_10_FONT_ID, messageY, line.c_str());
+      messageY += lineHeight + 4;
+    }
 
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, true);
