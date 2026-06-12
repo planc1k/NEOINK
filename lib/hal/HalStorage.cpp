@@ -72,11 +72,16 @@ HalFile::HalFile() = default;
 
 HalFile::HalFile(std::unique_ptr<Impl> impl) : impl(std::move(impl)) {}
 
-HalFile::~HalFile() = default;
+HalFile::~HalFile() { close(); }
 
 HalFile::HalFile(HalFile&&) = default;
 
-HalFile& HalFile::operator=(HalFile&&) = default;
+HalFile& HalFile::operator=(HalFile&& other) {
+  if (this == &other) return *this;
+  close();
+  impl = std::move(other.impl);
+  return *this;
+}
 
 HalFile HalStorage::open(const char* path, const oflag_t oflag) {
   StorageLock lock;  // ensure thread safety for the duration of this function
@@ -95,9 +100,12 @@ bool HalStorage::rename(const char* oldPath, const char* newPath) {
 bool HalStorage::rmdir(const char* path) { HAL_STORAGE_WRAPPED_CALL(rmdir, path); }
 
 bool HalStorage::openFileForRead(const char* moduleName, const char* path, HalFile& file) {
-  StorageLock lock;  // ensure thread safety for the duration of this function
   FsFile fsFile;
-  bool ok = SDCard.openFileForRead(moduleName, path, fsFile);
+  bool ok = false;
+  {
+    StorageLock lock;  // ensure thread safety for the duration of this function
+    ok = SDCard.openFileForRead(moduleName, path, fsFile);
+  }
   file = HalFile(std::make_unique<HalFile::Impl>(std::move(fsFile)));
   return ok;
 }
@@ -111,9 +119,12 @@ bool HalStorage::openFileForRead(const char* moduleName, const String& path, Hal
 }
 
 bool HalStorage::openFileForWrite(const char* moduleName, const char* path, HalFile& file) {
-  StorageLock lock;  // ensure thread safety for the duration of this function
   FsFile fsFile;
-  bool ok = SDCard.openFileForWrite(moduleName, path, fsFile);
+  bool ok = false;
+  {
+    StorageLock lock;  // ensure thread safety for the duration of this function
+    ok = SDCard.openFileForWrite(moduleName, path, fsFile);
+  }
   file = HalFile(std::make_unique<HalFile::Impl>(std::move(fsFile)));
   return ok;
 }
@@ -160,7 +171,13 @@ bool HalFile::sync() { HAL_FILE_WRAPPED_CALL(sync, ); }
 bool HalFile::rename(const char* newPath) { HAL_FILE_WRAPPED_CALL(rename, newPath); }
 bool HalFile::isDirectory() const { HAL_FILE_FORWARD_CALL(isDirectory, ); }  // already thread-safe, no need to wrap
 void HalFile::rewindDirectory() { HAL_FILE_WRAPPED_CALL(rewindDirectory, ); }
-bool HalFile::close() { HAL_FILE_WRAPPED_CALL(close, ); }
+bool HalFile::close() {
+  if (!impl) return true;
+  HalStorage::StorageLock lock;
+  const bool ok = impl->file.close();
+  impl.reset();
+  return ok;
+}
 HalFile HalFile::openNextFile() {
   HalStorage::StorageLock lock;
   assert(impl != nullptr);
