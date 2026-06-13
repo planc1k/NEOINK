@@ -887,10 +887,11 @@ inline std::vector<SettingInfo> buildSystemDeviceSettingsList(const std::vector<
 
 inline std::vector<SettingInfo> buildSystemFilesCacheSettingsList(const std::vector<SettingInfo>& allSettings) {
   std::vector<SettingInfo> settings;
-  settings.reserve(5);
+  settings.reserve(6);
   addSettingByName(settings, allSettings, StrId::STR_SHOW_HIDDEN_FILES);
   addSettingByName(settings, allSettings, StrId::STR_HIDE_FILE_EXTENSION);
   addSettingByName(settings, allSettings, StrId::STR_FILE_BROWSER_DISPLAY);
+  addSettingByName(settings, allSettings, StrId::STR_REMOVE_READ_FROM_RECENTS);
   addSettingByName(settings, allSettings, StrId::STR_MOVE_FINISHED_TO_READ);
   settings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
   return settings;
