@@ -148,24 +148,8 @@ Two singletons are central:
 - `src/CrossPointSettings.h` (`SETTINGS`): user preferences and behavior flags
 - `src/CrossPointState.h` (`APP_STATE`): runtime/session state such as current book and sleep context
 
-Typical persisted areas on SD:
-
-```text
-/.crosspoint/
-  epub_<hash>/
-    book.bin
-    css_rules.cache
-    progress.bin
-    cover.bmp
-    sections/*.bin
-    img_* cache files
-  settings.json
-  state.json
-```
-
-`sections/*.bin` contains rendered pages plus anchor, paragraph, and list-item
-lookup tables used for TOC/footnote jumps and KOReader sync refinement. For
-binary cache formats, see `docs/file-formats.md`.
+Most SD-card persistence lives under `/.crosspoint/`. See file inventory in
+`docs/data-cache.md`; for binary cache formats, see `docs/file-formats.md`.
 
 ## Networking architecture
 

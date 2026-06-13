@@ -16,7 +16,8 @@ The main data directory is `.crosspoint` on the SD card. It stores render caches
 ├── global_stats.bin        # All-time reading stats, including total books read
 ├── global_stats.bin.bak    # Backup used if the main global stats file is corrupt
 ├── synced_stats/           # Stats snapshots received from other readers
-├── settings.json           # Device settings
+├── crossink-settings.json  # CrossInk device settings
+├── settings.json           # Legacy settings fallback, if present
 ├── settings.bin.bak        # Legacy binary settings file after migration, if present
 ├── state.json              # Last-opened book and sleep/session state
 ├── state.bin.bak           # Legacy binary state file after migration, if present

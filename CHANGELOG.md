@@ -8,6 +8,7 @@
 - Delete Reading Stats actions in the EPUB reader and book action menus for clearing one book's stats without deleting its cache.
 
 ### Changed
+- CrossInk settings now save to `/.crosspoint/crossink-settings.json`, with a one-time fallback migration from `/.crosspoint/settings.json`, so switching between firmware builds is less likely to reset preferences.
 - The X3 clock visibility setting is now phrased as `Hide Clock`, with existing `Show Clock` preferences migrated to the matching hide behavior.
 
 ### Fixed
