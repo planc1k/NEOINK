@@ -43,6 +43,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/BookCacheUtils.h"
+#include "util/BookMoveUtils.h"
 #include "util/ScreenshotUtil.h"
 
 namespace {
@@ -419,31 +420,8 @@ bool isInReadFolder(const std::string& path) {
   return path.size() > n && path.compare(0, n, READ_FOLDER) == 0 && path[n] == '/';
 }
 
-// Pick a non-colliding destination path inside /Read/ for a finished book.
-// Mirrors the suffixing scheme used elsewhere: "name.epub" -> "name (2).epub", etc.
-std::string buildReadFolderDestination(const std::string& srcPath) {
-  const size_t lastSlash = srcPath.rfind('/');
-  const std::string filename = (lastSlash != std::string::npos) ? srcPath.substr(lastSlash + 1) : srcPath;
-
-  Storage.mkdir(READ_FOLDER);
-  std::string dstPath = std::string(READ_FOLDER) + "/" + filename;
-  if (!Storage.exists(dstPath.c_str())) {
-    return dstPath;
-  }
-
-  const size_t dotPos = filename.rfind('.');
-  const std::string base = (dotPos != std::string::npos) ? filename.substr(0, dotPos) : filename;
-  const std::string ext = (dotPos != std::string::npos) ? filename.substr(dotPos) : "";
-  int suffix = 2;
-  do {
-    dstPath = std::string(READ_FOLDER) + "/" + base + " (" + std::to_string(suffix) + ")" + ext;
-    suffix++;
-  } while (Storage.exists(dstPath.c_str()) && suffix < 100);
-  return dstPath;
-}
-
-// Relocate a finished book and its cache dir into /Read/, keep it in recents by
-// repointing its entry to the new path, and repoint the resume pointer too.
+// Relocate a finished book into /Read/, then migrate path-keyed state such as
+// cache files, bookmarks, recents, and resume path.
 void moveFinishedBookToReadFolder(const std::string& srcPath, const std::string& dstPath,
                                   const std::string& oldCachePath, const std::string& title,
                                   const std::string& author) {
@@ -458,24 +436,8 @@ void moveFinishedBookToReadFolder(const std::string& srcPath, const std::string&
     return;
   }
 
-  // Cache dir is keyed by hash of the epub path (see Epub ctor), so it must be re-keyed.
-  const std::string newCachePath = Epub::cachePathForFilePath(dstPath, "/.crosspoint");
-  if (!oldCachePath.empty() && Storage.exists(oldCachePath.c_str())) {
-    if (!Storage.rename(oldCachePath.c_str(), newCachePath.c_str())) {
-      LOG_ERR("ERS", "Failed to rename cache dir %s -> %s (non-fatal)", oldCachePath.c_str(), newCachePath.c_str());
-    }
-  }
-  if (!BookmarkStore::migrateForFilePath(srcPath, dstPath, title, author, "epub")) {
-    LOG_ERR("ERS", "Failed to migrate bookmarks for moved book %s -> %s", srcPath.c_str(), dstPath.c_str());
-  }
-
-  // Keep the book in recents (crossink behavior): repoint the entry to its new
-  // location instead of dropping it. updatePath persists on success.
-  RECENT_BOOKS.updatePath(srcPath, dstPath, oldCachePath, newCachePath);
-  if (APP_STATE.openEpubPath == srcPath) {
-    APP_STATE.openEpubPath = dstPath;
-    APP_STATE.saveToFile();
-  }
+  BookMoveUtils::migrateMovedEpubState(srcPath, dstPath, oldCachePath, title, author,
+                                       !SETTINGS.removeReadBooksFromRecents);
 }
 
 }  // namespace
@@ -1016,7 +978,7 @@ void EpubReaderActivity::onExit() {
     const std::string oldCachePath = epub->getCachePath();
     const std::string title = epub->getTitle();
     const std::string author = epub->getAuthor();
-    const std::string dstPath = buildReadFolderDestination(srcPath);
+    const std::string dstPath = BookMoveUtils::buildReadFolderDestination(srcPath);
     epub.reset();  // release the Epub (and any open handles) before renaming on the SD card
     moveFinishedBookToReadFolder(srcPath, dstPath, oldCachePath, title, author);
   } else {
@@ -2235,10 +2197,17 @@ void EpubReaderActivity::setBookCompleted(bool isCompleted) {
   }
   if (isCompleted) {
     completionPromptShown = true;
+    if (SETTINGS.removeReadBooksFromRecents) {
+      RECENT_BOOKS.removeByPath(epub->getPath());
+    }
     if (SETTINGS.moveFinishedToReadFolder && !isInReadFolder(epub->getPath())) {
       pendingReadFolderMove = true;
     }
   } else {
+    if (SETTINGS.removeReadBooksFromRecents) {
+      RECENT_BOOKS.addOrUpdateBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), epub->getThumbBmpPath());
+    }
+    recentsEntryRemoved = false;
     pendingReadFolderMove = false;
   }
   if (isCompleted) {

@@ -17,9 +17,9 @@
 - RoundedRaff's date shown in settings now sits lower on X3 devices instead of overlapping the battery.
 - Clear Bookmark List now asks for confirmation before deleting a book's bookmarks.
 - Clear Reading Cache now preserves per-book reading stats while continuing to leave all-time reading stats untouched.
+- Moving finished EPUBs to `/Read` now consistently preserves reading progress, per-book stats, bookmarks, and resume state.
 - Book settings option lists now return to the submenu they were opened from when pressing Back.
 - Lyra Carousel now refreshes its cached Home icon row after OPDS, Reading Stats, or Bookmarks icons appear or disappear.
-- File Browser now previews PNG images instead of trying to open them as EPUBs, and hides macOS `._*` sidecar files.
 - KOReader Sync failure screens now wrap long error messages and shut down WiFi cleanly before returning to the book.
 - Sleep Screen > Cover now generates the current book cover on demand instead of falling back to the dark sleep screen when the setting is changed after opening a book.
 - File Browser now previews PNG images instead of trying to open them as EPUBs, and hides common macOS and Windows metadata files.
