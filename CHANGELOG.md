@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- EPUB reader text clipping for selecting words on the current page and saving them to `/My Clippings.txt`.
 
 ### Changed
 

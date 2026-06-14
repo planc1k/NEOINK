@@ -21,6 +21,7 @@
 
 #include "../settings/KOReaderSettingsActivity.h"
 #include "BookStatsActivity.h"
+#include "ClipSelectionActivity.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "EpubReaderBookmarkListActivity.h"
@@ -37,9 +38,11 @@
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
+#include "WordRef.h"
 #include "activities/boot_sleep/SleepCoverAssets.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/IntervalSelectionActivity.h"
+#include "clippings/ClippingsManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/BookCacheUtils.h"
@@ -1568,6 +1571,10 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       requestUpdate();
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::SAVE_CLIPPING: {
+      startClipSelection();
+      break;
+    }
     case EpubReaderMenuActivity::MenuAction::GO_HOME: {
       onGoHome();
       return;
@@ -1894,6 +1901,135 @@ void EpubReaderActivity::openAutoPageTurnIntervalPicker(const bool ignoreInitial
         } else {
           resumeReadingPaceTimer("auto_turn_interval_cancel");
         }
+        requestUpdate();
+      });
+}
+
+void EpubReaderActivity::startClipSelection() {
+  if (!section || !epub) {
+    requestUpdate();
+    return;
+  }
+
+  ReaderViewportLayout layout{};
+  std::vector<WordRef> words;
+  int readerFontId = 0;
+  int startPage = 0;
+  int pageNumber = 0;
+  std::string bookTitle;
+  std::string author;
+  std::string chapterTitle;
+
+  {
+    RenderLock lock(*this);
+    if (!section || !epub) {
+      requestUpdate();
+      return;
+    }
+
+    layout = computeReaderViewportLayout(renderer, automaticPageTurnActive);
+    readerFontId = activeSectionFontId > 0 ? activeSectionFontId : SETTINGS.getReaderFontId();
+    const int lineHeight = renderer.getLineHeight(readerFontId);
+    startPage = section->currentPage;
+    pageNumber = startPage + 1;
+    const int pagesToLoad = std::min(3, section->pageCount - startPage);
+    words.reserve(static_cast<size_t>(std::max(0, pagesToLoad)) * 80);
+
+    auto stripEmSpace = [](const std::string& word) -> std::string {
+      if (word.size() >= 3 && static_cast<unsigned char>(word[0]) == 0xE2 &&
+          static_cast<unsigned char>(word[1]) == 0x80 && static_cast<unsigned char>(word[2]) == 0x83) {
+        return word.substr(3);
+      }
+      return word;
+    };
+
+    for (int pageIdx = 0; pageIdx < pagesToLoad; ++pageIdx) {
+      section->currentPage = startPage + pageIdx;
+      auto page = section->loadPageFromSectionFile();
+      if (!page) break;
+
+      for (const auto& element : page->elements) {
+        if (element->getTag() != TAG_PageLine) continue;
+        const auto& line = static_cast<const PageLine&>(*element);
+        if (!line.getBlock()) continue;
+
+        const auto& block = *line.getBlock();
+        const auto& xpos = block.getWordXpos();
+        const auto& wordList = block.getWords();
+        const auto& styles = block.getWordStyles();
+        const size_t count = std::min({wordList.size(), xpos.size(), styles.size()});
+        for (size_t i = 0; i < count; ++i) {
+          const std::string visibleWord = stripEmSpace(wordList[i]);
+          if (visibleWord.find_first_not_of(" \t\r\n") == std::string::npos) continue;
+
+          const int wordWidth = renderer.getTextWidth(readerFontId, wordList[i].c_str(), styles[i]);
+          if (wordWidth <= 0) continue;
+
+          WordRef word;
+          word.x = layout.marginLeft + line.xPos + xpos[i];
+          word.y = layout.marginTop + line.yPos;
+          word.w = wordWidth;
+          word.h = lineHeight;
+          word.pageIdx = pageIdx;
+          word.text = wordList[i];
+          word.style = styles[i];
+          words.push_back(std::move(word));
+        }
+      }
+    }
+
+    section->currentPage = startPage;
+
+    auto hasEmSpace = [](const std::string& word) {
+      return word.size() >= 3 && static_cast<unsigned char>(word[0]) == 0xE2 &&
+             static_cast<unsigned char>(word[1]) == 0x80 && static_cast<unsigned char>(word[2]) == 0x83;
+    };
+    auto endsWithHyphen = [](const std::string& word) { return !word.empty() && word.back() == '-'; };
+    const int indentThreshold = renderer.getLineHeight(readerFontId) / 2;
+    int previousLineFirstIdx = -1;
+    for (int i = 0; i < static_cast<int>(words.size()); ++i) {
+      const bool newLine = i == 0 || words[i].pageIdx != words[i - 1].pageIdx || words[i].y != words[i - 1].y;
+      if (!newLine) continue;
+
+      const bool byEmSpace = hasEmSpace(words[i].text);
+      const bool byIndent = !byEmSpace && previousLineFirstIdx >= 0 &&
+                            words[i].x > words[previousLineFirstIdx].x + indentThreshold &&
+                            !endsWithHyphen(words[i - 1].text);
+      if (byEmSpace || byIndent) {
+        words[i].paragraphStart = true;
+      }
+      previousLineFirstIdx = i;
+    }
+
+    const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
+    if (tocIndex >= 0) {
+      chapterTitle = epub->getTocItem(tocIndex).title;
+    }
+    bookTitle = epub->getTitle();
+    author = epub->getAuthor();
+  }
+
+  if (words.empty()) {
+    LOG_ERR("CLIP", "No selectable words on current EPUB page");
+    requestUpdate();
+    return;
+  }
+
+  pauseReadingPaceTimer("clip_selection");
+  startActivityForResult(
+      std::make_unique<ClipSelectionActivity>(renderer, mappedInput, std::move(words), readerFontId, *section,
+                                              startPage, layout.marginTop, layout.marginLeft),
+      [this, bookTitle = std::move(bookTitle), author = std::move(author), chapterTitle = std::move(chapterTitle),
+       pageNumber](const ActivityResult& result) {
+        if (!result.isCancelled) {
+          const auto& clip = std::get<ClippingResult>(result.data);
+          if (!clip.text.empty()) {
+            const bool saved = ClippingsManager::saveClipping(bookTitle, author, chapterTitle, pageNumber, clip.text);
+            drawToast(renderer, saved ? tr(STR_CLIPPING_SAVED) : tr(STR_CLIPPING_FAILED));
+            delay(1000);
+          }
+        }
+        resumeReadingPaceTimer("clip_selection_return");
         requestUpdate();
       });
 }

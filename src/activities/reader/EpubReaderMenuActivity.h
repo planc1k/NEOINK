@@ -32,7 +32,8 @@ class EpubReaderMenuActivity final : public Activity {
     CONTROLS_OPTIONS,
     BOOKMARK_TOGGLE,
     VIEW_BOOKMARKS,
-    DELETE_BOOKMARKS
+    DELETE_BOOKMARKS,
+    SAVE_CLIPPING
   };
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,

@@ -117,6 +117,7 @@ class EpubReaderActivity final : public Activity {
   void resetCurrentBookStatsAfterDelete();
   void openFileTransfer();
   void openAutoPageTurnIntervalPicker(bool ignoreInitialConfirmRelease = false);
+  void startClipSelection();
   void resetReadingPaceData();
   // Jump to a percentage of the book (0-100), mapping it to spine and page.
   void jumpToPercent(int percent);

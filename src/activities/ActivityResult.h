@@ -83,10 +83,24 @@ struct ReadingStatsResult {
   bool changed = false;
 };
 
+struct ClippingResult {
+  std::string text;
+  int fromWordIdx = -1;
+  int toWordIdx = -1;
+  uint16_t sectionPage = 0;
+  uint16_t endSectionPage = 0;
+  std::string startText;
+  std::string endText;
+  std::string beforeStartText;
+  std::string afterEndText;
+  std::string midText;
+  uint16_t wordCount = 0;
+};
+
 using ResultVariant =
     std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult, IntervalResult,
                  OptionSelectionResult, PageResult, ProgressChangeResult, SyncResult, NetworkModeResult, FootnoteResult,
-                 BookmarkResult, FileBrowserActionResult, FilePathResult, ReadingStatsResult>;
+                 BookmarkResult, FileBrowserActionResult, FilePathResult, ReadingStatsResult, ClippingResult>;
 
 struct ActivityResult {
   bool isCancelled = false;
