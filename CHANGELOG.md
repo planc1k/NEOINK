@@ -8,6 +8,8 @@
 
 ### Fixed
 - Long-press reader shortcuts that open another screen no longer close or confirm it again when releasing the shortcut button.
+- RoundedRaff's header battery icon and percentage now sit lower to avoid clipping at the top edge.
+- Lyra Carousel now redraws the Home header when restoring cached carousel frames so battery percentage and clock values stay current while navigating between books.
 
 ## [v1.3.3] - 2026-06-13
 
@@ -23,7 +25,6 @@
 - The X3 clock visibility setting is now phrased as `Hide Clock`, with existing `Show Clock` preferences migrated to the matching hide behavior.
 
 ### Fixed
-- RoundedRaff's header battery icon and percentage now sit lower to avoid clipping at the top edge.
 - RoundedRaff's date shown in settings now sits lower on X3 devices instead of overlapping the battery.
 - Clear Bookmark List now asks for confirmation before deleting a book's bookmarks.
 - Clear Reading Cache now preserves per-book reading stats while continuing to leave all-time reading stats untouched.
