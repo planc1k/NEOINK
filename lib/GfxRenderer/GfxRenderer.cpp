@@ -2208,6 +2208,10 @@ size_t GfxRenderer::getBufferSize() const { return frameBufferSize; }
 // unused
 // void GfxRenderer::grayscaleRevert() const { display.grayscaleRevert(); }
 
+void GfxRenderer::displayGrayscaleBase(HalDisplay::RefreshMode fallback, const bool turnOffScreen) const {
+  display.displayGrayscaleBase(fallback, fadingFix || turnOffScreen);
+}
+
 void GfxRenderer::preconditionGrayscale() const { display.preconditionGrayscale(); }
 
 void GfxRenderer::preconditionGrayscale(int x, int y, int w, int h) const {
