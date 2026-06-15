@@ -1232,7 +1232,11 @@ bool EpubReaderActivity::estimateRemainingTimeLeftPages(const bool bookEstimate,
 
 bool EpubReaderActivity::estimateProgressTimeLeftSeconds(uint32_t& seconds) const {
   seconds = 0;
-  const float progressPercent = getCurrentBookProgressPercent();
+  if (!epub || !section || section->pageCount == 0 || epub->getBookSize() == 0) {
+    return false;
+  }
+  const float chapterProgress = static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount);
+  const float progressPercent = epub->calculateSizeProgress(currentSpineIndex, chapterProgress) * 100.0f;
   uint32_t currentPageSeconds = 0;
   uint32_t sessionSeconds = sessionReadingSeconds;
   if (SETTINGS.shouldTrackReadingStats() &&
@@ -1349,6 +1353,14 @@ void EpubReaderActivity::initializeCompletionPromptTrigger() {
   const size_t bookSize = epub->getBookSize();
   const int spineCount = epub->getSpineItemsCount();
   if (bookSize == 0 || spineCount <= 0) {
+    return;
+  }
+
+  int locationSpineIndex = 0;
+  float locationSpineProgress = 0.0f;
+  if (epub->resolveLocationPercentToSpineProgress(99, locationSpineIndex, locationSpineProgress)) {
+    completionTriggerSpineIndex = locationSpineIndex;
+    completionTriggerSpineProgress = locationSpineProgress;
     return;
   }
 
@@ -2155,6 +2167,18 @@ void EpubReaderActivity::jumpToPercent(int percent) {
 
   // Normalize input to 0-100 to avoid invalid jumps.
   percent = clampPercent(percent);
+
+  int locationSpineIndex = 0;
+  float locationSpineProgress = 0.0f;
+  if (epub->resolveLocationPercentToSpineProgress(percent, locationSpineIndex, locationSpineProgress)) {
+    currentSpineIndex = locationSpineIndex;
+    pendingSpineProgress = locationSpineProgress;
+    nextPageNumber = 0;
+    pendingPercentJump = true;
+    section.reset();
+    armReadingPaceWarmup("percent_jump");
+    return;
+  }
 
   // Convert percent into a byte-like absolute position across the spine sizes.
   // Use an overflow-safe computation: (bookSize / 100) * percent + (bookSize % 100) * percent / 100
