@@ -26,7 +26,9 @@ class EpubReaderActivity final : public Activity {
   std::string pendingAnchor;
   int pagesUntilFullRefresh = 0;
   int cachedSpineIndex = 0;
+  int cachedChapterPageNumber = 0;
   int cachedChapterTotalPageCount = 0;
+  uint16_t cachedPageParagraphIndex = UINT16_MAX;
   unsigned long lastPageTurnTime = 0UL;
   unsigned long pageTurnDuration = 0UL;
   unsigned long pageShownAtMs = 0UL;
@@ -99,6 +101,7 @@ class EpubReaderActivity final : public Activity {
   void renderStatusBar() const;
   void silentIndexNextChapterIfNeeded(uint16_t viewportWidth, uint16_t viewportHeight);
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
+  void cacheCurrentSectionPosition();
   void pauseReadingPaceTimer(const char* reason = "unknown");
   void resumeReadingPaceTimer(const char* reason = "unknown");
   void armReadingPaceWarmup(const char* reason = "unknown");
