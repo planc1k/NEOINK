@@ -13,6 +13,7 @@ struct BookReadingStats {
   bool isCompleted = false;               // Whether the user manually marked this book as finished
   uint16_t avgSecondsPerForwardPage = 0;  // Running average pace for time-left estimates
   uint16_t paceSampleCount = 0;           // Number of forward-page pace samples included in the average
+  uint32_t estimatedTimeLeftSeconds = 0;  // Last live reader book time-left estimate; 0 means unavailable
   bool startDateManual = false;           // Permanent user override for the reading start date
   bool finishedDateManual = false;        // Permanent user override for the finished date
   ReadingStatsDate startDate;             // First qualifying reading date (or manual override)

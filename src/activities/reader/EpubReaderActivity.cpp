@@ -1146,6 +1146,11 @@ bool EpubReaderActivity::formatTimeLeftLabel(char* buf, const size_t len) const 
   return false;
 }
 
+void EpubReaderActivity::refreshCachedTimeLeftEstimate() {
+  uint32_t seconds = 0;
+  stats.estimatedTimeLeftSeconds = (!stats.isCompleted && estimateTimeLeftSeconds(true, seconds)) ? seconds : 0;
+}
+
 void EpubReaderActivity::initializeCompletionPromptTrigger() {
   completionTriggerSpineIndex = -1;
   completionTriggerSpineProgress = 1.0f;
@@ -1471,6 +1476,7 @@ void EpubReaderActivity::onExit() {
     }
     if (epub) {
       recoverStoredPaceFromSession("reader_exit");
+      refreshCachedTimeLeftEstimate();
       stats.save(epub->getCachePath());
     }
     globalStats.save();
@@ -2184,6 +2190,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       }
       uint32_t estimatedTimeLeftSeconds = 0;
       const bool hasEstimatedTimeLeft = estimateTimeLeftSeconds(true, estimatedTimeLeftSeconds);
+      displayStats.estimatedTimeLeftSeconds = hasEstimatedTimeLeft ? estimatedTimeLeftSeconds : 0;
       const bool hasSyncedStats = GlobalReadingStats::hasSyncedStats();
       const GlobalReadingStats displayAllDevicesStats =
           hasSyncedStats ? GlobalReadingStats::loadAggregated(globalStats) : GlobalReadingStats{};
@@ -2568,6 +2575,7 @@ void EpubReaderActivity::resetReadingPaceData() {
 #endif
   stats.avgSecondsPerForwardPage = 0;
   stats.paceSampleCount = 0;
+  stats.estimatedTimeLeftSeconds = 0;
   sessionPaceSampleSeconds = 0;
   sessionPaceSampleCount = 0;
   armReadingPaceWarmup("reading_pace_reset");
@@ -2935,6 +2943,7 @@ void EpubReaderActivity::setBookCompleted(bool isCompleted) {
     globalStats.completedBooks--;
   }
 
+  refreshCachedTimeLeftEstimate();
   stats.save(epub->getCachePath());
   globalStats.save();
 }

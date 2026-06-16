@@ -194,8 +194,8 @@ back or the clipping store is migrated.
 `stats_v5.bin` stores per-book reading statistics for stats schema version 5.
 Versioned filenames let firmware branches with different stats schemas keep
 their own per-book stats files without overwriting each other. Version 5 extends
-version 4 with a cached live reader book time-left estimate so Home/Dashboard
-and Reading Stats can show the same estimate the reader last computed.
+version 4 with a cached live reader book time-left estimate so Home and Reading
+Stats can show the same estimate the reader last computed.
 
 Binary layout:
 
