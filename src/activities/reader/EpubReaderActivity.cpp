@@ -60,7 +60,10 @@ constexpr uint16_t DEFAULT_AUTO_PAGE_TURN_INTERVAL_S = 30;
 constexpr uint16_t MIN_AUTO_PAGE_TURN_INTERVAL_S = 5;
 constexpr uint16_t MAX_AUTO_PAGE_TURN_INTERVAL_S = 120;
 constexpr int MAX_PAGE_LOAD_RETRIES = 3;
-constexpr uint8_t READER_SETTINGS_FILE_VERSION = 1;
+constexpr uint8_t LEGACY_READER_SETTINGS_FILE_VERSION = 1;
+constexpr uint8_t READER_SETTINGS_FILE_VERSION = 2;
+constexpr uint8_t READER_SETTINGS_FLAG_CUSTOM = 1 << 0;
+constexpr uint8_t READER_SETTINGS_FLAG_AUTO_PAGE_TURN = 1 << 1;
 constexpr char READER_SETTINGS_FILE_NAME[] = "/reader_settings.bin";
 constexpr char COMPAT_SECTION_CACHE_SUFFIX[] = "_compat";
 constexpr unsigned long MIN_READING_STATS_PAGE_MS = 2000UL;
@@ -603,48 +606,184 @@ uint16_t clampAutoPageTurnIntervalSeconds(const uint16_t seconds) {
   return std::clamp(seconds, MIN_AUTO_PAGE_TURN_INTERVAL_S, MAX_AUTO_PAGE_TURN_INTERVAL_S);
 }
 
-uint16_t loadAutoPageTurnIntervalSeconds(const std::string& cachePath) {
-  FsFile f;
-  if (!Storage.openFileForRead("ERS", cachePath + READER_SETTINGS_FILE_NAME, f)) {
-    return DEFAULT_AUTO_PAGE_TURN_INTERVAL_S;
-  }
+bool readExact(FsFile& file, void* data, const size_t size) { return file.read(data, size) == static_cast<int>(size); }
 
-  uint8_t data[3] = {};
-  const int n = f.read(data, sizeof(data));
-  f.close();
+bool writeExact(FsFile& file, const void* data, const size_t size) { return file.write(data, size) == size; }
 
-  if (n != static_cast<int>(sizeof(data)) || data[0] != READER_SETTINGS_FILE_VERSION) {
-    LOG_DBG("ERS", "Reader settings missing or version mismatch, using defaults");
-    return DEFAULT_AUTO_PAGE_TURN_INTERVAL_S;
-  }
+bool readU8(FsFile& file, uint8_t& value) { return readExact(file, &value, sizeof(value)); }
 
-  const uint16_t seconds = static_cast<uint16_t>(data[1]) | (static_cast<uint16_t>(data[2]) << 8);
-  if (seconds == 0) {
-    return DEFAULT_AUTO_PAGE_TURN_INTERVAL_S;
-  }
-  return clampAutoPageTurnIntervalSeconds(seconds);
+bool writeU8(FsFile& file, const uint8_t value) { return writeExact(file, &value, sizeof(value)); }
+
+bool readU16(FsFile& file, uint16_t& value) {
+  uint8_t data[2] = {};
+  if (!readExact(file, data, sizeof(data))) return false;
+  value = static_cast<uint16_t>(data[0]) | (static_cast<uint16_t>(data[1]) << 8);
+  return true;
 }
 
-bool saveAutoPageTurnIntervalSeconds(const std::string& cachePath, const uint16_t seconds) {
-  FsFile f;
-  if (!Storage.openFileForWrite("ERS", cachePath + READER_SETTINGS_FILE_NAME, f)) {
+bool writeU16(FsFile& file, const uint16_t value) {
+  const uint8_t data[2] = {static_cast<uint8_t>(value & 0xFF), static_cast<uint8_t>((value >> 8) & 0xFF)};
+  return writeExact(file, data, sizeof(data));
+}
+
+void captureReaderSettings(EpubReaderActivity::ReaderSettingsSnapshot& out) {
+  out.fontFamily = SETTINGS.fontFamily;
+  out.fontSize = SETTINGS.fontSize;
+  out.lineHeightPercent = SETTINGS.lineHeightPercent;
+  out.orientation = SETTINGS.orientation;
+  out.screenMargin = SETTINGS.screenMargin;
+  out.publisherPageNumbers = SETTINGS.publisherPageNumbers;
+  out.paragraphAlignment = SETTINGS.paragraphAlignment;
+  out.embeddedStyle = SETTINGS.embeddedStyle;
+  out.hyphenationEnabled = SETTINGS.hyphenationEnabled;
+  out.textAntiAliasing = SETTINGS.textAntiAliasing;
+  out.readerDarkMode = SETTINGS.readerDarkMode;
+  out.imageRendering = SETTINGS.imageRendering;
+  out.extraParagraphSpacing = SETTINGS.extraParagraphSpacing;
+  out.forceParagraphIndents = SETTINGS.forceParagraphIndents;
+  out.bionicReadingEnabled = SETTINGS.bionicReadingEnabled;
+  out.guideReadingEnabled = SETTINGS.guideReadingEnabled;
+  std::strncpy(out.sdFontFamilyName, SETTINGS.sdFontFamilyName, sizeof(out.sdFontFamilyName) - 1);
+  out.sdFontFamilyName[sizeof(out.sdFontFamilyName) - 1] = '\0';
+}
+
+void applyReaderSettings(const EpubReaderActivity::ReaderSettingsSnapshot& in) {
+  SETTINGS.fontFamily = in.fontFamily < CrossPointSettings::BUILTIN_FONT_COUNT ? in.fontFamily : SETTINGS.fontFamily;
+  SETTINGS.fontSize =
+      in.fontSize < CrossPointSettings::getActiveReaderFontSizeCount() ? in.fontSize : SETTINGS.fontSize;
+  SETTINGS.lineHeightPercent = CrossPointSettings::clampedLineHeightPercent(in.lineHeightPercent);
+  SETTINGS.orientation = in.orientation < CrossPointSettings::ORIENTATION_COUNT ? in.orientation : SETTINGS.orientation;
+  SETTINGS.screenMargin = std::clamp<uint8_t>(in.screenMargin, 5, 40);
+  SETTINGS.publisherPageNumbers = in.publisherPageNumbers ? 1 : 0;
+  SETTINGS.paragraphAlignment = in.paragraphAlignment < CrossPointSettings::PARAGRAPH_ALIGNMENT_COUNT
+                                    ? in.paragraphAlignment
+                                    : SETTINGS.paragraphAlignment;
+  SETTINGS.embeddedStyle = in.embeddedStyle ? 1 : 0;
+  SETTINGS.hyphenationEnabled = in.hyphenationEnabled ? 1 : 0;
+  SETTINGS.textAntiAliasing = in.textAntiAliasing ? 1 : 0;
+  SETTINGS.readerDarkMode = in.readerDarkMode ? 1 : 0;
+  SETTINGS.imageRendering =
+      in.imageRendering < CrossPointSettings::IMAGE_RENDERING_COUNT ? in.imageRendering : SETTINGS.imageRendering;
+  SETTINGS.extraParagraphSpacing = in.extraParagraphSpacing ? 1 : 0;
+  SETTINGS.forceParagraphIndents = in.forceParagraphIndents ? 1 : 0;
+  SETTINGS.bionicReadingEnabled = in.bionicReadingEnabled ? 1 : 0;
+  SETTINGS.guideReadingEnabled = in.guideReadingEnabled ? 1 : 0;
+  std::strncpy(SETTINGS.sdFontFamilyName, in.sdFontFamilyName, sizeof(SETTINGS.sdFontFamilyName) - 1);
+  SETTINGS.sdFontFamilyName[sizeof(SETTINGS.sdFontFamilyName) - 1] = '\0';
+}
+
+struct BookReaderSettingsData {
+  bool hasAutoPageTurnInterval = false;
+  uint16_t autoPageTurnSeconds = DEFAULT_AUTO_PAGE_TURN_INTERVAL_S;
+  bool hasCustomReaderSettings = false;
+  EpubReaderActivity::ReaderSettingsSnapshot readerSettings;
+};
+
+bool readReaderSettingsSnapshot(FsFile& file, EpubReaderActivity::ReaderSettingsSnapshot& out) {
+  return readU8(file, out.fontFamily) && readU8(file, out.fontSize) && readU8(file, out.lineHeightPercent) &&
+         readU8(file, out.orientation) && readU8(file, out.screenMargin) && readU8(file, out.publisherPageNumbers) &&
+         readU8(file, out.paragraphAlignment) && readU8(file, out.embeddedStyle) &&
+         readU8(file, out.hyphenationEnabled) && readU8(file, out.textAntiAliasing) &&
+         readU8(file, out.readerDarkMode) && readU8(file, out.imageRendering) &&
+         readU8(file, out.extraParagraphSpacing) && readU8(file, out.forceParagraphIndents) &&
+         readU8(file, out.bionicReadingEnabled) && readU8(file, out.guideReadingEnabled) &&
+         readExact(file, out.sdFontFamilyName, sizeof(out.sdFontFamilyName));
+}
+
+bool writeReaderSettingsSnapshot(FsFile& file, const EpubReaderActivity::ReaderSettingsSnapshot& in) {
+  return writeU8(file, in.fontFamily) && writeU8(file, in.fontSize) && writeU8(file, in.lineHeightPercent) &&
+         writeU8(file, in.orientation) && writeU8(file, in.screenMargin) && writeU8(file, in.publisherPageNumbers) &&
+         writeU8(file, in.paragraphAlignment) && writeU8(file, in.embeddedStyle) &&
+         writeU8(file, in.hyphenationEnabled) && writeU8(file, in.textAntiAliasing) &&
+         writeU8(file, in.readerDarkMode) && writeU8(file, in.imageRendering) &&
+         writeU8(file, in.extraParagraphSpacing) && writeU8(file, in.forceParagraphIndents) &&
+         writeU8(file, in.bionicReadingEnabled) && writeU8(file, in.guideReadingEnabled) &&
+         writeExact(file, in.sdFontFamilyName, sizeof(in.sdFontFamilyName));
+}
+
+BookReaderSettingsData loadBookReaderSettingsFile(const std::string& cachePath) {
+  BookReaderSettingsData data;
+  captureReaderSettings(data.readerSettings);
+
+  FsFile file;
+  if (!Storage.openFileForRead("ERS", cachePath + READER_SETTINGS_FILE_NAME, file)) {
+    return data;
+  }
+
+  uint8_t version = 0;
+  if (!readU8(file, version)) {
+    file.close();
+    LOG_DBG("ERS", "Reader settings missing version, using defaults");
+    return data;
+  }
+
+  if (version == LEGACY_READER_SETTINGS_FILE_VERSION) {
+    uint16_t seconds = 0;
+    if (readU16(file, seconds) && seconds != 0) {
+      data.hasAutoPageTurnInterval = true;
+      data.autoPageTurnSeconds = clampAutoPageTurnIntervalSeconds(seconds);
+    }
+    file.close();
+    return data;
+  }
+
+  if (version != READER_SETTINGS_FILE_VERSION) {
+    file.close();
+    LOG_DBG("ERS", "Reader settings version mismatch, using defaults");
+    return data;
+  }
+
+  uint8_t flags = 0;
+  uint16_t seconds = 0;
+  EpubReaderActivity::ReaderSettingsSnapshot snapshot;
+  const bool ok = readU8(file, flags) && readU16(file, seconds) && readReaderSettingsSnapshot(file, snapshot);
+  file.close();
+  if (!ok) {
+    LOG_ERR("ERS", "Reader settings file is truncated, using defaults");
+    return data;
+  }
+
+  if ((flags & READER_SETTINGS_FLAG_AUTO_PAGE_TURN) && seconds != 0) {
+    data.hasAutoPageTurnInterval = true;
+    data.autoPageTurnSeconds = clampAutoPageTurnIntervalSeconds(seconds);
+  }
+  if (flags & READER_SETTINGS_FLAG_CUSTOM) {
+    data.hasCustomReaderSettings = true;
+    data.readerSettings = snapshot;
+  }
+  return data;
+}
+
+bool saveBookReaderSettingsFile(const std::string& cachePath, const bool hasAutoPageTurnInterval,
+                                const uint16_t autoPageTurnSeconds, const bool hasCustomReaderSettings,
+                                const EpubReaderActivity::ReaderSettingsSnapshot& readerSettings) {
+  FsFile file;
+  if (!Storage.openFileForWrite("ERS", cachePath + READER_SETTINGS_FILE_NAME, file)) {
     LOG_ERR("ERS", "Could not open reader settings file for write");
     return false;
   }
 
-  const uint16_t clampedSeconds = clampAutoPageTurnIntervalSeconds(seconds);
-  uint8_t data[3];
-  data[0] = READER_SETTINGS_FILE_VERSION;
-  data[1] = clampedSeconds & 0xFF;
-  data[2] = (clampedSeconds >> 8) & 0xFF;
-  const size_t written = f.write(data, sizeof(data));
-  f.close();
-  if (written != sizeof(data)) {
-    LOG_ERR("ERS", "Short write saving reader settings: %u/%u bytes", (unsigned)written, (unsigned)sizeof(data));
-    return false;
+  uint8_t flags = 0;
+  if (hasCustomReaderSettings) flags |= READER_SETTINGS_FLAG_CUSTOM;
+  if (hasAutoPageTurnInterval) flags |= READER_SETTINGS_FLAG_AUTO_PAGE_TURN;
+  const uint16_t clampedSeconds = clampAutoPageTurnIntervalSeconds(autoPageTurnSeconds);
+  const bool ok = writeU8(file, READER_SETTINGS_FILE_VERSION) && writeU8(file, flags) &&
+                  writeU16(file, clampedSeconds) && writeReaderSettingsSnapshot(file, readerSettings);
+  file.close();
+  if (!ok) {
+    LOG_ERR("ERS", "Short write saving reader settings");
   }
-  return true;
+  return ok;
 }
+
+class ScopedReaderSettingsRestore {
+ public:
+  ScopedReaderSettingsRestore() { captureReaderSettings(snapshot); }
+  ~ScopedReaderSettingsRestore() { applyReaderSettings(snapshot); }
+
+ private:
+  EpubReaderActivity::ReaderSettingsSnapshot snapshot;
+};
 
 void formatCompactTimeLeft(const uint32_t seconds, char* out, const size_t outSize) {
   if (!out || outSize == 0) return;
@@ -1104,6 +1243,108 @@ void EpubReaderActivity::queueCompletionPromptIfNeeded() {
   lastAtOrPastCompletionTrigger = atOrPastTrigger;
 }
 
+void EpubReaderActivity::captureGlobalReaderSettings() {
+  captureReaderSettings(globalReaderSettingsBeforeBook);
+  restoreGlobalReaderSettingsOnExit = true;
+}
+
+void EpubReaderActivity::restoreGlobalReaderSettings() {
+  if (!restoreGlobalReaderSettingsOnExit) {
+    return;
+  }
+  applyReaderSettings(globalReaderSettingsBeforeBook);
+  restoreGlobalReaderSettingsOnExit = false;
+}
+
+void EpubReaderActivity::loadBookReaderSettings() {
+  bookHasCustomReaderSettings = false;
+  bookHasAutoPageTurnInterval = false;
+  lastAutoPageTurnIntervalSeconds = DEFAULT_AUTO_PAGE_TURN_INTERVAL_S;
+
+  if (!epub) {
+    return;
+  }
+
+  const auto data = loadBookReaderSettingsFile(epub->getCachePath());
+  bookHasCustomReaderSettings = data.hasCustomReaderSettings;
+  bookHasAutoPageTurnInterval = data.hasAutoPageTurnInterval;
+  lastAutoPageTurnIntervalSeconds =
+      data.hasAutoPageTurnInterval ? data.autoPageTurnSeconds : DEFAULT_AUTO_PAGE_TURN_INTERVAL_S;
+  if (data.hasCustomReaderSettings) {
+    applyReaderSettings(data.readerSettings);
+  }
+}
+
+void EpubReaderActivity::saveCurrentBookReaderSettings() {
+  if (!epub) {
+    return;
+  }
+
+  ReaderSettingsSnapshot snapshot;
+  captureReaderSettings(snapshot);
+  bookHasCustomReaderSettings = true;
+  saveBookReaderSettingsFile(epub->getCachePath(), bookHasAutoPageTurnInterval, lastAutoPageTurnIntervalSeconds,
+                             bookHasCustomReaderSettings, snapshot);
+}
+
+void EpubReaderActivity::saveGlobalSettingsPreservingBookOverrides() {
+  if (!restoreGlobalReaderSettingsOnExit) {
+    SETTINGS.saveToFile();
+    return;
+  }
+
+  ReaderSettingsSnapshot activeReaderSettings;
+  captureReaderSettings(activeReaderSettings);
+  applyReaderSettings(globalReaderSettingsBeforeBook);
+  SETTINGS.saveToFile();
+  applyReaderSettings(activeReaderSettings);
+}
+
+void EpubReaderActivity::beginGlobalSettingsEdit() {
+  if (bookReaderSettingsSuspendedForGlobalEdit || !restoreGlobalReaderSettingsOnExit) {
+    return;
+  }
+  captureReaderSettings(suspendedBookReaderSettings);
+  applyReaderSettings(globalReaderSettingsBeforeBook);
+  bookReaderSettingsSuspendedForGlobalEdit = true;
+}
+
+void EpubReaderActivity::endGlobalSettingsEdit() {
+  if (!bookReaderSettingsSuspendedForGlobalEdit) {
+    return;
+  }
+  applyReaderSettings(suspendedBookReaderSettings);
+  bookReaderSettingsSuspendedForGlobalEdit = false;
+}
+
+void EpubReaderActivity::saveReaderOptionsForBook(void* ctx) {
+  if (!ctx) {
+    return;
+  }
+  static_cast<EpubReaderActivity*>(ctx)->saveCurrentBookReaderSettings();
+}
+
+void EpubReaderActivity::saveGlobalSettingsForBookReader(void* ctx) {
+  if (!ctx) {
+    return;
+  }
+  static_cast<EpubReaderActivity*>(ctx)->saveGlobalSettingsPreservingBookOverrides();
+}
+
+void EpubReaderActivity::beginGlobalSettingsEditForBookReader(void* ctx) {
+  if (!ctx) {
+    return;
+  }
+  static_cast<EpubReaderActivity*>(ctx)->beginGlobalSettingsEdit();
+}
+
+void EpubReaderActivity::endGlobalSettingsEditForBookReader(void* ctx) {
+  if (!ctx) {
+    return;
+  }
+  static_cast<EpubReaderActivity*>(ctx)->endGlobalSettingsEdit();
+}
+
 void EpubReaderActivity::onEnter() {
   Activity::onEnter();
   pageLoadRetryCount = 0;
@@ -1112,6 +1353,10 @@ void EpubReaderActivity::onEnter() {
     return;
   }
 
+  captureGlobalReaderSettings();
+  epub->setupCacheDir();
+  loadBookReaderSettings();
+
   // Configure screen orientation based on settings
   // NOTE: This affects layout math and must be applied before any render calls.
   ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
@@ -1119,8 +1364,6 @@ void EpubReaderActivity::onEnter() {
   // Activate reader-specific front button mapping (if configured).
   mappedInput.setReaderMode(true);
 
-  epub->setupCacheDir();
-  lastAutoPageTurnIntervalSeconds = loadAutoPageTurnIntervalSeconds(epub->getCachePath());
   BOOKMARKS.loadForBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), "epub");
   CLIPPINGS.loadForBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), "epub");
 
@@ -1248,6 +1491,8 @@ void EpubReaderActivity::onExit() {
   } else {
     epub.reset();
   }
+
+  restoreGlobalReaderSettings();
 }
 
 void EpubReaderActivity::loop() {
@@ -1421,7 +1666,9 @@ void EpubReaderActivity::loop() {
             !currentPageFootnotes.empty(), !BOOKMARKS.getBookmarks().empty(), CLIPPINGS.hasClippings(),
             BOOKMARKS.hasBookmarkForPage(bmSpine, bmProgress, bookmarkPageCount), isBookCompleted,
             automaticPageTurnActive, getAutoPageTurnIntervalSeconds(),
-            SETTINGS.statusBarTimeLeft != CrossPointSettings::STATUS_BAR_TIME_LEFT::TIME_LEFT_HIDE),
+            SETTINGS.statusBarTimeLeft != CrossPointSettings::STATUS_BAR_TIME_LEFT::TIME_LEFT_HIDE,
+            saveReaderOptionsForBook, this, saveGlobalSettingsForBookReader, this, beginGlobalSettingsEditForBookReader,
+            this, endGlobalSettingsEditForBookReader, this),
         [this](const ActivityResult& result) {
           // Always apply orientation change even if the menu was cancelled
           const auto& menu = std::get<MenuResult>(result.data);
@@ -2145,7 +2392,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
 }
 
 void EpubReaderActivity::reindexCurrentSection() {
-  SETTINGS.saveToFile();
+  saveCurrentBookReaderSettings();
   sdFontSystem.ensureLoaded(renderer);
   {
     RenderLock lock(*this);
@@ -2374,7 +2621,7 @@ void EpubReaderActivity::executeReaderQuickAction(CrossPointSettings::LONG_PRESS
         startActivityForResult(std::make_unique<KOReaderSettingsActivity>(renderer, mappedInput),
                                [this](const ActivityResult&) {
                                  resumeReadingPaceTimer("koreader_settings_return");
-                                 SETTINGS.saveToFile();
+                                 saveGlobalSettingsPreservingBookOverrides();
                                });
       }
       break;
@@ -2410,7 +2657,7 @@ void EpubReaderActivity::executeReaderQuickAction(CrossPointSettings::LONG_PRESS
       if (halTiltSensor.isAvailable()) {
         SETTINGS.tiltPageTurn = SETTINGS.tiltPageTurn == CrossPointSettings::TILT_OFF ? CrossPointSettings::TILT_ON
                                                                                       : CrossPointSettings::TILT_OFF;
-        SETTINGS.saveToFile();
+        saveGlobalSettingsPreservingBookOverrides();
         halTiltSensor.clearPendingEvents();
         showTiltPageTurnFeedback(SETTINGS.tiltPageTurn != CrossPointSettings::TILT_OFF);
         requestUpdate();
@@ -2418,7 +2665,7 @@ void EpubReaderActivity::executeReaderQuickAction(CrossPointSettings::LONG_PRESS
       break;
     case CrossPointSettings::LONG_MENU_TOGGLE_DARK_MODE:
       SETTINGS.readerDarkMode = !SETTINGS.readerDarkMode;
-      SETTINGS.saveToFile();
+      saveCurrentBookReaderSettings();
       requestUpdate();
       break;
     case CrossPointSettings::LONG_MENU_FOOTNOTES:
@@ -2719,9 +2966,9 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
     }
 
     if (settingsChanged) {
-      // Persist the selection so the reader keeps the new orientation on next launch.
+      // Persist the selection for this book without changing global reader defaults.
       SETTINGS.orientation = orientation;
-      SETTINGS.saveToFile();
+      saveCurrentBookReaderSettings();
     }
 
     if (rendererChanged) {
@@ -2749,8 +2996,12 @@ void EpubReaderActivity::setAutoPageTurnIntervalSeconds(uint16_t seconds) {
 
   seconds = clampAutoPageTurnIntervalSeconds(seconds);
   lastAutoPageTurnIntervalSeconds = seconds;
+  bookHasAutoPageTurnInterval = true;
   if (epub) {
-    saveAutoPageTurnIntervalSeconds(epub->getCachePath(), seconds);
+    ReaderSettingsSnapshot snapshot;
+    captureReaderSettings(snapshot);
+    saveBookReaderSettingsFile(epub->getCachePath(), bookHasAutoPageTurnInterval, seconds, bookHasCustomReaderSettings,
+                               snapshot);
   }
   lastPageTurnTime = millis();
   pageTurnDuration = static_cast<unsigned long>(seconds) * 1000UL;
@@ -3635,13 +3886,19 @@ void EpubReaderActivity::restoreSavedPosition() {
 }
 bool EpubReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, GfxRenderer& renderer) {
   auto epub = std::make_shared<Epub>(filePath, "/.crosspoint");
+  epub->setupCacheDir();
+
+  ScopedReaderSettingsRestore restoreReaderSettings;
+  const auto readerSettings = loadBookReaderSettingsFile(epub->getCachePath());
+  if (readerSettings.hasCustomReaderSettings) {
+    applyReaderSettings(readerSettings.readerSettings);
+  }
+
   // Load CSS when embeddedStyle is enabled, as createSectionFile may need it to rebuild the cache.
   if (!epub->load(true, SETTINGS.embeddedStyle == 0)) {
     LOG_DBG("SLP", "EPUB: failed to load %s", filePath.c_str());
     return false;
   }
-
-  epub->setupCacheDir();
 
   // Load saved spine index and page number
   int spineIndex = 0, pageNumber = 0;

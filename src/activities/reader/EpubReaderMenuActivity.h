@@ -37,13 +37,20 @@ class EpubReaderMenuActivity final : public Activity {
     VIEW_CLIPPINGS
   };
 
-  explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
-                                  const int currentPage, const int totalPages, const int bookProgressPercent,
-                                  const uint8_t currentOrientation, const bool hasFootnotes, const bool hasBookmarks,
-                                  const bool hasClippings, const bool isCurrentPageBookmarked,
-                                  const bool isBookCompleted, const bool autoPageTurnActive = false,
-                                  const uint16_t autoPageTurnIntervalSeconds = 0,
-                                  const bool showReadingPaceReset = false);
+  explicit EpubReaderMenuActivity(
+      GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title, const int currentPage,
+      const int totalPages, const int bookProgressPercent, const uint8_t currentOrientation, const bool hasFootnotes,
+      const bool hasBookmarks, const bool hasClippings, const bool isCurrentPageBookmarked, const bool isBookCompleted,
+      const bool autoPageTurnActive = false, const uint16_t autoPageTurnIntervalSeconds = 0,
+      const bool showReadingPaceReset = false,
+      ReaderOptionsActivity::SaveSettingsCallback saveReaderSettingsCallback = nullptr,
+      void* saveReaderSettingsContext = nullptr,
+      ReaderOptionsActivity::SaveGlobalSettingsCallback saveGlobalSettingsCallback = nullptr,
+      void* saveGlobalSettingsContext = nullptr,
+      ReaderOptionsActivity::GlobalSettingsEditCallback beginGlobalSettingsEditCallback = nullptr,
+      void* beginGlobalSettingsEditContext = nullptr,
+      ReaderOptionsActivity::GlobalSettingsEditCallback endGlobalSettingsEditCallback = nullptr,
+      void* endGlobalSettingsEditContext = nullptr);
 
   void onEnter() override;
   void onExit() override;
@@ -77,5 +84,13 @@ class EpubReaderMenuActivity final : public Activity {
   int bookProgressPercent = 0;
   bool autoPageTurnActive = false;
   uint16_t autoPageTurnIntervalSeconds = 0;
+  ReaderOptionsActivity::SaveSettingsCallback saveReaderSettingsCallback = nullptr;
+  void* saveReaderSettingsContext = nullptr;
+  ReaderOptionsActivity::SaveGlobalSettingsCallback saveGlobalSettingsCallback = nullptr;
+  void* saveGlobalSettingsContext = nullptr;
+  ReaderOptionsActivity::GlobalSettingsEditCallback beginGlobalSettingsEditCallback = nullptr;
+  void* beginGlobalSettingsEditContext = nullptr;
+  ReaderOptionsActivity::GlobalSettingsEditCallback endGlobalSettingsEditCallback = nullptr;
+  void* endGlobalSettingsEditContext = nullptr;
   bool settingsChanged = false;
 };

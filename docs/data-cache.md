@@ -32,7 +32,7 @@ The main data directory is `.crosspoint` on the SD card. It stores render caches
 ├── epub_12471232/          # Each EPUB is cached to epub_<hash>
 │   ├── progress.bin        # Reading position (chapter, page, etc.)
 │   ├── stats.bin           # Per-book reading stats
-│   ├── reader_settings.bin # Per-book reader settings
+│   ├── reader_settings.bin # Per-book reader settings and auto-page-turn interval
 │   ├── cover.bmp           # Book cover image, once generated
 │   ├── thumb_*.bmp         # Home/recent-books thumbnail images
 │   ├── book.bin            # Book metadata, spine, table of contents, etc.
@@ -56,6 +56,8 @@ To clear EPUB/XTC render caches from the device UI without deleting settings or 
 ## Book Moves And Cache Identity
 
 Cache folders are path-based. Moving a book file can create a new cache directory, so the moved copy may start with fresh reading progress unless the firmware migrates the cache for that move. CrossInk migrates cache and bookmark data for the built-in move-to-Read flow and related file-browser move actions.
+
+EPUB reader font, page layout, styling, and reading-aid settings normally come from the global Reader settings. If those settings are changed from inside an EPUB, CrossInk stores a per-book override in that book's `reader_settings.bin`; books without that override continue to follow the global defaults.
 
 Cache data is cleared by supported CrossInk delete/move flows. If you remove or rename books outside CrossInk by editing the SD card directly, old cache folders may remain until you clear reading cache.
 

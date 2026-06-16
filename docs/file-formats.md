@@ -2,7 +2,8 @@
 
 These formats describe the SD-card cache files under `/.crosspoint/epub_<hash>/`.
 All POD fields are written in the ESP32 little-endian representation used by
-`Serialization.h`; strings are length-prefixed UTF-8.
+`Serialization.h`; strings are length-prefixed UTF-8 unless a format notes a
+fixed-size char buffer.
 
 ## `book.bin`
 
@@ -86,6 +87,48 @@ u32 parsedSize = $;
 if (parsedSize != fileSize) {
     std::warning(std::format("Unparsed data detected: {} bytes remaining at offset 0x{:X}", fileSize - parsedSize, parsedSize));
 }
+```
+
+## `reader_settings.bin`
+
+### Version 2
+
+Each EPUB cache directory may contain `reader_settings.bin`. Missing files mean
+the book uses global Reader settings and the default auto-page-turn interval.
+
+Version 1 stored only:
+
+- `u8 version`
+- `u16 autoPageTurnSeconds`
+
+Version 2 stores flags before the full reader-settings snapshot. This lets the
+file preserve an auto-page-turn interval without forcing custom font/layout
+settings for the book.
+
+```c++
+struct ReaderSettingsBin {
+    u8 version; // 2
+    u8 flags;   // bit 0 = custom reader settings, bit 1 = custom auto-page-turn interval
+    u16 autoPageTurnSeconds;
+
+    u8 fontFamily;
+    u8 fontSize;
+    u8 lineHeightPercent;
+    u8 orientation;
+    u8 screenMargin;
+    u8 publisherPageNumbers;
+    u8 paragraphAlignment;
+    u8 embeddedStyle;
+    u8 hyphenationEnabled;
+    u8 textAntiAliasing;
+    u8 readerDarkMode;
+    u8 imageRendering;
+    u8 extraParagraphSpacing;
+    u8 forceParagraphIndents;
+    u8 bionicReadingEnabled;
+    u8 guideReadingEnabled;
+    char sdFontFamilyName[64];
+};
 ```
 
 ## `section.bin`

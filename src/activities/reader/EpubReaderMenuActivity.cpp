@@ -15,7 +15,6 @@ namespace {
 struct ReaderLayoutSettingsSnapshot {
   uint8_t fontFamily;
   uint8_t fontSize;
-  uint8_t sdFontSizeRange;
   uint8_t lineHeightPercent;
   uint8_t orientation;
   uint8_t screenMargin;
@@ -23,6 +22,8 @@ struct ReaderLayoutSettingsSnapshot {
   uint8_t paragraphAlignment;
   uint8_t embeddedStyle;
   uint8_t hyphenationEnabled;
+  uint8_t textAntiAliasing;
+  uint8_t readerDarkMode;
   uint8_t imageRendering;
   uint8_t extraParagraphSpacing;
   uint8_t forceParagraphIndents;
@@ -31,11 +32,12 @@ struct ReaderLayoutSettingsSnapshot {
   char sdFontFamilyName[sizeof(SETTINGS.sdFontFamilyName)] = {};
 
   bool operator==(const ReaderLayoutSettingsSnapshot& other) const {
-    return fontFamily == other.fontFamily && fontSize == other.fontSize && sdFontSizeRange == other.sdFontSizeRange &&
+    return fontFamily == other.fontFamily && fontSize == other.fontSize &&
            lineHeightPercent == other.lineHeightPercent && orientation == other.orientation &&
            screenMargin == other.screenMargin && publisherPageNumbers == other.publisherPageNumbers &&
            paragraphAlignment == other.paragraphAlignment && embeddedStyle == other.embeddedStyle &&
-           hyphenationEnabled == other.hyphenationEnabled && imageRendering == other.imageRendering &&
+           hyphenationEnabled == other.hyphenationEnabled && textAntiAliasing == other.textAntiAliasing &&
+           readerDarkMode == other.readerDarkMode && imageRendering == other.imageRendering &&
            extraParagraphSpacing == other.extraParagraphSpacing &&
            forceParagraphIndents == other.forceParagraphIndents && bionicReadingEnabled == other.bionicReadingEnabled &&
            guideReadingEnabled == other.guideReadingEnabled &&
@@ -48,7 +50,6 @@ ReaderLayoutSettingsSnapshot captureReaderLayoutSettings() {
   ReaderLayoutSettingsSnapshot snapshot{
       SETTINGS.fontFamily,
       SETTINGS.fontSize,
-      SETTINGS.sdFontSizeRange,
       SETTINGS.lineHeightPercent,
       SETTINGS.orientation,
       SETTINGS.screenMargin,
@@ -56,6 +57,8 @@ ReaderLayoutSettingsSnapshot captureReaderLayoutSettings() {
       SETTINGS.paragraphAlignment,
       SETTINGS.embeddedStyle,
       SETTINGS.hyphenationEnabled,
+      SETTINGS.textAntiAliasing,
+      SETTINGS.readerDarkMode,
       SETTINGS.imageRendering,
       SETTINGS.extraParagraphSpacing,
       SETTINGS.forceParagraphIndents,
@@ -77,7 +80,12 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
     GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title, const int currentPage,
     const int totalPages, const int bookProgressPercent, const uint8_t currentOrientation, const bool hasFootnotes,
     const bool hasBookmarks, const bool hasClippings, const bool isCurrentPageBookmarked, const bool isBookCompleted,
-    const bool autoPageTurnActive, const uint16_t autoPageTurnIntervalSeconds, const bool showReadingPaceReset)
+    const bool autoPageTurnActive, const uint16_t autoPageTurnIntervalSeconds, const bool showReadingPaceReset,
+    ReaderOptionsActivity::SaveSettingsCallback saveReaderSettingsCallback, void* saveReaderSettingsContext,
+    ReaderOptionsActivity::SaveGlobalSettingsCallback saveGlobalSettingsCallback, void* saveGlobalSettingsContext,
+    ReaderOptionsActivity::GlobalSettingsEditCallback beginGlobalSettingsEditCallback,
+    void* beginGlobalSettingsEditContext,
+    ReaderOptionsActivity::GlobalSettingsEditCallback endGlobalSettingsEditCallback, void* endGlobalSettingsEditContext)
     : Activity("EpubReaderMenu", renderer, mappedInput),
       menuItems(buildMenuItems(hasFootnotes, hasBookmarks, hasClippings, isCurrentPageBookmarked, isBookCompleted,
                                showReadingPaceReset)),
@@ -87,7 +95,15 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
       totalPages(totalPages),
       bookProgressPercent(bookProgressPercent),
       autoPageTurnActive(autoPageTurnActive),
-      autoPageTurnIntervalSeconds(autoPageTurnIntervalSeconds) {}
+      autoPageTurnIntervalSeconds(autoPageTurnIntervalSeconds),
+      saveReaderSettingsCallback(saveReaderSettingsCallback),
+      saveReaderSettingsContext(saveReaderSettingsContext),
+      saveGlobalSettingsCallback(saveGlobalSettingsCallback),
+      saveGlobalSettingsContext(saveGlobalSettingsContext),
+      beginGlobalSettingsEditCallback(beginGlobalSettingsEditCallback),
+      beginGlobalSettingsEditContext(beginGlobalSettingsEditContext),
+      endGlobalSettingsEditCallback(endGlobalSettingsEditCallback),
+      endGlobalSettingsEditContext(endGlobalSettingsEditContext) {}
 
 std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuItems(
     bool hasFootnotes, bool hasBookmarks, bool hasClippings, bool isCurrentPageBookmarked, bool isBookCompleted,
@@ -160,12 +176,16 @@ void EpubReaderMenuActivity::loop() {
 
     if (selectedAction == MenuAction::READER_OPTIONS) {
       const auto before = captureReaderLayoutSettings();
-      startActivityForResult(std::make_unique<ReaderOptionsActivity>(renderer, mappedInput),
-                             [this, before](const ActivityResult&) {
-                               settingsChanged = settingsChanged || haveReaderLayoutSettingsChanged(before);
-                               pendingOrientation = SETTINGS.orientation;  // sync in case orientation changed
-                               requestUpdate();
-                             });
+      startActivityForResult(
+          std::make_unique<ReaderOptionsActivity>(
+              renderer, mappedInput, saveReaderSettingsCallback, saveReaderSettingsContext, saveGlobalSettingsCallback,
+              saveGlobalSettingsContext, beginGlobalSettingsEditCallback, beginGlobalSettingsEditContext,
+              endGlobalSettingsEditCallback, endGlobalSettingsEditContext),
+          [this, before](const ActivityResult&) {
+            settingsChanged = settingsChanged || haveReaderLayoutSettingsChanged(before);
+            pendingOrientation = SETTINGS.orientation;  // sync in case orientation changed
+            requestUpdate();
+          });
       return;
     }
 

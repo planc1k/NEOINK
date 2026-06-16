@@ -15,6 +15,28 @@
 #include "activities/Activity.h"
 
 class EpubReaderActivity final : public Activity {
+ public:
+  struct ReaderSettingsSnapshot {
+    uint8_t fontFamily = 0;
+    uint8_t fontSize = 0;
+    uint8_t lineHeightPercent = 100;
+    uint8_t orientation = 0;
+    uint8_t screenMargin = 5;
+    uint8_t publisherPageNumbers = 0;
+    uint8_t paragraphAlignment = 0;
+    uint8_t embeddedStyle = 1;
+    uint8_t hyphenationEnabled = 0;
+    uint8_t textAntiAliasing = 1;
+    uint8_t readerDarkMode = 0;
+    uint8_t imageRendering = 0;
+    uint8_t extraParagraphSpacing = 1;
+    uint8_t forceParagraphIndents = 0;
+    uint8_t bionicReadingEnabled = 0;
+    uint8_t guideReadingEnabled = 0;
+    char sdFontFamilyName[64] = "";
+  };
+
+ private:
   std::shared_ptr<Epub> epub;
   std::unique_ptr<Section> section = nullptr;
   int currentSpineIndex = 0;
@@ -37,6 +59,12 @@ class EpubReaderActivity final : public Activity {
   uint16_t sessionPaceSampleCount = 0;
   uint32_t sessionReadingSeconds = 0;
   uint16_t lastAutoPageTurnIntervalSeconds = 0;
+  bool bookHasCustomReaderSettings = false;
+  bool bookHasAutoPageTurnInterval = false;
+  bool restoreGlobalReaderSettingsOnExit = false;
+  ReaderSettingsSnapshot globalReaderSettingsBeforeBook;
+  bool bookReaderSettingsSuspendedForGlobalEdit = false;
+  ReaderSettingsSnapshot suspendedBookReaderSettings;
   BookReadingStats stats;
   GlobalReadingStats globalStats;
   ReadingStatsDateTime sessionStartLocalDateTime;
@@ -123,6 +151,17 @@ class EpubReaderActivity final : public Activity {
   void openAutoPageTurnIntervalPicker(bool ignoreInitialConfirmRelease = false);
   void startClipSelection();
   void resetReadingPaceData();
+  void captureGlobalReaderSettings();
+  void restoreGlobalReaderSettings();
+  void loadBookReaderSettings();
+  void saveCurrentBookReaderSettings();
+  void saveGlobalSettingsPreservingBookOverrides();
+  void beginGlobalSettingsEdit();
+  void endGlobalSettingsEdit();
+  static void saveReaderOptionsForBook(void* ctx);
+  static void saveGlobalSettingsForBookReader(void* ctx);
+  static void beginGlobalSettingsEditForBookReader(void* ctx);
+  static void endGlobalSettingsEditForBookReader(void* ctx);
   // Jump to a percentage of the book (0-100), mapping it to spine and page.
   void jumpToPercent(int percent);
   void reindexCurrentSection();

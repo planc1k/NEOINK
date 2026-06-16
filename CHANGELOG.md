@@ -5,6 +5,7 @@
 ### Added
 - File Browser now indexes large folders on the SD card so folders with many books can be browsed without loading every filename into RAM.
 - EPUB reader text clipping with persisted highlights, saved clipping lists, and Kindle-style `/My Clippings.txt` export.
+- EPUB books can now keep their own reader font, layout, styling, and reading-aid settings when changed from inside the reader.
 
 ### Changed
 
