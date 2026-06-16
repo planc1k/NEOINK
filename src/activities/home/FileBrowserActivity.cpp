@@ -466,6 +466,10 @@ void FileBrowserActivity::showDirectoryActionMenu(const std::string& entry, bool
                              case FileBrowserAction::RemoveFromRecents:
                              case FileBrowserAction::PinFavorite:
                              case FileBrowserAction::UnpinFavorite:
+                             case FileBrowserAction::ViewBookmarks:
+                             case FileBrowserAction::ViewClippings:
+                             case FileBrowserAction::DeleteBookmarks:
+                             case FileBrowserAction::DeleteClippings:
                                return;
                            }
                          });
@@ -628,6 +632,10 @@ void FileBrowserActivity::showFileActionMenu(const std::string& entry, bool igno
           case FileBrowserAction::SetSleepFolder:
           case FileBrowserAction::ClearSleepFolder:
           case FileBrowserAction::RemoveFromRecents:
+          case FileBrowserAction::ViewBookmarks:
+          case FileBrowserAction::ViewClippings:
+          case FileBrowserAction::DeleteBookmarks:
+          case FileBrowserAction::DeleteClippings:
             return;
         }
       });
