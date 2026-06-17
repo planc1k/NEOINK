@@ -256,6 +256,7 @@
     operationCancelled = false;
     isUploadInProgress = false;
     document.getElementById('uploadModalClose').classList.remove('disabled');
+    document.getElementById('fileInput').disabled = false;
     const progressFill = document.getElementById('progress-fill');
     const progressText = document.getElementById('progress-text');
     progressFill.style.width = '0%';
@@ -276,6 +277,7 @@
     const fileInput = document.getElementById('fileInput');
     fileInput.value = '';
     fileInput.classList.remove('has-files');
+    fileInput.disabled = false;
     const uploadBtn = document.getElementById('uploadBtn');
     uploadBtn.disabled = true;
     uploadBtn.style.display = 'block';
@@ -1211,6 +1213,60 @@
         }
       }, 10);
     });
+
+    // Drag-and-drop: route dropped files through the existing file input so the
+    // normal validateFile() pipeline (EPUB optimize options, batch mode, upload)
+    // runs unchanged.
+    const dropZone = document.getElementById('dropZone');
+    if (dropZone) {
+      // dragenter/dragleave fire for child elements too; a counter avoids the
+      // highlight flickering as the cursor moves over the hint text or input.
+      let dragDepth = 0;
+
+      const uploadBusy = () =>
+        typeof isUploadInProgress !== 'undefined' && isUploadInProgress;
+
+      dropZone.addEventListener('click', function(e) {
+        if (uploadBusy()) return;
+        if (e.target !== fileInput) fileInput.click();
+      });
+
+      dropZone.addEventListener('dragenter', function(e) {
+        e.preventDefault();
+        dragDepth++;
+        if (!uploadBusy()) dropZone.classList.add('dragover');
+      });
+
+      dropZone.addEventListener('dragover', function(e) {
+        // Required so the browser doesn't navigate to / open the dropped file.
+        e.preventDefault();
+      });
+
+      dropZone.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        dragDepth = Math.max(0, dragDepth - 1);
+        if (dragDepth === 0) dropZone.classList.remove('dragover');
+      });
+
+      dropZone.addEventListener('drop', function(e) {
+        e.preventDefault();
+        dragDepth = 0;
+        dropZone.classList.remove('dragover');
+
+        // Don't let a drop disrupt an in-flight transfer.
+        if (uploadBusy()) return;
+
+        const dropped = e.dataTransfer && e.dataTransfer.files;
+        if (!dropped || dropped.length === 0) return;
+
+        // Replace the current selection, matching native file-picker semantics.
+        const dt = new DataTransfer();
+        for (const file of dropped) dt.items.add(file);
+        fileInput.files = dt.files;
+
+        validateFile();
+      });
+    }
   })();
 
   function validateFile() {
@@ -1258,7 +1314,7 @@
       }
 
       updateBatchModeUI(files.length > 1);
-      uploadBtn.disabled = false;
+      uploadBtn.disabled = isUploadInProgress;
     } else {
       updateBatchModeUI(false);
       uploadBtn.disabled = true;
@@ -3136,6 +3192,8 @@ function uploadFileHTTP(file, onProgress, onComplete, onError) {
 }
 
 function uploadFile() {
+  if (isUploadInProgress) return;
+
   const fileInput = document.getElementById('fileInput');
   const files = Array.from(fileInput.files);
   const convertEnabled = document.getElementById('convertBeforeUpload').checked;
@@ -3150,6 +3208,7 @@ function uploadFile() {
   uploadGeneration++;
   const myGeneration = uploadGeneration;
   document.getElementById('uploadModalClose').classList.add('disabled');
+  fileInput.disabled = true;
 
   const progressContainer = document.getElementById('progress-container');
   const progressFill = document.getElementById('progress-fill');
