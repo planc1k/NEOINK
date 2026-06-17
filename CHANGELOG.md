@@ -3,23 +3,24 @@
 ## [Unreleased]
 
 ### Added
-- File Browser now indexes large folders on the SD card so folders with many books can be browsed without loading every filename into RAM.
-- EPUB reader text clipping with persisted highlights, saved clipping lists, and Kindle-style `/My Clippings.txt` export.
-- EPUB books can now keep their own reader font, layout, styling, and reading-aid settings when changed from inside the reader.
+- File Browser now indexes large SD-card folders so directories with many books can be browsed without loading every filename into memory at once.
+- EPUB text clipping with saved highlights, clipping lists, and Kindle-style `/My Clippings.txt` export.
+- Per-book EPUB reader settings for font, layout, styling, and reading aids when changed from inside the reader.
 
 ### Changed
-- The EPUB reader menu now labels per-book reader settings as Book Options and avoids showing duplicate Orientation controls.
+- The EPUB reader menu has been updated to split out the growing menu of items into 3 separate screens for faster navigation.
+- The Epub reader menu now labels per-book reader settings as `Book Options` and avoids showing duplicate `Orientation` controls.
 
 ### Fixed
 - Calibre Wireless transfer status no longer stacks the last received-file message on top of the upload percentage.
 - EPUB chapters that run out of memory during full CrossInk layout now retry with a lighter compatibility renderer before showing a low-memory error.
 - EPUB reader font-size changes now restore the current chapter position by content instead of jumping far backward after re-indexing.
 - Reading Stats now use the reader's last live book time-left estimate instead of showing a separate fallback estimate.
-- Per-book reading stats now use versioned filenames so firmware with different schemas do not overwrite each other's stats.
+- Per-book reading stats now use versioned filenames so firmware builds with different schemas do not overwrite each other's stats.
 - Lyra Carousel Home menu rendering now avoids extra label allocations that could crash tiny builds under low memory.
 - Long-press reader shortcuts that open another screen no longer close or confirm it again when releasing the shortcut button.
 - RoundedRaff's header battery icon and percentage now sit lower to avoid clipping at the top edge.
-- Lyra Carousel now redraws the Home header when restoring cached carousel frames so battery percentage and clock values stay current while navigating between books.
+- Lyra Carousel now keeps the Home header current when rendering the menu or restoring cached carousel frames, preventing stale battery and clock values while navigating between books.
 - Web file manager multi-delete now handles larger selections without failing after a small batch.
 
 ## [v1.3.3] - 2026-06-13

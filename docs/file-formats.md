@@ -131,6 +131,62 @@ struct ReaderSettingsBin {
 };
 ```
 
+## `/.crosspoint/clippings/<bookType>_<crc32(path)>.bin`
+
+### Version 2
+
+Clipping files store the per-book EPUB clipping list used by the reader. A
+saved clipping is also what CrossInk renders as an in-reader highlight; there is
+no separate highlight file. The file lives in `/.crosspoint/clippings/` instead
+of the EPUB render-cache directory so clearing/rebuilding layout cache does not
+delete user clippings.
+
+The current implementation only writes EPUB clipping files, so `bookType` is
+`epub`. The numeric suffix is `uzlib_crc32()` of the book's SD-card path, for
+example:
+
+```text
+/.crosspoint/clippings/epub_1234567890.bin
+```
+
+Binary layout:
+
+- `[0]` version (`2`)
+- `[1-2]` clipping count (`uint16_t` LE, maximum `64`)
+- book title (`String`)
+- book author (`String`)
+- book path (`String`)
+- repeated clipping records:
+  - `spineIndex` (`uint16_t` LE)
+  - `startPage` (`uint16_t` LE)
+  - `endPage` (`uint16_t` LE)
+  - `pageCount` (`uint16_t` LE, at least `1`)
+  - `startWordIndex` (`uint16_t` LE)
+  - `endWordIndex` (`uint16_t` LE)
+  - `wordCount` (`uint16_t` LE)
+  - `paragraphIndex` (`uint16_t` LE, `UINT16_MAX` when unavailable)
+  - `timestamp` (`uint32_t` LE, seconds since firmware boot when saved)
+  - `chapterTitle` (`char[48]`, null-terminated/truncated)
+  - selected text (`String`, truncated to `512` bytes for the in-app store)
+
+CrossInk uses the stored spine/page/paragraph fields as anchors, then searches
+near that location for the stored clipping text after relayout. This is similar
+to keeping both a DOM position and a text quote in a web app: the numeric
+position gives a fast starting point, while the text makes jumps and highlights
+survive font, layout, or page-count changes when possible.
+
+Creating a clipping also appends a Kindle-style export entry to
+`/My Clippings.txt` on the SD-card root. That text export can keep up to `2000`
+bytes of the selected text and is append-only. Removing a clipping from the
+reader deletes or rewrites only the binary clipping file; it does not remove
+previous entries from `/My Clippings.txt`.
+
+When CrossInk moves an EPUB through its built-in move-to-Read flow, it rewrites
+the clipping file under the new path-derived name and removes the old one. If a
+book is renamed or moved outside CrossInk, the path hash changes, so the old
+clipping file may no longer be associated with the book until the file is moved
+back or the clipping store is migrated.
+
 ## `stats_v5.bin`
 
 ### Version 5
