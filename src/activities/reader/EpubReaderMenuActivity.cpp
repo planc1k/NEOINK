@@ -320,12 +320,6 @@ void EpubReaderMenuActivity::loop() {
       requestUpdate();
       return;
     }
-    if (activeTab != MenuTab::Main) {
-      activeTab = MenuTab::Main;
-      focusTabRow();
-      requestUpdate();
-      return;
-    }
     finishCancelled();
     return;
   }
