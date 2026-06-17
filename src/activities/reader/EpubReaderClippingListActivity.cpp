@@ -13,7 +13,7 @@
 #include "fontIds.h"
 
 namespace {
-constexpr int ROW_HEIGHT = 72;
+constexpr int ROW_HEIGHT = 56;
 constexpr int LIST_START_Y = 60;
 constexpr int DETAIL_START_Y = 70;
 constexpr int DETAIL_SIDE_MARGIN = 20;
@@ -482,9 +482,6 @@ void EpubReaderClippingListActivity::render(RenderLock&&) {
     const std::string chapterTrunc = renderer.truncatedText(SMALL_FONT_ID, chapter, contentWidth - 40);
     renderer.drawText(SMALL_FONT_ID, marginLeft, rowY + 31, chapterTrunc.c_str(), !isSelected);
 
-    char pageBuf[24];
-    snprintf(pageBuf, sizeof(pageBuf), "%u", static_cast<unsigned>(clipping.startPage + 1));
-    renderer.drawText(SMALL_FONT_ID, marginLeft, rowY + 51, pageBuf, !isSelected);
   }
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
