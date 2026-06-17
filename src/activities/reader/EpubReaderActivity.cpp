@@ -2488,7 +2488,6 @@ void EpubReaderActivity::startClipSelection() {
   std::vector<WordRef> words;
   int readerFontId = 0;
   int startPage = 0;
-  int pageNumber = 0;
   std::string bookTitle;
   std::string author;
   std::string chapterTitle;
@@ -2504,7 +2503,6 @@ void EpubReaderActivity::startClipSelection() {
     readerFontId = activeSectionFontId > 0 ? activeSectionFontId : SETTINGS.getReaderFontId();
     const int lineHeight = renderer.getLineHeight(readerFontId);
     startPage = section->currentPage;
-    pageNumber = startPage + 1;
     const int pagesToLoad = std::min(3, section->pageCount - startPage);
     words.reserve(static_cast<size_t>(std::max(0, pagesToLoad)) * 80);
 
@@ -2591,8 +2589,8 @@ void EpubReaderActivity::startClipSelection() {
   startActivityForResult(
       std::make_unique<ClipSelectionActivity>(renderer, mappedInput, std::move(words), readerFontId, *section,
                                               startPage, layout.marginTop, layout.marginLeft),
-      [this, bookTitle = std::move(bookTitle), author = std::move(author), chapterTitle = std::move(chapterTitle),
-       pageNumber](const ActivityResult& result) {
+      [this, bookTitle = std::move(bookTitle), author = std::move(author),
+       chapterTitle = std::move(chapterTitle)](const ActivityResult& result) {
         if (!result.isCancelled) {
           const auto& clip = std::get<ClippingResult>(result.data);
           if (!clip.text.empty()) {
@@ -2600,8 +2598,8 @@ void EpubReaderActivity::startClipSelection() {
                 CLIPPINGS.addClipping(static_cast<uint16_t>(currentSpineIndex), clip.sectionPage, clip.endSectionPage,
                                       clip.sectionPageCount, clip.startPageWordIndex, clip.endPageWordIndex,
                                       clip.wordCount, chapterTitle.c_str(), clip.paragraphIndex, clip.text);
-            const bool exported =
-                ClippingsManager::saveClipping(bookTitle, author, chapterTitle, pageNumber, clip.text);
+            const bool exported = ClippingsManager::saveClipping(bookTitle, author, chapterTitle,
+                                                                 static_cast<int>(clip.sectionPage) + 1, clip.text);
             const bool saved = addResult == ClippingStore::AddResult::Added && exported;
             drawToast(renderer, addResult == ClippingStore::AddResult::LimitReached ? tr(STR_CLIPPING_LIMIT_REACHED)
                                 : saved                                             ? tr(STR_CLIPPING_SAVED)
