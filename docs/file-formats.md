@@ -197,6 +197,11 @@ their own per-book stats files without overwriting each other. Version 5 extends
 version 4 with a cached live reader book time-left estimate so Home and Reading
 Stats can show the same estimate the reader last computed.
 
+When `stats_v5.bin` is missing, CrossInk can read the previous versioned stats
+filename (`stats_v4.bin` for version 5, `stats_v5.bin` after a future version 6
+bump) before falling back to legacy `stats.bin` files with compatible stats
+payloads. Future changes are always saved to the current versioned filename.
+
 Binary layout:
 
 - `[0]` version (`5`)

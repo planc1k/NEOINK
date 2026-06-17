@@ -21,14 +21,16 @@ struct BookReadingStats {
   std::array<uint32_t, READING_TIME_BUCKET_COUNT> timeOfDaySeconds{};
   std::array<uint32_t, READING_DAY_OF_WEEK_COUNT> dayOfWeekSeconds{};
 
-  // Loads stats from cachePath/stats_v5.bin. Returns default-constructed stats if
-  // the file is missing or the version byte does not match.
+  // Loads stats from cachePath/stats_v5.bin, with fallback reads from the
+  // previous versioned filename and legacy cachePath/stats.bin. Returns
+  // default-constructed stats if no compatible file exists.
   static BookReadingStats load(const std::string& cachePath);
 
   // Saves stats to cachePath/stats_v5.bin.
   void save(const std::string& cachePath) const;
 
-  // Deletes cachePath/stats_v5.bin. Missing files are treated as success.
+  // Deletes cachePath/stats_v5.bin, the previous versioned filename, and legacy
+  // cachePath/stats.bin. Missing files are treated as success.
   static bool remove(const std::string& cachePath);
 
   // Updates the running reading pace with one forward page dwell sample.
