@@ -2484,6 +2484,13 @@ void EpubReaderActivity::startClipSelection() {
         const auto& wordList = block.getWords();
         const auto& styles = block.getWordStyles();
         const size_t count = std::min({wordList.size(), xpos.size(), styles.size()});
+        if (renderer.isSdCardFont(readerFontId) && count > 0) {
+          uint8_t styleMask = 0;
+          for (size_t i = 0; i < count; ++i) {
+            styleMask |= static_cast<uint8_t>(1u << (static_cast<uint8_t>(styles[i]) & 0x03));
+          }
+          renderer.ensureSdCardFontReady(readerFontId, wordList, /*includeHyphen=*/false, styleMask);
+        }
         for (size_t i = 0; i < count; ++i) {
           const std::string visibleWord = stripEmSpacePrefix(wordList[i]);
           if (visibleWord.find_first_not_of(" \t\r\n") == std::string::npos) continue;
