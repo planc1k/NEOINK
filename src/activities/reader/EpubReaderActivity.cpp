@@ -225,6 +225,21 @@ uint16_t countClipTokens(const std::string& text) {
   return count;
 }
 
+bool advanceClipCursorToToken(const std::string& text, const uint16_t targetIndex, const char*& cursor,
+                              const char*& tokenStart, size_t& tokenLen) {
+  cursor = text.c_str();
+  uint16_t index = 0;
+  while (nextClipToken(cursor, tokenStart, tokenLen)) {
+    if (index == targetIndex) {
+      return true;
+    }
+    index++;
+  }
+  tokenStart = nullptr;
+  tokenLen = 0;
+  return false;
+}
+
 bool wordMatchesToken(const std::string& word, const char* token, const size_t tokenLen) {
   if (!token || tokenLen == 0) return false;
   const char* visibleWord = word.c_str() + (hasEmSpacePrefix(word) ? 3 : 0);
@@ -265,6 +280,59 @@ bool forEachVisiblePageWord(const Page& page, Callback&& callback) {
   return true;
 }
 
+bool matchClipRunFromPageWord(const Page& page, const Clipping& clipping, const uint16_t startPageWord,
+                              const uint16_t startClipToken, const uint16_t minPartialMatch, ClippingPageMatch& match) {
+  const char* cursor = nullptr;
+  const char* token = nullptr;
+  size_t tokenLen = 0;
+  if (!advanceClipCursorToToken(clipping.text, startClipToken, cursor, token, tokenLen)) {
+    return false;
+  }
+
+  uint16_t matchedTokens = 0;
+  uint16_t lastWord = startPageWord;
+  bool reachedClipEnd = false;
+  bool stoppedByMismatch = false;
+
+  forEachVisiblePageWord(page, [&](const uint16_t wordIndex, const PageLine&, const TextBlock& block, const size_t i) {
+    if (wordIndex < startPageWord) {
+      return true;
+    }
+
+    const std::string& word = block.getWords()[i];
+    if (!wordMatchesToken(word, token, tokenLen)) {
+      stoppedByMismatch = true;
+      return false;
+    }
+
+    matchedTokens++;
+    lastWord = wordIndex;
+    if (!nextClipToken(cursor, token, tokenLen)) {
+      reachedClipEnd = true;
+      return false;
+    }
+    return true;
+  });
+
+  if (matchedTokens == 0) {
+    return false;
+  }
+
+  // A relayout can split a saved clipping so this page starts mid-clipping.
+  // Accept complete runs, page-boundary partial runs, or longer mid-page runs.
+  if (!reachedClipEnd && matchedTokens < minPartialMatch) {
+    const bool startsAtClipBoundary = startClipToken == 0;
+    const bool startsAtPageBoundary = startPageWord == 0;
+    if (stoppedByMismatch || (!startsAtClipBoundary && !startsAtPageBoundary)) {
+      return false;
+    }
+  }
+
+  match.startWord = startPageWord;
+  match.endWord = lastWord;
+  return true;
+}
+
 bool findClippingTextOnPage(const Page& page, const Clipping& clipping, ClippingPageMatch& match) {
   if (clipping.text.empty()) return false;
 
@@ -272,66 +340,29 @@ bool findClippingTextOnPage(const Page& page, const Clipping& clipping, Clipping
   if (tokenCount == 0) return false;
   const uint16_t minPartialMatch = std::min<uint16_t>(tokenCount, 3);
 
-  const char* firstToken = nullptr;
-  size_t firstTokenLen = 0;
-  const char* firstCursor = clipping.text.c_str();
-  if (!nextClipToken(firstCursor, firstToken, firstTokenLen)) return false;
-
-  const char* cursor = clipping.text.c_str();
-  const char* token = nullptr;
-  size_t tokenLen = 0;
-  nextClipToken(cursor, token, tokenLen);
-
-  bool active = false;
-  uint16_t matchedTokens = 0;
-  uint16_t startWord = 0;
-  uint16_t lastWord = 0;
   bool found = false;
 
   forEachVisiblePageWord(page, [&](const uint16_t wordIndex, const PageLine&, const TextBlock& block, const size_t i) {
     const std::string& word = block.getWords()[i];
-    if (wordMatchesToken(word, token, tokenLen)) {
-      if (!active) {
-        active = true;
-        startWord = wordIndex;
+    const char* cursor = clipping.text.c_str();
+    const char* token = nullptr;
+    size_t tokenLen = 0;
+    uint16_t tokenIndex = 0;
+    while (nextClipToken(cursor, token, tokenLen)) {
+      if (tokenIndex >= tokenCount) {
+        break;
       }
-      lastWord = wordIndex;
-      matchedTokens++;
-      if (!nextClipToken(cursor, token, tokenLen)) {
+      if (wordMatchesToken(word, token, tokenLen) &&
+          matchClipRunFromPageWord(page, clipping, wordIndex, tokenIndex, minPartialMatch, match)) {
         found = true;
         return false;
       }
-      return true;
+      tokenIndex++;
     }
-
-    if (wordMatchesToken(word, firstToken, firstTokenLen)) {
-      active = true;
-      startWord = wordIndex;
-      lastWord = wordIndex;
-      matchedTokens = 1;
-      cursor = firstCursor;
-      if (!nextClipToken(cursor, token, tokenLen)) {
-        found = true;
-        return false;
-      }
-      return true;
-    }
-
-    active = false;
-    matchedTokens = 0;
-    cursor = clipping.text.c_str();
-    nextClipToken(cursor, token, tokenLen);
     return true;
   });
 
-  if (!found && active && matchedTokens >= minPartialMatch) {
-    found = true;
-  }
-  if (!found) return false;
-
-  match.startWord = startWord;
-  match.endWord = lastWord;
-  return true;
+  return found;
 }
 
 uint16_t countVisiblePageWords(const Page& page) {
