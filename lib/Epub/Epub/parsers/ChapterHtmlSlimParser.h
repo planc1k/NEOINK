@@ -67,7 +67,6 @@ class ChapterHtmlSlimParser {
   bool lowMemoryImageFallback = false;
   bool lowMemoryAbort = false;
   bool attemptedTextLayoutFontCacheRelease = false;
-  bool attemptedSimplifiedCssRelease = false;
   EpubRenderMode renderMode = EpubRenderMode::CrossInkDefault;
 
   // Style tracking (replaces depth-based approach)
@@ -160,6 +159,7 @@ class ChapterHtmlSlimParser {
   void attachPendingPublisherPageMarkers(int yPos);
   void flushPartWordBuffer();
   void makePages();
+  int effectiveLineHeight(const BlockStyle& blockStyle) const;
   bool usesSimpleCssLookup() const { return renderMode != EpubRenderMode::CrossInkDefault; }
   bool flattensTables() const { return renderMode != EpubRenderMode::CrossInkDefault; }
   bool isLightMode() const { return renderMode == EpubRenderMode::Light; }
