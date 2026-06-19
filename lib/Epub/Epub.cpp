@@ -8,6 +8,7 @@
 #include <ZipFile.h>
 
 #include <cstdint>
+#include <cstring>
 #include <functional>
 #include <utility>
 
@@ -74,6 +75,72 @@ std::string getAdaptiveThumbBmpPathForDimensions(const std::string& cachePath, i
 std::string legacyCachePathForFilePath(const std::string& filepath, const std::string& cacheDir) {
   return cacheDir + "/epub_" + std::to_string(std::hash<std::string>{}(filepath));
 }
+
+class CoverImageRefScanner final : public Print {
+ public:
+  std::string imageRef;
+
+  size_t write(uint8_t data) override { return write(&data, 1); }
+
+  size_t write(const uint8_t* buffer, size_t size) override {
+    for (size_t i = 0; i < size && imageRef.empty(); ++i) {
+      consume(static_cast<char>(buffer[i]));
+    }
+    return size;
+  }
+
+ private:
+  static constexpr size_t kMaxImageRefLen = 512;
+  static constexpr const char* kXlinkPattern = "xlink:href=\"";
+  static constexpr const char* kSrcPattern = "src=\"";
+
+  size_t xlinkMatched = 0;
+  size_t srcMatched = 0;
+  bool collecting = false;
+  std::string candidate;
+
+  static bool isSupportedImageRef(const std::string& ref) {
+    const auto view = std::string_view{ref};
+    return FsHelpers::hasPngExtension(view) || FsHelpers::hasJpgExtension(view) || FsHelpers::hasGifExtension(view);
+  }
+
+  void consume(const char c) {
+    if (collecting) {
+      if (c == '"') {
+        if (isSupportedImageRef(candidate)) {
+          imageRef = candidate;
+        }
+        candidate.clear();
+        collecting = false;
+        xlinkMatched = 0;
+        srcMatched = 0;
+        return;
+      }
+      if (candidate.size() < kMaxImageRefLen) {
+        candidate.push_back(c);
+      } else {
+        candidate.clear();
+        collecting = false;
+      }
+      return;
+    }
+
+    const auto advance = [c](const char* pattern, size_t matched) {
+      if (c == pattern[matched]) {
+        return matched + 1;
+      }
+      return c == pattern[0] ? size_t{1} : size_t{0};
+    };
+
+    xlinkMatched = advance(kXlinkPattern, xlinkMatched);
+    srcMatched = advance(kSrcPattern, srcMatched);
+
+    if (kXlinkPattern[xlinkMatched] == '\0' || kSrcPattern[srcMatched] == '\0') {
+      collecting = true;
+      candidate.clear();
+    }
+  }
+};
 }  // namespace
 
 Epub::Epub(std::string filepath, const std::string& cacheDir) : filepath(std::move(filepath)) {
@@ -178,43 +245,16 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, const 
   // try extracting the image reference from the guide's cover page XHTML
   if (bookMetadata.coverItemHref.empty() && !opfParser.guideCoverPageHref.empty()) {
     LOG_DBG("EBP", "No cover from metadata, trying guide cover page: %s", opfParser.guideCoverPageHref.c_str());
-    size_t coverPageSize;
-    uint8_t* coverPageData = readItemContentsToBytes(opfParser.guideCoverPageHref, &coverPageSize, true);
-    if (coverPageData) {
-      const std::string coverPageHtml(reinterpret_cast<char*>(coverPageData), coverPageSize);
-      free(coverPageData);
-
-      // Determine base path of the cover page for resolving relative image references
+    CoverImageRefScanner scanner;
+    if (readItemContentsToStream(opfParser.guideCoverPageHref, scanner, 512) && !scanner.imageRef.empty()) {
       std::string coverPageBase;
       const auto lastSlash = opfParser.guideCoverPageHref.rfind('/');
       if (lastSlash != std::string::npos) {
         coverPageBase = opfParser.guideCoverPageHref.substr(0, lastSlash + 1);
       }
-
-      // Search for image references: xlink:href="..." (SVG) and src="..." (img)
-      std::string imageRef;
-      for (const char* pattern : {"xlink:href=\"", "src=\""}) {
-        auto pos = coverPageHtml.find(pattern);
-        while (pos != std::string::npos) {
-          pos += strlen(pattern);
-          const auto endPos = coverPageHtml.find('"', pos);
-          if (endPos != std::string::npos) {
-            const auto ref = std::string_view{coverPageHtml}.substr(pos, endPos - pos);
-            // Check if it's an image file
-            if (FsHelpers::hasPngExtension(ref) || FsHelpers::hasJpgExtension(ref) || FsHelpers::hasGifExtension(ref)) {
-              imageRef = ref;
-              break;
-            }
-          }
-          pos = coverPageHtml.find(pattern, pos);
-        }
-        if (!imageRef.empty()) break;
-      }
-
-      if (!imageRef.empty()) {
-        bookMetadata.coverItemHref = FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(coverPageBase + imageRef));
-        LOG_DBG("EBP", "Found cover image from guide: %s", bookMetadata.coverItemHref.c_str());
-      }
+      bookMetadata.coverItemHref =
+          FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(coverPageBase + scanner.imageRef));
+      LOG_DBG("EBP", "Found cover image from guide: %s", bookMetadata.coverItemHref.c_str());
     }
   }
 

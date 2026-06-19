@@ -137,14 +137,10 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
       LOG_ERR("COF", "Couldn't open temp items file for reading. This is probably going to be a fatal error.");
     }
 
-    // Sort item index for binary search if we have enough items
-    if (self->itemIndex.size() >= LARGE_SPINE_THRESHOLD) {
-      std::sort(self->itemIndex.begin(), self->itemIndex.end(), [](const ItemIndexEntry& a, const ItemIndexEntry& b) {
-        return a.idHash < b.idHash || (a.idHash == b.idHash && a.idLen < b.idLen);
-      });
-      self->useItemIndex = true;
-      LOG_DBG("COF", "Using fast index for %zu manifest items", self->itemIndex.size());
-    }
+    std::sort(self->itemIndex.begin(), self->itemIndex.end(), [](const ItemIndexEntry& a, const ItemIndexEntry& b) {
+      return a.idHash < b.idHash || (a.idHash == b.idHash && a.idLen < b.idLen);
+    });
+    LOG_DBG("COF", "Using compact manifest index for %zu items", self->itemIndex.size());
     return;
   }
 
@@ -203,8 +199,10 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
       self->itemIndex.push_back(entry);
     }
 
-    // Write items down to SD card
-    serialization::writeString(self->tempItemStore, itemId);
+    // Write compact manifest rows down to SD card. idref matching uses the
+    // in-memory hash/length index, so the temp file only needs to keep hrefs.
+    serialization::writePod(self->tempItemStore, fnvHash(itemId));
+    serialization::writePod(self->tempItemStore, static_cast<uint16_t>(itemId.size()));
     serialization::writeString(self->tempItemStore, href);
 
     if (itemId == self->coverItemId) {
@@ -260,43 +258,27 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
           std::string href;
           bool found = false;
 
-          if (self->useItemIndex) {
-            // Fast path: binary search
-            uint32_t targetHash = fnvHash(idref);
-            uint16_t targetLen = static_cast<uint16_t>(idref.size());
+          const uint64_t targetHash = fnvHash(idref);
+          const uint16_t targetLen = static_cast<uint16_t>(idref.size());
 
-            auto it = std::lower_bound(self->itemIndex.begin(), self->itemIndex.end(),
-                                       ItemIndexEntry{targetHash, targetLen, 0},
-                                       [](const ItemIndexEntry& a, const ItemIndexEntry& b) {
-                                         return a.idHash < b.idHash || (a.idHash == b.idHash && a.idLen < b.idLen);
-                                       });
+          auto it =
+              std::lower_bound(self->itemIndex.begin(), self->itemIndex.end(), ItemIndexEntry{targetHash, targetLen, 0},
+                               [](const ItemIndexEntry& a, const ItemIndexEntry& b) {
+                                 return a.idHash < b.idHash || (a.idHash == b.idHash && a.idLen < b.idLen);
+                               });
 
-            // Check for match (may need to check a few due to hash collisions)
-            while (it != self->itemIndex.end() && it->idHash == targetHash) {
-              self->tempItemStore.seek(it->fileOffset);
-              std::string itemId;
-              serialization::readString(self->tempItemStore, itemId);
-              if (itemId == idref) {
-                serialization::readString(self->tempItemStore, href);
-                found = true;
-                break;
-              }
-              ++it;
-            }
-          } else {
-            // Slow path: linear scan (for small manifests, keeps original behavior)
-            // TODO: This lookup is slow as need to scan through all items each time.
-            //       It can take up to 200ms per item when getting to 1500 items.
-            self->tempItemStore.seek(0);
-            std::string itemId;
-            while (self->tempItemStore.available()) {
-              serialization::readString(self->tempItemStore, itemId);
+          while (it != self->itemIndex.end() && it->idHash == targetHash && it->idLen == targetLen) {
+            self->tempItemStore.seek(it->fileOffset);
+            uint64_t rowHash = 0;
+            uint16_t rowLen = 0;
+            serialization::readPod(self->tempItemStore, rowHash);
+            serialization::readPod(self->tempItemStore, rowLen);
+            if (rowHash == targetHash && rowLen == targetLen) {
               serialization::readString(self->tempItemStore, href);
-              if (itemId == idref) {
-                found = true;
-                break;
-              }
+              found = true;
+              break;
             }
+            ++it;
           }
 
           if (found && self->cache) {

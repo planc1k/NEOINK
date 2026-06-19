@@ -32,23 +32,32 @@ class ContentOpfParser final : public Print {
   HalFile tempItemStore;
   std::string coverItemId;
 
-  // Index for fast idref→href lookup (used only for large EPUBs)
+  // Index for compact idref->href lookup. The temp manifest rows store only
+  // hash/length plus href, not a second full copy of every manifest ID.
   struct ItemIndexEntry {
-    uint32_t idHash;      // FNV-1a hash of itemId
+    uint64_t idHash;      // FNV-1a hash of itemId
     uint16_t idLen;       // length for collision reduction
     uint32_t fileOffset;  // offset in .items.bin
   };
   std::deque<ItemIndexEntry> itemIndex;
-  bool useItemIndex = false;
-
-  static constexpr uint16_t LARGE_SPINE_THRESHOLD = 400;
 
   // FNV-1a hash function
-  static uint32_t fnvHash(const std::string& s) {
-    uint32_t hash = 2166136261u;
-    for (char c : s) {
-      hash ^= static_cast<uint8_t>(c);
-      hash *= 16777619u;
+  static uint64_t fnvHash(const char* s, size_t len) {
+    uint64_t hash = 14695981039346656037ull;
+    for (size_t i = 0; i < len; ++i) {
+      hash ^= static_cast<uint8_t>(s[i]);
+      hash *= 1099511628211ull;
+    }
+    return hash;
+  }
+  static uint64_t fnvHash(const std::string& s) { return fnvHash(s.c_str(), s.size()); }
+  static uint64_t fnvHash(const char* s) {
+    if (!s) return 0;
+    uint64_t hash = 14695981039346656037ull;
+    while (*s != '\0') {
+      hash ^= static_cast<uint8_t>(*s);
+      hash *= 1099511628211ull;
+      ++s;
     }
     return hash;
   }
