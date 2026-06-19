@@ -6,7 +6,9 @@ const std::string& OtaUpdater::getLatestVersion() const { return latestVersion; 
 OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() { return NO_UPDATE; }
 OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback, void*, std::atomic<bool>*) { return NO_UPDATE; }
 #else
+#include <Arduino.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <ReleaseJsonParser.h>
 
 #include <cstring>
@@ -14,7 +16,8 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback, void*, s
 #include "AppVersion.h"
 #include "OtaUpdater.h"
 #include "esp_http_client.h"
-#include "esp_https_ota.h"
+#include "esp_ota_ops.h"
+#include "mbedtls/sha256.h"
 #include "network/WifiPowerSaveGuard.h"
 
 namespace {
@@ -34,6 +37,10 @@ constexpr char firmwareAssetName[] = "firmware.bin";
 
 constexpr char binSuffix[] = ".bin";
 constexpr size_t VERSION_SEGMENT_COUNT = 4;
+constexpr size_t OTA_PROGRESS_UPDATE_BYTES = 64 * 1024;
+constexpr int OTA_HTTP_READ_TIMEOUT_MS = 5000;
+constexpr uint32_t OTA_DOWNLOAD_IDLE_TIMEOUT_MS = 30000;
+constexpr size_t OTA_READ_BUFFER_SIZE = 1024;
 
 struct ParsedVersion {
   int segments[VERSION_SEGMENT_COUNT] = {0, 0, 0, 0};
@@ -108,6 +115,43 @@ bool startsWith(const char* value, const char* prefix) {
   return strncmp(value, prefix, prefixLength) == 0;
 }
 
+char lowerHex(const uint8_t value) {
+  return value < 10 ? static_cast<char>('0' + value) : static_cast<char>('a' + value - 10);
+}
+
+char asciiLower(const char c) { return (c >= 'A' && c <= 'F') ? static_cast<char>(c - 'A' + 'a') : c; }
+
+bool isHexChar(const char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'); }
+
+bool isSha256Hex(const char* value) {
+  if (value == nullptr) return false;
+  for (size_t i = 0; i < 64; ++i) {
+    if (!isHexChar(value[i])) return false;
+  }
+  return value[64] == '\0';
+}
+
+bool sha256Matches(const uint8_t digest[32], const char* expectedHex) {
+  if (!isSha256Hex(expectedHex)) return false;
+
+  for (size_t i = 0; i < 32; ++i) {
+    const char high = lowerHex((digest[i] >> 4) & 0x0F);
+    const char low = lowerHex(digest[i] & 0x0F);
+    if (high != asciiLower(expectedHex[i * 2]) || low != asciiLower(expectedHex[i * 2 + 1])) return false;
+  }
+  return true;
+}
+
+void formatSha256(const uint8_t digest[32], char output[65]) {
+  for (size_t i = 0; i < 32; ++i) {
+    output[i * 2] = lowerHex((digest[i] >> 4) & 0x0F);
+    output[i * 2 + 1] = lowerHex(digest[i] & 0x0F);
+  }
+  output[64] = '\0';
+}
+
+bool isHttpUrl(const std::string& url) { return url.rfind("http://", 0) == 0; }
+
 bool endsWith(const char* value, const char* suffix) {
   if (value == nullptr || suffix == nullptr) return false;
   const size_t valueLength = strlen(value);
@@ -139,7 +183,16 @@ esp_err_t http_client_set_header_cb(esp_http_client_handle_t http_client) {
 
 size_t totalBytesReceived = 0;
 
-esp_err_t event_handler(esp_http_client_event_t* event) {
+struct OtaInstallContext {
+  size_t* processedSize = nullptr;
+  size_t totalSize = 0;
+  size_t lastProgressBytes = 0;
+  int lastReportedPct = -1;
+  OtaUpdater::ProgressCallback onProgress = nullptr;
+  void* progressCtx = nullptr;
+};
+
+esp_err_t release_manifest_event_handler(esp_http_client_event_t* event) {
   if (event->event_id != HTTP_EVENT_ON_DATA) return ESP_OK;
   if (event->data_len <= 0) return ESP_OK;
 
@@ -154,6 +207,28 @@ esp_err_t event_handler(esp_http_client_event_t* event) {
   parser->feed(static_cast<const char*>(event->data), event->data_len);
   return ESP_OK;
 }
+
+void notifyOtaProgress(OtaInstallContext* ctx, const bool force) {
+  if (ctx == nullptr || ctx->onProgress == nullptr || ctx->processedSize == nullptr || ctx->totalSize == 0) return;
+
+  const size_t processed = *ctx->processedSize;
+  const int pct = static_cast<int>(static_cast<uint64_t>(processed) * 100 / ctx->totalSize);
+  if (force || pct != ctx->lastReportedPct || processed - ctx->lastProgressBytes >= OTA_PROGRESS_UPDATE_BYTES) {
+    ctx->lastReportedPct = pct;
+    ctx->lastProgressBytes = processed;
+    ctx->onProgress(ctx->progressCtx);
+  }
+}
+
+void logTlsError(esp_http_client_handle_t client, const char* phase) {
+  int tlsError = 0;
+  int tlsFlags = 0;
+  const esp_err_t err = esp_http_client_get_and_clear_last_tls_error(client, &tlsError, &tlsFlags);
+  if (err != ESP_OK || tlsError != 0 || tlsFlags != 0) {
+    const int tlsCode = tlsError < 0 ? -tlsError : tlsError;
+    LOG_ERR("OTA", "%s TLS error: err=%s mbedtls=0x%x flags=0x%x", phase, esp_err_to_name(err), tlsCode, tlsFlags);
+  }
+}
 }  // namespace
 
 OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
@@ -162,6 +237,7 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
   updateAvailable = false;
   latestVersion.clear();
   otaUrl.clear();
+  otaSha256.clear();
   otaSize = 0;
   processedSize = 0;
   totalSize = 0;
@@ -171,7 +247,7 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
 
   esp_http_client_config_t client_config = {
       .url = latestReleaseUrl,
-      .event_handler = event_handler,
+      .event_handler = release_manifest_event_handler,
       // 4096 holds the API response headers; the 32KB body streams through the
       // parser in chunks so RX needn't be larger. TX only carries our GET.
       // Both free before installUpdate, so smaller leaves it less fragmentation.
@@ -229,11 +305,13 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
   }
 
   otaUrl = releaseParser.getFirmwareUrl();
+  otaSha256 = releaseParser.getFirmwareSha256();
   otaSize = releaseParser.getFirmwareSize();
   totalSize = otaSize;
   updateAvailable = true;
 
-  LOG_DBG("OTA", "Found update: tag=%s size=%zu", latestVersion.c_str(), otaSize);
+  LOG_DBG("OTA", "Found update: tag=%s size=%zu sha256=%s", latestVersion.c_str(), otaSize,
+          otaSha256.empty() ? "missing" : "present");
   LOG_DBG("OTA", "Firmware URL: %s", otaUrl.c_str());
   return OK;
 }
@@ -264,11 +342,30 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
   if (isCancellationRequested()) {
     return CANCELLED_ERROR;
   }
+  if (isHttpUrl(otaUrl) && !isSha256Hex(otaSha256.c_str())) {
+    LOG_ERR("OTA", "Refusing HTTP firmware URL without manifest sha256");
+    return JSON_PARSE_ERROR;
+  }
 
   processedSize = 0;
 
-  esp_https_ota_handle_t ota_handle = NULL;
-  esp_err_t esp_err;
+  const esp_partition_t* updatePartition = esp_ota_get_next_update_partition(nullptr);
+  if (updatePartition == nullptr) {
+    LOG_ERR("OTA", "No OTA update partition found");
+    return INTERNAL_UPDATE_ERROR;
+  }
+
+  if (otaSize > 0 && otaSize > updatePartition->size) {
+    LOG_ERR("OTA", "Firmware too large: %zu > %zu", otaSize, updatePartition->size);
+    return INTERNAL_UPDATE_ERROR;
+  }
+
+  esp_ota_handle_t otaHandle = 0;
+  OtaInstallContext installCtx;
+  installCtx.processedSize = &processedSize;
+  installCtx.totalSize = totalSize;
+  installCtx.onProgress = onProgress;
+  installCtx.progressCtx = ctx;
 
   esp_http_client_config_t client_config = {
       .url = otaUrl.c_str(),
@@ -280,71 +377,193 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
       .buffer_size_tx = 1024,
       .skip_cert_common_name_check = true,
       .crt_bundle_attach = esp_crt_bundle_attach,
-      .keep_alive_enable = true,
-  };
-
-  esp_https_ota_config_t ota_config = {
-      .http_config = &client_config,
-      .http_client_init_cb = http_client_set_header_cb,
+      .keep_alive_enable = false,
   };
 
   WifiPowerSaveGuard wifiPowerSaveGuard;
 
-  esp_err = esp_https_ota_begin(&ota_config, &ota_handle);
-  if (esp_err != ESP_OK) {
-    LOG_DBG("OTA", "HTTP OTA Begin Failed: %s", esp_err_to_name(esp_err));
-    return INTERNAL_UPDATE_ERROR;
-  }
+  LOG_INF("OTA", "Starting firmware download: url=%s heap=%u maxAlloc=%u", otaUrl.c_str(), ESP.getFreeHeap(),
+          ESP.getMaxAllocHeap());
 
-  int lastReportedPct = -1;
-  do {
-    if (isCancellationRequested()) {
-      LOG_INF("OTA", "Update cancelled");
-      esp_https_ota_abort(ota_handle);
-      return CANCELLED_ERROR;
-    }
-
-    esp_err = esp_https_ota_perform(ota_handle);
-    processedSize = esp_https_ota_get_image_len_read(ota_handle);
-    // Fire the callback only on whole-percent change. Without this it fired
-    // every ~100ms perform iteration, waking the render task whose framebuffer
-    // work contends with TLS on the same internal arena. E-ink can't repaint
-    // faster than a percent tick anyway.
-    if (onProgress && totalSize > 0) {
-      const int pct = static_cast<int>(static_cast<uint64_t>(processedSize) * 100 / totalSize);
-      if (pct != lastReportedPct) {
-        lastReportedPct = pct;
-        onProgress(ctx);
-      }
-    }
-    delay(100);  // TODO: should we replace this with something better?
-  } while (esp_err == ESP_ERR_HTTPS_OTA_IN_PROGRESS);
-
-  if (isCancellationRequested()) {
-    LOG_INF("OTA", "Update cancelled");
-    esp_https_ota_abort(ota_handle);
-    return CANCELLED_ERROR;
-  }
-
-  if (esp_err != ESP_OK) {
-    LOG_ERR("OTA", "esp_https_ota_perform Failed: %s", esp_err_to_name(esp_err));
-    esp_https_ota_finish(ota_handle);
+  esp_http_client_handle_t client = esp_http_client_init(&client_config);
+  if (client == nullptr) {
+    LOG_ERR("OTA", "HTTP client init failed (heap=%u maxAlloc=%u)", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
     return HTTP_ERROR;
   }
 
-  if (!esp_https_ota_is_complete_data_received(ota_handle)) {
-    LOG_ERR("OTA", "esp_https_ota_is_complete_data_received Failed: %s", esp_err_to_name(esp_err));
-    esp_https_ota_finish(ota_handle);
-    return INTERNAL_UPDATE_ERROR;
-  }
-
-  esp_err = esp_https_ota_finish(ota_handle);
+  esp_err_t esp_err = http_client_set_header_cb(client);
   if (esp_err != ESP_OK) {
-    LOG_ERR("OTA", "esp_https_ota_finish Failed: %s", esp_err_to_name(esp_err));
+    LOG_ERR("OTA", "Failed to set OTA User-Agent: %s", esp_err_to_name(esp_err));
+    esp_http_client_cleanup(client);
     return INTERNAL_UPDATE_ERROR;
   }
 
-  LOG_INF("OTA", "Update completed");
+  auto buffer = makeUniqueNoThrow<char[]>(OTA_READ_BUFFER_SIZE);
+  if (!buffer) {
+    LOG_ERR("OTA", "Failed to allocate %zu byte OTA read buffer (heap=%u maxAlloc=%u)", OTA_READ_BUFFER_SIZE,
+            ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+    esp_http_client_cleanup(client);
+    return OOM_ERROR;
+  }
+
+  LOG_INF("OTA", "Opening firmware connection");
+  esp_err = esp_http_client_open(client, 0);
+  if (esp_err != ESP_OK) {
+    LOG_ERR("OTA", "Firmware HTTP open failed: %s (heap=%u maxAlloc=%u)", esp_err_to_name(esp_err), ESP.getFreeHeap(),
+            ESP.getMaxAllocHeap());
+    logTlsError(client, "Firmware open failure");
+    esp_http_client_cleanup(client);
+    return HTTP_ERROR;
+  }
+
+  LOG_INF("OTA", "Fetching firmware headers");
+  const int64_t contentLength = esp_http_client_fetch_headers(client);
+  const int statusCode = esp_http_client_get_status_code(client);
+  if (contentLength < 0) {
+    LOG_ERR("OTA", "Firmware header fetch failed: %lld", static_cast<long long>(contentLength));
+    logTlsError(client, "Firmware header failure");
+    esp_http_client_cleanup(client);
+    return HTTP_ERROR;
+  }
+  if (statusCode < 200 || statusCode >= 300) {
+    LOG_ERR("OTA", "Firmware HTTP status: %d", statusCode);
+    esp_http_client_cleanup(client);
+    return HTTP_ERROR;
+  }
+
+  const size_t firmwareSize = contentLength > 0 ? static_cast<size_t>(contentLength) : otaSize;
+  if (firmwareSize > 0) {
+    if (firmwareSize > updatePartition->size) {
+      LOG_ERR("OTA", "Firmware response too large: %zu > %zu", firmwareSize, updatePartition->size);
+      esp_http_client_cleanup(client);
+      return INTERNAL_UPDATE_ERROR;
+    }
+    totalSize = firmwareSize;
+    installCtx.totalSize = firmwareSize;
+  }
+
+  LOG_INF("OTA", "Writing firmware to %s @0x%x size=%zu heap=%u maxAlloc=%u", updatePartition->label,
+          static_cast<unsigned>(updatePartition->address), firmwareSize, ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+
+  esp_err = esp_ota_begin(updatePartition, firmwareSize > 0 ? firmwareSize : OTA_SIZE_UNKNOWN, &otaHandle);
+  if (esp_err != ESP_OK) {
+    LOG_ERR("OTA", "esp_ota_begin failed: %s (heap=%u maxAlloc=%u)", esp_err_to_name(esp_err), ESP.getFreeHeap(),
+            ESP.getMaxAllocHeap());
+    esp_http_client_cleanup(client);
+    return esp_err == ESP_ERR_NO_MEM ? OOM_ERROR : INTERNAL_UPDATE_ERROR;
+  }
+
+  esp_err = esp_http_client_set_timeout_ms(client, OTA_HTTP_READ_TIMEOUT_MS);
+  if (esp_err != ESP_OK) {
+    LOG_ERR("OTA", "Failed to set OTA read timeout: %s", esp_err_to_name(esp_err));
+    esp_ota_abort(otaHandle);
+    esp_http_client_cleanup(client);
+    return INTERNAL_UPDATE_ERROR;
+  }
+
+  mbedtls_sha256_context shaCtx;
+  mbedtls_sha256_init(&shaCtx);
+  mbedtls_sha256_starts(&shaCtx, /*is224=*/0);
+
+  uint32_t lastReadMs = millis();
+  while (true) {
+    if (isCancellationRequested()) {
+      LOG_INF("OTA", "Update cancelled");
+      mbedtls_sha256_free(&shaCtx);
+      esp_ota_abort(otaHandle);
+      esp_http_client_cleanup(client);
+      return CANCELLED_ERROR;
+    }
+
+    const int bytesRead = esp_http_client_read(client, buffer.get(), OTA_READ_BUFFER_SIZE);
+    if (bytesRead < 0) {
+      if (bytesRead == -ESP_ERR_HTTP_EAGAIN) {
+        const uint32_t idleMs = millis() - lastReadMs;
+        if (idleMs >= OTA_DOWNLOAD_IDLE_TIMEOUT_MS) {
+          LOG_ERR("OTA", "Firmware read timed out after %zu/%zu bytes (idle=%lu ms)", processedSize, totalSize,
+                  static_cast<unsigned long>(idleMs));
+          mbedtls_sha256_free(&shaCtx);
+          esp_ota_abort(otaHandle);
+          esp_http_client_cleanup(client);
+          return HTTP_ERROR;
+        }
+        delay(1);
+        continue;
+      }
+
+      LOG_ERR("OTA", "Firmware read failed after %zu/%zu bytes", processedSize, totalSize);
+      logTlsError(client, "Firmware read failure");
+      mbedtls_sha256_free(&shaCtx);
+      esp_ota_abort(otaHandle);
+      esp_http_client_cleanup(client);
+      return HTTP_ERROR;
+    }
+    if (bytesRead == 0) break;
+
+    esp_err = esp_ota_write(otaHandle, buffer.get(), static_cast<size_t>(bytesRead));
+    if (esp_err != ESP_OK) {
+      LOG_ERR("OTA", "esp_ota_write failed after %zu bytes: %s", processedSize, esp_err_to_name(esp_err));
+      mbedtls_sha256_free(&shaCtx);
+      esp_ota_abort(otaHandle);
+      esp_http_client_cleanup(client);
+      return INTERNAL_UPDATE_ERROR;
+    }
+
+    mbedtls_sha256_update(&shaCtx, reinterpret_cast<const unsigned char*>(buffer.get()),
+                          static_cast<size_t>(bytesRead));
+    processedSize += static_cast<size_t>(bytesRead);
+    lastReadMs = millis();
+    notifyOtaProgress(&installCtx, false);
+    if (totalSize > 0 && processedSize >= totalSize) break;
+    delay(0);
+  }
+
+  if (isCancellationRequested()) {
+    LOG_INF("OTA", "Update cancelled");
+    mbedtls_sha256_free(&shaCtx);
+    esp_ota_abort(otaHandle);
+    esp_http_client_cleanup(client);
+    return CANCELLED_ERROR;
+  }
+
+  if (!esp_http_client_is_complete_data_received(client)) {
+    LOG_ERR("OTA", "Firmware download incomplete: %zu/%zu", processedSize, totalSize);
+    mbedtls_sha256_free(&shaCtx);
+    esp_ota_abort(otaHandle);
+    esp_http_client_cleanup(client);
+    return INTERNAL_UPDATE_ERROR;
+  }
+  esp_http_client_cleanup(client);
+
+  notifyOtaProgress(&installCtx, true);
+
+  uint8_t computedSha256[32];
+  mbedtls_sha256_finish(&shaCtx, computedSha256);
+  mbedtls_sha256_free(&shaCtx);
+  if (!otaSha256.empty()) {
+    if (!sha256Matches(computedSha256, otaSha256.c_str())) {
+      char computedSha256Hex[65];
+      formatSha256(computedSha256, computedSha256Hex);
+      LOG_ERR("OTA", "Firmware sha256 mismatch: expected=%s actual=%s", otaSha256.c_str(), computedSha256Hex);
+      esp_ota_abort(otaHandle);
+      return HASH_MISMATCH_ERROR;
+    }
+    LOG_INF("OTA", "Firmware sha256 verified");
+  }
+
+  esp_err = esp_ota_end(otaHandle);
+  if (esp_err != ESP_OK) {
+    LOG_ERR("OTA", "esp_ota_end failed: %s", esp_err_to_name(esp_err));
+    return INTERNAL_UPDATE_ERROR;
+  }
+
+  esp_err = esp_ota_set_boot_partition(updatePartition);
+  if (esp_err != ESP_OK) {
+    LOG_ERR("OTA", "esp_ota_set_boot_partition failed: %s", esp_err_to_name(esp_err));
+    return INTERNAL_UPDATE_ERROR;
+  }
+
+  LOG_INF("OTA", "Update completed: %zu bytes", processedSize);
   return OK;
 }
 #endif

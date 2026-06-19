@@ -57,6 +57,11 @@ def parse_args():
         default=None,
         help='Base URL for firmware artifacts. Defaults to GitHub Releases latest/download.',
     )
+    parser.add_argument(
+        '--ota-firmware-base-url',
+        default=None,
+        help='Optional base URL for OTA manifest firmware assets. Defaults to --firmware-base-url.',
+    )
     parser.add_argument('--released-at', default=utc_now_iso(), help='Release timestamp in ISO-8601 format.')
     parser.add_argument('--channel', default='stable', help='Release channel.')
     parser.add_argument('--notes', default=None, help='Free-text changelog shown to users.')
@@ -91,6 +96,7 @@ def main():
     notes = args.notes or f'CrossInk {version} {args.channel} firmware'
     firmware_base_url = args.firmware_base_url or f'https://github.com/{args.repo}/releases/latest/download/'
     firmware_base_url = firmware_base_url.rstrip('/') + '/'
+    ota_firmware_base_url = (args.ota_firmware_base_url or firmware_base_url).rstrip('/') + '/'
 
     releases = []
     ota_assets = []
@@ -104,6 +110,7 @@ def main():
         filename = firmware_path.name
         variant = parse_variant(firmware_path)
         firmware_url = f'{firmware_base_url}{filename}'
+        ota_firmware_url = f'{ota_firmware_base_url}{filename}'
         firmware_sha256 = sha256_file(firmware_path)
         firmware_size = firmware_path.stat().st_size
         if variant in seen_variants:
@@ -128,8 +135,9 @@ def main():
         ota_assets.append(
             {
                 'name': filename,
-                'browser_download_url': firmware_url,
+                'browser_download_url': ota_firmware_url,
                 'size': firmware_size,
+                'sha256': firmware_sha256,
             }
         )
 

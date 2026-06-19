@@ -406,7 +406,12 @@ void WifiSelectionActivity::attemptConnection() {
 
   WiFi.persistent(false);  // Credentials are managed by WifiCredentialStore; suppress SDK NVS auto-connect
   WiFi.mode(WIFI_STA);
-  WiFi.disconnect(true, true);  // Abort any in-progress SDK auto-connect and clear NVS-saved SSID
+  // Abort any in-progress SDK auto-connect before our explicit begin().
+  // Do not erase the AP config or power-cycle the radio; some routers fail the
+  // next WPA handshake after that heavier reset.
+  if (!WiFi.disconnect(false, false, 1000)) {
+    LOG_DBG("WIFI", "Disconnect before begin timed out; continuing with explicit begin");
+  }
   delay(100);
 #ifndef SIMULATOR
   sLastStaDisconnectReason = 0;

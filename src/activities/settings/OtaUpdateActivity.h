@@ -1,5 +1,6 @@
 #pragma once
 
+#include "I18nKeys.h"
 #include "activities/Activity.h"
 #include "network/OtaUpdater.h"
 
@@ -20,6 +21,7 @@ class OtaUpdateActivity : public Activity {
 
   State state = WIFI_SELECTION;
   unsigned int lastUpdaterPercentage = UNINITIALIZED_PERCENTAGE;
+  StrId failureMessage = StrId::STR_UPDATE_FAILED;
   OtaUpdater updater;
 
   void onWifiSelectionComplete(bool success);

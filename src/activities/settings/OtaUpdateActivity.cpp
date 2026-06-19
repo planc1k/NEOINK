@@ -13,6 +13,15 @@
 #include "fontIds.h"
 #include "network/OtaUpdater.h"
 
+namespace {
+bool hasActiveWifiConnection() { return WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress(0, 0, 0, 0); }
+
+StrId failureMessageFor(const OtaUpdater::OtaUpdaterError error) {
+  if (error == OtaUpdater::HASH_MISMATCH_ERROR) return StrId::STR_UPDATE_HASH_MISMATCH;
+  return StrId::STR_UPDATE_FAILED;
+}
+}  // namespace
+
 void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
   if (!success) {
     LOG_ERR("OTA", "WiFi connection failed, exiting");
@@ -41,6 +50,7 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
     LOG_DBG("OTA", "Update check failed: %d", res);
     {
       RenderLock lock(*this);
+      failureMessage = failureMessageFor(res);
       state = FAILED;
     }
     requestUpdate(true);
@@ -67,6 +77,12 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
 void OtaUpdateActivity::onEnter() {
   Activity::onEnter();
   sdFontSystem.releaseLoadedFont(renderer);
+
+  if (hasActiveWifiConnection()) {
+    LOG_DBG("OTA", "WiFi already connected, checking for update");
+    onWifiSelectionComplete(true);
+    return;
+  }
 
   // Turn on WiFi immediately
   LOG_DBG("OTA", "Turning on WiFi...");
@@ -146,7 +162,7 @@ void OtaUpdateActivity::render(RenderLock&&) {
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (state == FAILED) {
-    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_UPDATE_FAILED), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, top, I18n::getInstance().get(failureMessage), true, EpdFontFamily::BOLD);
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (state == FINISHED) {
@@ -163,6 +179,7 @@ void OtaUpdateActivity::loop() {
       LOG_DBG("OTA", "New update available, starting download...");
       {
         RenderLock lock(*this);
+        failureMessage = StrId::STR_UPDATE_FAILED;
         state = UPDATE_IN_PROGRESS;
       }
       if (requestUpdateAndWait() != RequestUpdateResult::Rendered) {
@@ -187,6 +204,7 @@ void OtaUpdateActivity::loop() {
         LOG_DBG("OTA", "Update failed: %d", res);
         {
           RenderLock lock(*this);
+          failureMessage = failureMessageFor(res);
           state = FAILED;
         }
         requestUpdate();
