@@ -649,8 +649,9 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
   const int outWidth = geometry.outWidth;
   const int outHeight = geometry.outHeight;
   const bool needsScaling = geometry.needsScaling;
-  const bool smoothUpscale =
-      progressive && needsScaling && geometry.scaleX_fp < FP_ONE && geometry.scaleY_fp < FP_ONE;
+  const bool smoothUpscale = progressive && needsScaling && geometry.scaleX_fp <= FP_ONE &&
+                             geometry.scaleY_fp <= FP_ONE &&
+                             (geometry.scaleX_fp < FP_ONE || geometry.scaleY_fp < FP_ONE);
   LOG_DBG("JPG", "Scaling %dx%d -> %dx%d (target %dx%d, mode=%s, offset %u,%u)", effectiveSrcW, effectiveSrcH, outWidth,
           outHeight, targetWidth, targetHeight, cropOutput ? "cover" : "contain", geometry.srcXOffset_fp >> 16,
           geometry.srcYOffset_fp >> 16);
