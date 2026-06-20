@@ -44,6 +44,7 @@ class ChapterHtmlSlimParser {
   // leave one char at end for null pointer
   char partWordBuffer[MAX_WORD_SIZE + 1] = {};
   int partWordBufferIndex = 0;
+  uint16_t currentTextRunBytes = 0;
   bool nextWordContinues = false;  // true when next flushed word attaches to previous (inline element boundary)
   std::unique_ptr<ParsedText> currentTextBlock = nullptr;
   std::unique_ptr<Page> currentPage = nullptr;
@@ -158,6 +159,7 @@ class ChapterHtmlSlimParser {
   void addPendingPublisherPageMarker(const char* label);
   void attachPendingPublisherPageMarkers(int yPos);
   void flushPartWordBuffer();
+  void flushLongTextRunIfNeeded();
   void makePages();
   int effectiveLineHeight() const;
   bool usesSimpleCssLookup() const { return renderMode != EpubRenderMode::CrossInkDefault; }

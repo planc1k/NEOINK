@@ -13,18 +13,16 @@
 - The Epub reader menu now labels per-book reader settings as `Book Options` and avoids showing duplicate `Orientation` controls.
 - The `Inverted` sleep cover filter now flips Minimal and Reading Stats sleep screens to black text on a white background.
 - OTA update checks now use a stable CrossInk manifest endpoint that can point firmware downloads at S3-hosted release assets.
+- OTA checks from older `no_emoji` builds now resolve to the `tiny` firmware update.
 
 ### Fixed
 - Calibre Wireless transfer status no longer stacks the last received-file message on top of the upload percentage.
-- OTA checks from older `no_emoji` builds now resolve to the `tiny` firmware update.
-- EPUB layout now honors publisher `line-height` and page-break CSS, avoids stretching justified spaces before closing punctuation, and keeps large CSS rule sets in a smaller disk-backed lookup cache.
 - EPUB layout now honors publisher page-break CSS, avoids stretching justified spaces before closing punctuation, and keeps large CSS rule sets in a smaller disk-backed lookup cache.
 - EPUB first-open conversion now uses more compact OPF manifest lookups and streams cover-wrapper parsing to avoid large temporary heap buffers on books with huge manifests.
 - EPUB chapters that run out of memory during full CrossInk layout now retry with `Balanced` and then `Light` rendering before showing a low-memory error, and save the first successful fallback for that book.
 - EPUB reader font-size changes now restore the current chapter position by content instead of jumping far backward after re-indexing.
 - Reading Stats now use the reader's last live book time-left estimate instead of showing a separate fallback estimate.
 - Per-book reading stats now migrate compatible legacy `stats.bin` files into the `stats_v5.bin` flow instead of resetting when only the old filename exists.
-- Per-book reading stats now use versioned filenames so firmware builds with different schemas do not overwrite each other's stats.
 - Lyra Carousel Home menu rendering now avoids extra label allocations that could crash tiny builds under low memory.
 - TXT readers now stay open when pressing a page-turn button at the end of the file.
 - Long-press reader shortcuts that open another screen no longer close or confirm it again when releasing the shortcut button.

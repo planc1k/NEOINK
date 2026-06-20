@@ -32,6 +32,7 @@ constexpr uint32_t MIN_MAX_ALLOC_FOR_TEXT_LAYOUT = 32 * 1024;
 constexpr uint32_t MIN_FREE_HEAP_FOR_TABLE_BUFFERING = 64 * 1024;
 constexpr uint32_t MIN_MAX_ALLOC_FOR_TABLE_BUFFERING = 40 * 1024;
 constexpr size_t MAX_BUFFERED_WORDS_BEFORE_LAYOUT = 350;
+constexpr uint16_t MAX_TEXT_RUN_BYTES_BEFORE_LAYOUT = 2048;
 constexpr uint8_t INITIAL_PAGE_ELEMENT_RESERVE = 8;
 constexpr uint8_t INITIAL_TABLE_FRAGMENT_ROW_RESERVE = 8;
 constexpr uint32_t PAGE_ELEMENT_RESERVE_MIN_MAX_ALLOC = 1024;
@@ -340,8 +341,31 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
   partWordBuffer[partWordBufferIndex] = '\0';
   currentTextBlock->addWord(partWordBuffer, fontStyle, false, nextWordContinues,
                             honorsPublisherDecorations() && effectiveBackgroundBlack);
+  currentTextRunBytes = static_cast<uint16_t>(
+      std::min<size_t>(currentTextRunBytes + static_cast<size_t>(partWordBufferIndex), UINT16_MAX));
   partWordBufferIndex = 0;
   nextWordContinues = false;
+}
+
+void ChapterHtmlSlimParser::flushLongTextRunIfNeeded() {
+  if (!currentTextBlock) {
+    currentTextRunBytes = 0;
+    return;
+  }
+
+  if (currentTextBlock->size() <= MAX_BUFFERED_WORDS_BEFORE_LAYOUT &&
+      currentTextRunBytes <= MAX_TEXT_RUN_BYTES_BEFORE_LAYOUT) {
+    return;
+  }
+
+  LOG_DBG("EHP", "Text block too long, splitting into multiple pages");
+  const int horizontalInset = currentTextBlock->getBlockStyle().totalHorizontalInset();
+  const uint16_t effectiveWidth =
+      (horizontalInset < viewportWidth) ? static_cast<uint16_t>(viewportWidth - horizontalInset) : viewportWidth;
+  currentTextBlock->layoutAndExtractLines(
+      renderer, fontId, effectiveWidth,
+      [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); }, false);
+  currentTextRunBytes = 0;
 }
 
 // start a new text block if needed
@@ -377,6 +401,7 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
 
     makePages();
   }
+  currentTextRunBytes = 0;
   // If the pending anchor is a TOC chapter boundary, force a page break after the previous
   // block is flushed so the chapter starts on a fresh page.
   flushPendingAnchor();
@@ -1956,19 +1981,13 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
   }
 
   // If a paragraph keeps growing, perform the layout and consume all but the last line.
-  // This turns the parser's text buffer into page records earlier, which keeps memory
-  // bounded for chapters with very long XHTML text runs.
-  // Spotted when reading Intermezzo, there are some really long text blocks in there.
-  if (self->currentTextBlock && self->currentTextBlock->size() > MAX_BUFFERED_WORDS_BEFORE_LAYOUT) {
-    LOG_DBG("EHP", "Text block too long, splitting into multiple pages");
-    const int horizontalInset = self->currentTextBlock->getBlockStyle().totalHorizontalInset();
-    const uint16_t effectiveWidth = (horizontalInset < self->viewportWidth)
-                                        ? static_cast<uint16_t>(self->viewportWidth - horizontalInset)
-                                        : self->viewportWidth;
-    self->currentTextBlock->layoutAndExtractLines(
-        self->renderer, self->fontId, effectiveWidth,
-        [self](const std::shared_ptr<TextBlock>& textBlock) { self->addLineToPage(textBlock); }, false);
+  // This keeps memory bounded for chapters with very long XHTML text runs even when
+  // the text does not contain enough word boundaries to trip the word-count guard.
+  if (self->partWordBufferIndex > 0 &&
+      self->currentTextRunBytes + static_cast<uint16_t>(self->partWordBufferIndex) > MAX_TEXT_RUN_BYTES_BEFORE_LAYOUT) {
+    self->flushPartWordBuffer();
   }
+  self->flushLongTextRunIfNeeded();
 }
 
 void XMLCALL ChapterHtmlSlimParser::defaultHandlerExpand(void* userData, const XML_Char* s, const int len) {
