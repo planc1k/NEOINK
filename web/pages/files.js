@@ -1775,7 +1775,7 @@ function exportLogToFile(filename = null, isBatch = false) {
 
 /** Defensive CSS injected into every XHTML <head> — prevents e-ink overflow. */
 const DEFENSIVE_STYLE = '<style type="text/css">img,svg{max-width:100%;height:auto}body{overflow-wrap:break-word}table{max-width:100%;table-layout:fixed}pre,code{white-space:pre-wrap;word-wrap:break-word}*{box-sizing:border-box}</style>';
-const CROSSINK_LOCATION_MANIFEST_PATH = 'META-INF/crossink-locations.json';
+const CROSSINK_LOCATION_MANIFEST_PATH = 'META-INF/x-locations.json';
 const CROSSINK_LOCATION_WORDS_PER_UNIT = 64;
 const CROSSINK_REFERENCE_WORDS_PER_PAGE = 250;
 

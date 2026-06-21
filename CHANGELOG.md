@@ -16,6 +16,7 @@
 - The Epub reader menu now labels per-book reader settings as `Book Options` and avoids showing duplicate `Orientation` controls.
 - The `Inverted` sleep cover filter now flips Minimal and Reading Stats sleep screens to black text on a white background.
 - OTA update checks now use a stable CrossInk manifest endpoint that can point firmware downloads at S3-hosted release assets.
+- Optimized EPUBs now store location metadata at `META-INF/x-locations.json`.
 
 ### Fixed
 - Calibre Wireless transfer status no longer stacks the last received-file message on top of the upload percentage.

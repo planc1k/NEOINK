@@ -22,7 +22,7 @@
 
 namespace {
 constexpr int kDefaultThumbHeight = 180;
-constexpr char kCrossInkLocationsPath[] = "META-INF/crossink-locations.json";
+constexpr char kCrossInkLocationsPath[] = "META-INF/x-locations.json";
 constexpr size_t kCrossInkLocationsMaxBytes = 64 * 1024;
 constexpr uint32_t kDefaultReferenceWordsPerPage = 250;
 
