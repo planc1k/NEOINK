@@ -317,12 +317,16 @@ bool matchClipRunFromPageWord(const Page& page, const Clipping& clipping, const 
     return false;
   }
 
+  if (stoppedByMismatch) {
+    return false;
+  }
+
   // A relayout can split a saved clipping so this page starts mid-clipping.
-  // Accept complete runs, page-boundary partial runs, or longer mid-page runs.
+  // Accept complete runs or page-boundary partial runs.
   if (!reachedClipEnd && matchedTokens < minPartialMatch) {
     const bool startsAtClipBoundary = startClipToken == 0;
     const bool startsAtPageBoundary = startPageWord == 0;
-    if (stoppedByMismatch || (!startsAtClipBoundary && !startsAtPageBoundary)) {
+    if (!startsAtClipBoundary && !startsAtPageBoundary) {
       return false;
     }
   }
