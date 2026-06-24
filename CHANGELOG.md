@@ -7,6 +7,7 @@
 - EPUB text clipping with saved highlights, clipping lists, and Kindle-style `/My Clippings.txt` export.
 - `Create Clipping` is now available as a reader shortcut for short/long Power, long-press Menu, and long-press Back actions.
 - Per-book EPUB options for font, layout, styling, reading aids, and render modes, including `CrossInk Default`, `Balanced`, and `Light` modes for difficult books.
+- Arena allocator (`lib/Memory/Arena.h`) for burst-then-discard allocation patterns - reduces heap fragmentation during EPUB parsing and page layout over long reading sessions.
 
 ### Changed
 - The EPUB reader menu now splits the growing menu into 3 screens, labels per-book settings as `Book Options`, and avoids showing duplicate `Orientation` controls.
