@@ -393,9 +393,13 @@ void ChapterHtmlSlimParser::flushLongTextRunIfNeeded() {
   const int horizontalInset = currentTextBlock->getBlockStyle().totalHorizontalInset();
   const uint16_t effectiveWidth =
       (horizontalInset < viewportWidth) ? static_cast<uint16_t>(viewportWidth - horizontalInset) : viewportWidth;
-  currentTextBlock->layoutAndExtractLines(
-      renderer, fontId, effectiveWidth,
-      [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); }, false);
+  if (!currentTextBlock->layoutAndExtractLines(
+          renderer, fontId, effectiveWidth,
+          [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); }, false)) {
+    LOG_ERR("EHP", "Failed to lay out long text run");
+    lowMemoryAbort = true;
+    return;
+  }
   currentTextRunBytes = 0;
 }
 
@@ -680,9 +684,12 @@ void ChapterHtmlSlimParser::emitBufferedTableAsFragments(BufferedTable& table) {
       destCell.isHeader = sourceCell.isHeader;
 
       if (sourceCell.text) {
-        sourceCell.text->layoutAndExtractLines(
-            renderer, fontId, innerColumnWidth,
-            [&destCell](const std::shared_ptr<TextBlock>& textBlock) { destCell.lines.push_back(textBlock); });
+        if (!sourceCell.text->layoutAndExtractLines(
+                renderer, fontId, innerColumnWidth,
+                [&destCell](const std::shared_ptr<TextBlock>& textBlock) { destCell.lines.push_back(textBlock); })) {
+          LOG_DBG("EHP", "Table layout fallback: cell text layout failed");
+          return false;
+        }
       }
 
       for (const auto& [wordIndex, footnote] : sourceCell.footnotes) {
@@ -2451,9 +2458,13 @@ void ChapterHtmlSlimParser::makePages() {
   const uint16_t effectiveWidth =
       (horizontalInset < viewportWidth) ? static_cast<uint16_t>(viewportWidth - horizontalInset) : viewportWidth;
 
-  currentTextBlock->layoutAndExtractLines(
-      renderer, fontId, effectiveWidth,
-      [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); });
+  if (!currentTextBlock->layoutAndExtractLines(
+          renderer, fontId, effectiveWidth,
+          [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); })) {
+    LOG_ERR("EHP", "Failed to lay out text block");
+    lowMemoryAbort = true;
+    return;
+  }
   if (lowMemoryAbort) {
     return;
   }

@@ -1,6 +1,8 @@
 #include "CssParser.h"
 
 #include <Arduino.h>
+#include <Arena.h>
+#include <ArenaVector.h>
 #include <Logging.h>
 
 #include <algorithm>
@@ -1058,8 +1060,20 @@ bool CssParser::saveToCache(const bool complete) const {
   const auto ruleCount = static_cast<uint16_t>(rulesBySelector_.size());
   writeBytes(&ruleCount, sizeof(ruleCount));
 
-  std::vector<SelectorEntry> indexEntries;
-  indexEntries.reserve(ruleCount);
+  Arena indexArena;
+  if (!indexArena.init(4096)) {
+    LOG_ERR("CSS", "Failed to allocate selector index arena");
+    file.close();
+    Storage.remove(tmpPath.c_str());
+    return false;
+  }
+  ArenaVector<SelectorEntry> indexEntries(indexArena);
+  if (!indexEntries.reserve(ruleCount)) {
+    LOG_ERR("CSS", "Failed to reserve selector index (%u rules)", ruleCount);
+    file.close();
+    Storage.remove(tmpPath.c_str());
+    return false;
+  }
   const SelectorEntry zeroEntry{0, 0};
   for (uint16_t i = 0; i < ruleCount; ++i) {
     writeBytes(&zeroEntry, sizeof(zeroEntry));
@@ -1074,7 +1088,10 @@ bool CssParser::saveToCache(const bool complete) const {
       writeOk = false;
       break;
     }
-    indexEntries.push_back({selectorHash(pair.first), ruleOffset});
+    if (!indexEntries.push_back({selectorHash(pair.first), ruleOffset})) {
+      writeOk = false;
+      break;
+    }
   }
 
   // Write descendant rules: count, then (ancestorSelector, subjectSelector, CssStyle) per entry

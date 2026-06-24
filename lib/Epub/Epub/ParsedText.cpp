@@ -1,7 +1,10 @@
 #include "ParsedText.h"
 
+#include <Arena.h>
+#include <ArenaVector.h>
 #include <BidiUtils.h>
 #include <GfxRenderer.h>
+#include <Logging.h>
 #include <Utf8.h>
 
 #include <algorithm>
@@ -29,6 +32,7 @@ constexpr size_t MIN_JUSTIFY_GAPS = 1;
 constexpr char GUIDE_DOT_UTF8[] = "\xc2\xb7";
 constexpr uint32_t GUIDE_DOT_CODEPOINT = 0x00B7;
 constexpr size_t FOCUS_READING_PERCENT = 43;
+constexpr size_t LAYOUT_ARENA_SLAB_BYTES = 4096;
 
 bool mayContainRtlBytes(const char* str) {
   for (const auto* p = reinterpret_cast<const unsigned char*>(str); *p; ++p) {
@@ -586,11 +590,18 @@ int ParsedText::resolveFirstLineIndent(const bool isFirstLine, const GfxRenderer
 }
 
 // Consumes data to minimize memory usage
-void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fontId, const uint16_t viewportWidth,
+bool ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fontId, const uint16_t viewportWidth,
                                        const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
                                        const bool includeLastLine) {
   if (words.empty()) {
-    return;
+    return true;
+  }
+
+  Arena layoutArena;
+  if (!layoutArena.init(LAYOUT_ARENA_SLAB_BYTES)) {
+    LOG_ERR("PTX", "Failed to allocate layout scratch arena (%u bytes)",
+            static_cast<unsigned>(LAYOUT_ARENA_SLAB_BYTES));
+    return false;
   }
 
   if (!blockStyle.directionDefined && hasRtlWord) {
@@ -637,13 +648,19 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
     lineBreakIndices =
         computeHyphenatedLineBreaks(renderer, fontId, pageWidth, wordWidths, wordContinues, wordNoSpaceBefore);
   } else {
-    lineBreakIndices = computeLineBreaks(renderer, fontId, pageWidth, wordWidths, wordContinues, wordNoSpaceBefore);
+    lineBreakIndices =
+        computeLineBreaks(layoutArena, renderer, fontId, pageWidth, wordWidths, wordContinues, wordNoSpaceBefore);
+  }
+  if (lineBreakIndices.empty()) {
+    return false;
   }
   const size_t lineCount = includeLastLine ? lineBreakIndices.size() : lineBreakIndices.size() - 1;
 
   for (size_t i = 0; i < lineCount; ++i) {
-    extractLine(i, pageWidth, wordWidths, wordContinues, wordNoSpaceBefore, lineBreakIndices, processLine, renderer,
-                fontId);
+    if (!extractLine(layoutArena, i, pageWidth, wordWidths, wordContinues, wordNoSpaceBefore, lineBreakIndices,
+                     processLine, renderer, fontId)) {
+      return false;
+    }
   }
 
   // Remove consumed words so size() reflects only remaining words
@@ -657,6 +674,7 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
     wordGuideDotBefore.erase(wordGuideDotBefore.begin(), wordGuideDotBefore.begin() + consumed);
     wordBackgroundBlack.erase(wordBackgroundBlack.begin(), wordBackgroundBlack.begin() + consumed);
   }
+  return true;
 }
 
 std::vector<uint16_t> ParsedText::calculateWordWidths(const GfxRenderer& renderer, const int fontId) {
@@ -670,8 +688,9 @@ std::vector<uint16_t> ParsedText::calculateWordWidths(const GfxRenderer& rendere
   return wordWidths;
 }
 
-std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, const int fontId, const int pageWidth,
-                                                  std::vector<uint16_t>& wordWidths, std::vector<bool>& continuesVec,
+std::vector<size_t> ParsedText::computeLineBreaks(Arena& scratchArena, const GfxRenderer& renderer, const int fontId,
+                                                  const int pageWidth, std::vector<uint16_t>& wordWidths,
+                                                  std::vector<bool>& continuesVec,
                                                   std::vector<bool>& noSpaceBeforeVec) {
   if (words.empty()) {
     return {};
@@ -697,9 +716,13 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
   const size_t totalWordCount = words.size();
 
   // DP table to store the minimum badness (cost) of lines starting at index i
-  std::vector<int> dp(totalWordCount);
+  ArenaVector<int> dp(scratchArena);
   // 'ans[i]' stores the index 'j' of the *last word* in the optimal line starting at 'i'
-  std::vector<size_t> ans(totalWordCount);
+  ArenaVector<size_t> ans(scratchArena);
+  if (!dp.resize(totalWordCount) || !ans.resize(totalWordCount)) {
+    LOG_ERR("PTX", "OOM allocating line-break scratch (%u words)", static_cast<unsigned>(totalWordCount));
+    return {};
+  }
 
   // Base Case
   dp[totalWordCount - 1] = 0;
@@ -1024,9 +1047,9 @@ bool ParsedText::splitPathologicalTokenAtIndex(const size_t wordIndex, const int
   return true;
 }
 
-void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const std::vector<uint16_t>& wordWidths,
-                             const std::vector<bool>& continuesVec, const std::vector<bool>& noSpaceBeforeVec,
-                             const std::vector<size_t>& lineBreakIndices,
+bool ParsedText::extractLine(Arena& scratchArena, const size_t breakIndex, const int pageWidth,
+                             const std::vector<uint16_t>& wordWidths, const std::vector<bool>& continuesVec,
+                             const std::vector<bool>& noSpaceBeforeVec, const std::vector<size_t>& lineBreakIndices,
                              const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
                              const GfxRenderer& renderer, const int fontId) {
   const size_t lineBreak = lineBreakIndices[breakIndex];
@@ -1102,8 +1125,11 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   const bool willReorder =
       shouldResolveVisualOrder && BidiUtils::computeVisualWordOrder(lineWords, blockStyle.isRtl, visualOrderScratch);
 
-  std::vector<int16_t> lineXPos;
-  lineXPos.reserve(lineWordCount);
+  ArenaVector<int16_t> lineXPos(scratchArena);
+  if (!lineXPos.reserve(lineWordCount)) {
+    LOG_ERR("PTX", "OOM allocating line x-position scratch (%u words)", static_cast<unsigned>(lineWordCount));
+    return false;
+  }
   int activeJustifyExtra = justifyExtra;
 
   if (willReorder) {
@@ -1196,7 +1222,10 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     }
 
     for (size_t wordIdx = 0; wordIdx < reorderedWidthsScratch.size(); ++wordIdx) {
-      lineXPos.push_back(static_cast<int16_t>(xpos));
+      if (!lineXPos.push_back(static_cast<int16_t>(xpos))) {
+        LOG_ERR("PTX", "OOM growing RTL line x-position scratch");
+        return false;
+      }
       xpos += reorderedWidthsScratch[wordIdx];
 
       if (wordIdx + 1 < reorderedWidthsScratch.size()) {
@@ -1234,7 +1263,10 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
 
       for (size_t wordIdx = 0; wordIdx < lineWordCount; ++wordIdx) {
         xpos -= lineWordWidths[wordIdx];
-        lineXPos.push_back(static_cast<int16_t>(xpos));
+        if (!lineXPos.push_back(static_cast<int16_t>(xpos))) {
+          LOG_ERR("PTX", "OOM growing line x-position scratch");
+          return false;
+        }
 
         if (wordIdx + 1 < lineWordCount) {
           const bool nextContinues = continuesVec[lastBreakAt + wordIdx + 1];
@@ -1257,7 +1289,10 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
       }
 
       for (size_t wordIdx = 0; wordIdx < lineWordCount; ++wordIdx) {
-        lineXPos.push_back(static_cast<int16_t>(xpos));
+        if (!lineXPos.push_back(static_cast<int16_t>(xpos))) {
+          LOG_ERR("PTX", "OOM growing line x-position scratch");
+          return false;
+        }
 
         int gap = 0;
         if (wordIdx + 1 < lineWordCount) {
@@ -1341,4 +1376,5 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   processLine(std::make_shared<TextBlock>(std::move(outWords), std::move(outXPos), std::move(outStyles),
                                           std::move(outBoundaries), std::move(outSuffixX),
                                           std::move(outGuideDotXOffset), std::move(outBackgroundBlack), blockStyle));
+  return true;
 }
