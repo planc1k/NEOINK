@@ -22,7 +22,6 @@
 - EPUB low-memory layout errors now suggest turning off Bionic Reading or Guide Dots when either reading aid is adding memory pressure.
 - EPUB next-chapter pre-indexing now uses the same render-mode fallbacks as visible chapter loading when layout runs low on memory.
 - EPUB reader font-size changes now restore the current chapter position by content instead of jumping far backward after re-indexing.
-- EPUB clipping highlights now stay visible after changing reader font size.
 - Reading Stats now use the reader's last live book time-left estimate instead of showing a separate fallback estimate.
 - Per-book reading stats now migrate compatible legacy `stats.bin` files into the `stats_v5.bin` flow instead of resetting when only the old filename exists.
 - Lyra Carousel Home menu rendering now avoids extra label allocations that could crash tiny builds under low memory.
