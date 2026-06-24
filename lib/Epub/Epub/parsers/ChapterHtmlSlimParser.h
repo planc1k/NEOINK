@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Arena.h>
 #include <expat.h>
 
 #include <climits>
@@ -27,6 +28,8 @@ class ChapterHtmlSlimParser {
   static constexpr uint16_t MAX_SIMPLE_TABLE_CELLS = 64;
   static constexpr uint16_t MAX_SIMPLE_TABLE_CELL_WORDS = 160;
   static constexpr uint8_t TABLE_CELL_PADDING = 6;
+  static constexpr size_t MAX_INLINE_STYLE_DEPTH = 64;
+  static constexpr size_t MAX_BLOCK_STYLE_DEPTH = 16;
 
   std::shared_ptr<Epub> epub;
   const std::string& filepath;
@@ -83,8 +86,14 @@ class ChapterHtmlSlimParser {
     bool hasSup = false, sup = false;
     bool hasSub = false, sub = false;
   };
-  std::vector<StyleStackEntry> inlineStyleStack;
-  std::vector<BlockStyle> blockStyleStack;  // accumulated block styles from open ancestor elements
+  // Arena-backed style stacks. Initialized in parseAndBuildPages(); pointers are
+  // null before and after each parse. StyleStackEntry and BlockStyle are trivially
+  // destructible, so clear() on the arena is sufficient cleanup.
+  Arena parseArena_;
+  StyleStackEntry* inlineStyleBuf_ = nullptr;
+  size_t inlineStyleCount_ = 0;
+  BlockStyle* blockStyleBuf_ = nullptr;
+  size_t blockStyleCount_ = 0;
   CssStyle currentCssStyle;
   bool effectiveBold = false;
   bool effectiveItalic = false;

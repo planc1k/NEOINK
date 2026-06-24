@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Logging.h>
+
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -52,6 +53,7 @@ struct Arena {
   size_t slabSize = 0;
 
   Arena() = default;
+  ~Arena() { release(); }
   Arena(const Arena&) = delete;
   Arena& operator=(const Arena&) = delete;
 
@@ -113,9 +115,7 @@ struct Arena {
   }
 
   // Save current position for scratch (temporary) use.
-  ArenaCheckpoint save() const {
-    return {current, current ? current->offset : 0};
-  }
+  ArenaCheckpoint save() const { return {current, current ? current->offset : 0}; }
 
   // Restore to a previously saved checkpoint. Frees any slabs allocated
   // after the checkpoint slab. Must be used in LIFO order.

@@ -26,6 +26,8 @@
 // Minimum file size (in bytes) to show indexing popup - smaller chapters don't benefit from it
 constexpr size_t MIN_SIZE_FOR_POPUP = 10 * 1024;  // 10KB
 constexpr size_t PARSE_BUFFER_SIZE = 1024;
+// Initial slab for the parse arena. Covers both style stacks (~2 KB) with headroom for growth.
+constexpr size_t PARSE_ARENA_SLAB_SIZE = 4 * 1024;
 constexpr size_t IMAGE_EXTRACT_CHUNK_SIZE = 1024;
 constexpr uint32_t MIN_FREE_HEAP_FOR_TEXT_LAYOUT = 44 * 1024;
 constexpr uint32_t MIN_MAX_ALLOC_FOR_TEXT_LAYOUT = 32 * 1024;
@@ -170,7 +172,8 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
   effectiveSub = currentCssStyle.hasVerticalAlign() && currentCssStyle.verticalAlign == CssVerticalAlign::Sub;
 
   // Apply inline style stack in order
-  for (const auto& entry : inlineStyleStack) {
+  for (size_t i = 0; i < inlineStyleCount_; ++i) {
+    const auto& entry = inlineStyleBuf_[i];
     if (entry.hasBold) {
       effectiveBold = entry.bold;
     }
@@ -1140,7 +1143,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         headerStyle.backgroundBlack = cssStyle.backgroundBlack;
       }
       ChapterHtmlSlimParser::applyDirectionToEntry(headerStyle, cssStyle);
-      self->inlineStyleStack.push_back(headerStyle);
+      if (self->inlineStyleCount_ < MAX_INLINE_STYLE_DEPTH) {
+        self->inlineStyleBuf_[self->inlineStyleCount_++] = headerStyle;
+      } else {
+        LOG_ERR("EHP", "inline style stack overflow (table header)");
+      }
       self->updateEffectiveInlineStyle();
     }
     self->startNewTextBlock(tableCellBlockStyle);
@@ -1410,8 +1417,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                   if (self->currentTextBlock && self->currentTextBlock->isEmpty()) {
                     const auto& bs = self->currentTextBlock->getBlockStyle();
                     imageMarginTop = bs.topInset();
-                    if (self->blockStyleStack.size() > 1) {
-                      imageMarginBottom = self->blockStyleStack.back().bottomInset();
+                    if (self->blockStyleCount_ > 1) {
+                      imageMarginBottom = self->blockStyleBuf_[self->blockStyleCount_ - 1].bottomInset();
                     }
                   }
 
@@ -1452,7 +1459,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                   self->currentPageNextY += displayHeight + imageMarginBottom;
 
                   if (self->currentTextBlock && self->currentTextBlock->isEmpty()) {
-                    self->currentTextBlock->setBlockStyle(self->blockStyleStack.back().withoutBottom());
+                    self->currentTextBlock->setBlockStyle(
+                        self->blockStyleBuf_[self->blockStyleCount_ - 1].withoutBottom());
                   }
 
                   self->pushCssAncestor(self->depth, name, classAttr);
@@ -1482,7 +1490,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       // Fallback to alt text if image processing fails
       if (!alt.empty()) {
         alt = "[Image: " + alt + "]";
-        self->startNewTextBlock(self->blockStyleStack.back()
+        self->startNewTextBlock(self->blockStyleBuf_[self->blockStyleCount_ - 1]
                                     .getCombinedBlockStyle(centeredBlockStyle, BlockStyle::CombineAxis::Horizontal)
                                     .withoutBottom());
         self->italicUntilDepth = std::min(self->italicUntilDepth, self->depth);
@@ -1545,7 +1553,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         entry.backgroundBlack = cssStyle.backgroundBlack;
       }
       applyDirectionToEntry(entry, cssStyle);
-      self->inlineStyleStack.push_back(entry);
+      if (self->inlineStyleCount_ < MAX_INLINE_STYLE_DEPTH) {
+        self->inlineStyleBuf_[self->inlineStyleCount_++] = entry;
+      } else {
+        LOG_ERR("EHP", "inline style stack overflow (anchor)");
+      }
       self->updateEffectiveInlineStyle();
 
       // Skip CSS resolution — we already handled styling for this <a> tag
@@ -1626,9 +1638,13 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     if (!self->embeddedStyle || self->isLightMode()) {
       stripPublisherSpacing(headerBlockStyle);
     }
-    const auto accumulated =
-        self->blockStyleStack.back().getCombinedBlockStyle(headerBlockStyle, BlockStyle::CombineAxis::Horizontal);
-    self->blockStyleStack.push_back(accumulated);
+    const auto accumulated = self->blockStyleBuf_[self->blockStyleCount_ - 1].getCombinedBlockStyle(
+        headerBlockStyle, BlockStyle::CombineAxis::Horizontal);
+    if (self->blockStyleCount_ < MAX_BLOCK_STYLE_DEPTH) {
+      self->blockStyleBuf_[self->blockStyleCount_++] = accumulated;
+    } else {
+      LOG_ERR("EHP", "block style stack overflow (header)");
+    }
     self->startNewTextBlock(accumulated.withoutBottom());
     self->boldUntilDepth = std::min(self->boldUntilDepth, self->depth);
     self->updateEffectiveInlineStyle();
@@ -1642,7 +1658,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       // the block remains empty (i.e. <br> is a section separator between paragraphs).
       // If the block gets text added before the next block opens it becomes non-empty,
       // goes through makePages() normally, and the flag has no effect (inline <br> case).
-      BlockStyle brStyle = self->blockStyleStack.back().withoutBottom();
+      BlockStyle brStyle = self->blockStyleBuf_[self->blockStyleCount_ - 1].withoutBottom();
       if (self->currentTextBlock) {
         brStyle = self->currentTextBlock->getBlockStyle();
       }
@@ -1650,9 +1666,13 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       self->startNewTextBlock(brStyle);
     } else {
       self->currentCssStyle = cssStyle;
-      const auto accumulated = self->blockStyleStack.back().getCombinedBlockStyle(userAlignmentBlockStyle,
-                                                                                  BlockStyle::CombineAxis::Horizontal);
-      self->blockStyleStack.push_back(accumulated);
+      const auto accumulated = self->blockStyleBuf_[self->blockStyleCount_ - 1].getCombinedBlockStyle(
+          userAlignmentBlockStyle, BlockStyle::CombineAxis::Horizontal);
+      if (self->blockStyleCount_ < MAX_BLOCK_STYLE_DEPTH) {
+        self->blockStyleBuf_[self->blockStyleCount_++] = accumulated;
+      } else {
+        LOG_ERR("EHP", "block style stack overflow (block)");
+      }
       // Common EPUB shape: <li><p>text</p></li>. Keep the first paragraph in the marker block
       // so the auto bullet does not become its own orphaned paragraph.
       const bool reuseListMarkerBlock = strcmp(name, "p") == 0 && self->pendingListMarkerDepth >= 0 &&
@@ -1698,7 +1718,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       entry.backgroundBlack = cssStyle.backgroundBlack;
     }
     applyDirectionToEntry(entry, cssStyle);
-    self->inlineStyleStack.push_back(entry);
+    if (self->inlineStyleCount_ < MAX_INLINE_STYLE_DEPTH) {
+      self->inlineStyleBuf_[self->inlineStyleCount_++] = entry;
+    } else {
+      LOG_ERR("EHP", "inline style stack overflow (underline)");
+    }
     self->updateEffectiveInlineStyle();
   } else if (matches(name, STRIKETHROUGH_TAGS, std::size(STRIKETHROUGH_TAGS))) {
     // Flush buffer before style change so preceding text gets current style
@@ -1725,7 +1749,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       entry.backgroundBlack = cssStyle.backgroundBlack;
     }
     applyDirectionToEntry(entry, cssStyle);
-    self->inlineStyleStack.push_back(entry);
+    if (self->inlineStyleCount_ < MAX_INLINE_STYLE_DEPTH) {
+      self->inlineStyleBuf_[self->inlineStyleCount_++] = entry;
+    } else {
+      LOG_ERR("EHP", "inline style stack overflow (strikethrough)");
+    }
     self->updateEffectiveInlineStyle();
   } else if (matches(name, BOLD_TAGS, std::size(BOLD_TAGS))) {
     // Flush buffer before style change so preceding text gets current style
@@ -1754,7 +1782,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       entry.backgroundBlack = cssStyle.backgroundBlack;
     }
     applyDirectionToEntry(entry, cssStyle);
-    self->inlineStyleStack.push_back(entry);
+    if (self->inlineStyleCount_ < MAX_INLINE_STYLE_DEPTH) {
+      self->inlineStyleBuf_[self->inlineStyleCount_++] = entry;
+    } else {
+      LOG_ERR("EHP", "inline style stack overflow (bold)");
+    }
     self->updateEffectiveInlineStyle();
   } else if (matches(name, ITALIC_TAGS, std::size(ITALIC_TAGS))) {
     // Flush buffer before style change so preceding text gets current style
@@ -1783,7 +1815,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       entry.backgroundBlack = cssStyle.backgroundBlack;
     }
     applyDirectionToEntry(entry, cssStyle);
-    self->inlineStyleStack.push_back(entry);
+    if (self->inlineStyleCount_ < MAX_INLINE_STYLE_DEPTH) {
+      self->inlineStyleBuf_[self->inlineStyleCount_++] = entry;
+    } else {
+      LOG_ERR("EHP", "inline style stack overflow (italic)");
+    }
     self->updateEffectiveInlineStyle();
   } else if (strcmp(name, "sup") == 0 || strcmp(name, "sub") == 0) {
     if (self->partWordBufferIndex > 0) {
@@ -1800,7 +1836,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       entry.sub = true;
     }
     ChapterHtmlSlimParser::applyDirectionToEntry(entry, cssStyle);
-    self->inlineStyleStack.push_back(entry);
+    if (self->inlineStyleCount_ < MAX_INLINE_STYLE_DEPTH) {
+      self->inlineStyleBuf_[self->inlineStyleCount_++] = entry;
+    } else {
+      LOG_ERR("EHP", "inline style stack overflow (sup/sub)");
+    }
     self->updateEffectiveInlineStyle();
   } else if (strcmp(name, "span") == 0 || !isHeaderOrBlock(name)) {
     // Handle span and other inline elements for CSS styling
@@ -1842,7 +1882,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         }
       }
       ChapterHtmlSlimParser::applyDirectionToEntry(entry, cssStyle);
-      self->inlineStyleStack.push_back(entry);
+      if (self->inlineStyleCount_ < MAX_INLINE_STYLE_DEPTH) {
+        self->inlineStyleBuf_[self->inlineStyleCount_++] = entry;
+      } else {
+        LOG_ERR("EHP", "inline style stack overflow (span/inline)");
+      }
       self->updateEffectiveInlineStyle();
     }
   }
@@ -2054,7 +2098,7 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   // If so, we MUST flush the partWordBuffer with the CURRENT style first
   // Note: depth hasn't been decremented yet, so we check against (depth - 1)
   const bool willPopStyleStack =
-      !self->inlineStyleStack.empty() && self->inlineStyleStack.back().depth == self->depth - 1;
+      self->inlineStyleCount_ > 0 && self->inlineStyleBuf_[self->inlineStyleCount_ - 1].depth == self->depth - 1;
   const bool willClearBold = self->boldUntilDepth == self->depth - 1;
   const bool willClearItalic = self->italicUntilDepth == self->depth - 1;
   const bool willClearUnderline = self->underlineUntilDepth == self->depth - 1;
@@ -2170,8 +2214,8 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
 
   // Pop from inline style stack if we pushed an entry at this depth
   // This handles all inline elements: b, i, u, span, etc.
-  if (!self->inlineStyleStack.empty() && self->inlineStyleStack.back().depth == self->depth) {
-    self->inlineStyleStack.pop_back();
+  if (self->inlineStyleCount_ > 0 && self->inlineStyleBuf_[self->inlineStyleCount_ - 1].depth == self->depth) {
+    self->inlineStyleCount_--;
     self->updateEffectiveInlineStyle();
   }
 
@@ -2181,15 +2225,15 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     self->updateEffectiveInlineStyle();
 
     // br is self-closing and not a container — it doesn't push/pop the stack.
-    if (strcmp(name, "br") != 0 && self->blockStyleStack.size() > 1) {
+    if (strcmp(name, "br") != 0 && self->blockStyleCount_ > 1) {
       // Apply closing element's bottom margin to the current text block so
       // container spacing appears after the element's content (on the last child),
       // not on the first child via the empty-block merge in startNewTextBlock.
       if (self->currentTextBlock) {
         const auto style = self->currentTextBlock->getBlockStyle();
-        self->currentTextBlock->setBlockStyle(style.addBottom(self->blockStyleStack.back()));
+        self->currentTextBlock->setBlockStyle(style.addBottom(self->blockStyleBuf_[self->blockStyleCount_ - 1]));
       }
-      self->blockStyleStack.pop_back();
+      self->blockStyleCount_--;
     }
   }
 }
@@ -2202,9 +2246,20 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   rootBlockStyle.alignment = (this->paragraphAlignment == static_cast<uint8_t>(CssTextAlign::None))
                                  ? CssTextAlign::Justify
                                  : static_cast<CssTextAlign>(this->paragraphAlignment);
-  blockStyleStack.clear();
-  blockStyleStack.reserve(8);
-  blockStyleStack.push_back(rootBlockStyle);
+  if (!parseArena_.init(PARSE_ARENA_SLAB_SIZE)) {
+    LOG_ERR("EHP", "Failed to init parse arena");
+    return false;
+  }
+  inlineStyleBuf_ = arenaNewArray<StyleStackEntry>(parseArena_, MAX_INLINE_STYLE_DEPTH);
+  blockStyleBuf_ = arenaNewArray<BlockStyle>(parseArena_, MAX_BLOCK_STYLE_DEPTH);
+  if (!inlineStyleBuf_ || !blockStyleBuf_) {
+    LOG_ERR("EHP", "Parse arena OOM for style stacks");
+    parseArena_.release();
+    return false;
+  }
+  inlineStyleCount_ = 0;
+  blockStyleCount_ = 0;
+  blockStyleBuf_[blockStyleCount_++] = rootBlockStyle;
 
   auto paragraphAlignmentBlockStyle = BlockStyle();
   paragraphAlignmentBlockStyle.textAlignDefined = true;
@@ -2307,6 +2362,11 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
     currentPage.reset();
     currentTextBlock.reset();
   }
+
+  LOG_DBG("EHP", "Parse arena used %u bytes", (unsigned)parseArena_.used());
+  parseArena_.release();
+  inlineStyleBuf_ = nullptr;
+  blockStyleBuf_ = nullptr;
 
   return true;
 }
