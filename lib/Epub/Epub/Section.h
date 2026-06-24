@@ -10,6 +10,13 @@
 class Page;
 class GfxRenderer;
 
+struct SectionBuildOptions {
+  const char* previewAnchor = nullptr;
+  uint16_t previewMaxPages = 0;
+
+  bool isPreview() const { return previewAnchor && previewAnchor[0] != '\0' && previewMaxPages > 0; }
+};
+
 class Section {
   std::shared_ptr<Epub> epub;
   const int spineIndex;
@@ -45,7 +52,8 @@ class Section {
                          bool hyphenationEnabled, bool embeddedStyle, uint8_t imageRendering, bool bionicReadingEnabled,
                          bool guideReadingEnabled, const std::function<void()>& popupFn = nullptr,
                          bool* imagesWereSuppressed = nullptr, bool* layoutAbortedForLowMemory = nullptr,
-                         EpubRenderMode renderMode = EpubRenderMode::CrossInkDefault);
+                         EpubRenderMode renderMode = EpubRenderMode::CrossInkDefault,
+                         SectionBuildOptions buildOptions = {});
   std::unique_ptr<Page> loadPageFromSectionFile();
 
   // Look up the page number for an anchor id from the section cache file.

@@ -270,6 +270,10 @@ void ChapterHtmlSlimParser::flushPendingAnchor() {
     if (currentPage && !currentPage->elements.empty()) {
       completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
       completedPageCount++;
+      stopPreviewIfPageLimitReached();
+      if (previewStopRequested) {
+        return;
+      }
       if (!startNewPage("TOC anchor page break")) {
         return;
       }
@@ -279,6 +283,48 @@ void ChapterHtmlSlimParser::flushPendingAnchor() {
   // Record deferred anchor after previous block is flushed (and any TOC page break)
   anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
   pendingAnchorId.clear();
+}
+
+bool ChapterHtmlSlimParser::handlePreviewScanStart(const XML_Char** atts) {
+  const char* idValue = getAttribute(atts, "id");
+  if (!idValue || strcmp(idValue, previewAnchor.c_str()) != 0) {
+    depth += 1;
+    return true;
+  }
+
+  startPreviewAtAnchor();
+  return false;
+}
+
+void ChapterHtmlSlimParser::startPreviewAtAnchor() {
+  previewAnchorFound = true;
+  completedPageCount = 0;
+  currentPageNextY = 0;
+  pendingAnchorId.clear();
+  anchorData.clear();
+  anchorData.push_back({previewAnchor, 0});
+
+  if (!currentTextBlock) {
+    auto paragraphAlignmentBlockStyle = BlockStyle();
+    paragraphAlignmentBlockStyle.textAlignDefined = true;
+    paragraphAlignmentBlockStyle.alignment = (paragraphAlignment == static_cast<uint8_t>(CssTextAlign::None))
+                                                 ? CssTextAlign::Justify
+                                                 : static_cast<CssTextAlign>(paragraphAlignment);
+    startNewTextBlock(paragraphAlignmentBlockStyle);
+  }
+  LOG_DBG("EHP", "Started preview at anchor '%s'", previewAnchor.c_str());
+}
+
+void ChapterHtmlSlimParser::stopPreviewIfPageLimitReached() {
+  if (!isPreviewBuild() || !previewAnchorFound || previewStopRequested || completedPageCount < previewMaxPages) {
+    return;
+  }
+
+  previewStopRequested = true;
+  if (activeParser) {
+    XML_StopParser(activeParser, XML_TRUE);
+  }
+  LOG_DBG("EHP", "Stopping preview after %u pages for anchor '%s'", previewMaxPages, previewAnchor.c_str());
 }
 
 void ChapterHtmlSlimParser::addPendingPublisherPageMarker(const char* label) {
@@ -547,6 +593,10 @@ void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
   if (!currentPage->elements.empty() && currentPageNextY + totalHeight > viewportHeight) {
     completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
     completedPageCount++;
+    stopPreviewIfPageLimitReached();
+    if (previewStopRequested) {
+      return;
+    }
     if (!startNewPage("horizontal-rule page break")) {
       return;
     }
@@ -775,6 +825,10 @@ void ChapterHtmlSlimParser::emitBufferedTableAsFragments(BufferedTable& table) {
         if (fragmentRows.empty() && currentPageNextY + nextHeight > viewportHeight && !currentPage->elements.empty()) {
           completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
           completedPageCount++;
+          stopPreviewIfPageLimitReached();
+          if (previewStopRequested) {
+            return;
+          }
           if (!startNewPage("table fragment page break")) {
             return;
           }
@@ -807,6 +861,10 @@ void ChapterHtmlSlimParser::emitBufferedTableAsFragments(BufferedTable& table) {
       if (nextRowIndex < segment.rows.size()) {
         completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
         completedPageCount++;
+        stopPreviewIfPageLimitReached();
+        if (previewStopRequested) {
+          return;
+        }
         if (!startNewPage("table fragment split")) {
           return;
         }
@@ -894,6 +952,14 @@ void ChapterHtmlSlimParser::fallbackCurrentTableBufferIfNeeded(const char* stage
 
 void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
   auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
+  if (self->isScanningForPreviewAnchor()) {
+    if (self->handlePreviewScanStart(atts)) {
+      return;
+    }
+  }
+  if (self->previewStopRequested) {
+    return;
+  }
   if (self->shouldAbortForLowMemory("element start")) {
     return;
   }
@@ -922,6 +988,10 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       } else if (strcmp(atts[i], "style") == 0) {
         styleAttr = atts[i + 1];
       } else if (strcmp(atts[i], "id") == 0) {
+        if (self->isPreviewBuild() && self->previewAnchorFound &&
+            strcmp(atts[i + 1], self->previewAnchor.c_str()) == 0) {
+          continue;
+        }
         // Defer both anchor recording and TOC page breaks until startNewTextBlock,
         // after the previous block is flushed to pages via makePages().
         const char* idValue = atts[i + 1];
@@ -1444,6 +1514,10 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                     self->completePageFn(std::move(self->currentPage), self->xpathParagraphIndex,
                                          self->xpathListItemIndex);
                     self->completedPageCount++;
+                    self->stopPreviewIfPageLimitReached();
+                    if (self->previewStopRequested) {
+                      return;
+                    }
                     if (!self->startNewPage("image page break")) {
                       return;
                     }
@@ -1639,6 +1713,10 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     if (self->currentPage && !self->currentPage->elements.empty()) {
       self->completePageFn(std::move(self->currentPage), self->xpathParagraphIndex, self->xpathListItemIndex);
       self->completedPageCount++;
+      self->stopPreviewIfPageLimitReached();
+      if (self->previewStopRequested) {
+        return;
+      }
       self->currentPageNextY = 0;
     }
   }
@@ -1913,6 +1991,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 
 void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char* s, const int len) {
   auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
+  if (self->isScanningForPreviewAnchor() || self->previewStopRequested) {
+    return;
+  }
   if (self->tableDepth == 1) {
     self->fallbackCurrentTableBufferIfNeeded("low heap while buffering table");
   }
@@ -2079,6 +2160,10 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
 }
 
 void XMLCALL ChapterHtmlSlimParser::defaultHandlerExpand(void* userData, const XML_Char* s, const int len) {
+  auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
+  if (self->isScanningForPreviewAnchor() || self->previewStopRequested) {
+    return;
+  }
   // Check if this looks like an entity reference (&...;)
   if (len >= 3 && s[0] == '&' && s[len - 1] == ';') {
     const char* utf8Value = lookupHtmlEntity(s, static_cast<size_t>(len));
@@ -2096,6 +2181,15 @@ void XMLCALL ChapterHtmlSlimParser::defaultHandlerExpand(void* userData, const X
 
 void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* name) {
   auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
+  if (self->isScanningForPreviewAnchor()) {
+    if (self->depth > 0) {
+      self->depth -= 1;
+    }
+    return;
+  }
+  if (self->previewStopRequested) {
+    return;
+  }
   if (self->lowMemoryAbort) {
     return;
   }
@@ -2280,19 +2374,25 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   paragraphAlignmentBlockStyle.textAlignDefined = true;
   const auto align = rootBlockStyle.alignment;
   paragraphAlignmentBlockStyle.alignment = align;
-  startNewTextBlock(paragraphAlignmentBlockStyle);
+  if (!isPreviewBuild()) {
+    startNewTextBlock(paragraphAlignmentBlockStyle);
+  }
 
   if (!usesSimpleCssLookup()) {
     ancestorStack_.reserve(32);
   }
 
   XML_Parser parser = XML_ParserCreate(nullptr);
-  int done;
+  int done = 0;
 
   if (!parser) {
     LOG_ERR("EHP", "Couldn't allocate memory for parser");
+    parseArena_.release();
+    inlineStyleBuf_ = nullptr;
+    blockStyleBuf_ = nullptr;
     return false;
   }
+  activeParser = parser;
 
   // Handle HTML entities (like &nbsp;) that aren't in XML spec or DTD
   // Using DefaultHandlerExpand preserves normal entity expansion from DOCTYPE
@@ -2301,6 +2401,10 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   FsFile file;
   if (!Storage.openFileForRead("EHP", filepath, file)) {
     destroyXmlParser(parser);
+    activeParser = nullptr;
+    parseArena_.release();
+    inlineStyleBuf_ = nullptr;
+    blockStyleBuf_ = nullptr;
     return false;
   }
 
@@ -2320,7 +2424,11 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
     if (!buf) {
       LOG_ERR("EHP", "Couldn't allocate memory for buffer");
       destroyXmlParser(parser);
+      activeParser = nullptr;
       file.close();
+      parseArena_.release();
+      inlineStyleBuf_ = nullptr;
+      blockStyleBuf_ = nullptr;
       return false;
     }
 
@@ -2329,24 +2437,40 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
     if (len == 0 && file.available() > 0) {
       LOG_ERR("EHP", "File read error");
       destroyXmlParser(parser);
+      activeParser = nullptr;
       file.close();
+      parseArena_.release();
+      inlineStyleBuf_ = nullptr;
+      blockStyleBuf_ = nullptr;
       return false;
     }
 
     done = file.available() == 0;
 
-    if (XML_ParseBuffer(parser, static_cast<int>(len), done) == XML_STATUS_ERROR) {
+    const XML_Status parseStatus = XML_ParseBuffer(parser, static_cast<int>(len), done);
+    if (parseStatus == XML_STATUS_ERROR && !previewStopRequested) {
       LOG_ERR("EHP", "Parse error at line %lu:\n%s", XML_GetCurrentLineNumber(parser),
               XML_ErrorString(XML_GetErrorCode(parser)));
       destroyXmlParser(parser);
+      activeParser = nullptr;
       file.close();
+      parseArena_.release();
+      inlineStyleBuf_ = nullptr;
+      blockStyleBuf_ = nullptr;
       return false;
+    }
+    if (previewStopRequested || parseStatus == XML_STATUS_SUSPENDED) {
+      done = true;
     }
 
     if (lowMemoryAbort) {
       LOG_ERR("EHP", "Aborting section parse due to low heap");
       destroyXmlParser(parser);
+      activeParser = nullptr;
       file.close();
+      parseArena_.release();
+      inlineStyleBuf_ = nullptr;
+      blockStyleBuf_ = nullptr;
       return false;
     }
 
@@ -2355,10 +2479,19 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
           ESP.getFreeHeap(), ESP.getMaxAllocHeap());
 
   destroyXmlParser(parser);
+  activeParser = nullptr;
   file.close();
 
   // Process last page if there is still text
-  if (currentTextBlock) {
+  if (isPreviewBuild() && !previewAnchorFound) {
+    LOG_ERR("EHP", "Preview anchor '%s' was not found", previewAnchor.c_str());
+    parseArena_.release();
+    inlineStyleBuf_ = nullptr;
+    blockStyleBuf_ = nullptr;
+    return false;
+  }
+
+  if (currentTextBlock && !previewStopRequested) {
     if (shouldAbortForLowMemory("final page layout")) {
       return false;
     }
@@ -2373,6 +2506,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
     if (currentPage && !currentPage->elements.empty()) {
       completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
       completedPageCount++;
+      stopPreviewIfPageLimitReached();
     }
     currentPage.reset();
     currentTextBlock.reset();
@@ -2402,6 +2536,10 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
   if (currentPageNextY + lineHeight > viewportHeight) {
     completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
     completedPageCount++;
+    stopPreviewIfPageLimitReached();
+    if (previewStopRequested) {
+      return;
+    }
     if (!startNewPage("line page break")) {
       return;
     }
@@ -2496,6 +2634,10 @@ void ChapterHtmlSlimParser::makePages() {
   if (blockStyle.pageBreakAfter && currentPage && !currentPage->elements.empty()) {
     completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
     completedPageCount++;
+    stopPreviewIfPageLimitReached();
+    if (previewStopRequested) {
+      return;
+    }
     currentPageNextY = 0;
   }
 }

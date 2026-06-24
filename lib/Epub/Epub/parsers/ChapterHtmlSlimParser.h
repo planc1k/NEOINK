@@ -72,6 +72,11 @@ class ChapterHtmlSlimParser {
   bool lowMemoryAbort = false;
   bool attemptedTextLayoutFontCacheRelease = false;
   EpubRenderMode renderMode = EpubRenderMode::CrossInkDefault;
+  std::string previewAnchor;
+  uint16_t previewMaxPages = 0;
+  bool previewAnchorFound = false;
+  bool previewStopRequested = false;
+  XML_Parser activeParser = nullptr;
 
   // Style tracking (replaces depth-based approach)
   struct StyleStackEntry {
@@ -173,6 +178,11 @@ class ChapterHtmlSlimParser {
   uint16_t textRunBytesBeforeLayoutLimit() const;
   void makePages();
   int effectiveLineHeight() const;
+  bool isPreviewBuild() const { return !previewAnchor.empty() && previewMaxPages > 0; }
+  bool isScanningForPreviewAnchor() const { return isPreviewBuild() && !previewAnchorFound; }
+  bool handlePreviewScanStart(const XML_Char** atts);
+  void startPreviewAtAnchor();
+  void stopPreviewIfPageLimitReached();
   bool usesSimpleCssLookup() const { return renderMode != EpubRenderMode::CrossInkDefault; }
   bool flattensTables() const { return renderMode != EpubRenderMode::CrossInkDefault; }
   bool isLightMode() const { return renderMode == EpubRenderMode::Light; }
@@ -201,7 +211,8 @@ class ChapterHtmlSlimParser {
       const std::function<void(std::unique_ptr<Page>, uint16_t, uint16_t)>& completePageFn, const bool embeddedStyle,
       const std::string& contentBase, const std::string& imageBasePath, const uint8_t imageRendering = 0,
       std::vector<std::string> tocAnchors = {}, const std::function<void()>& popupFn = nullptr,
-      CssParser* cssParser = nullptr, const EpubRenderMode renderMode = EpubRenderMode::CrossInkDefault)
+      CssParser* cssParser = nullptr, const EpubRenderMode renderMode = EpubRenderMode::CrossInkDefault,
+      std::string previewAnchor = {}, const uint16_t previewMaxPages = 0)
 
       : epub(epub),
         filepath(filepath),
@@ -222,6 +233,8 @@ class ChapterHtmlSlimParser {
         embeddedStyle(embeddedStyle),
         imageRendering(imageRendering),
         renderMode(renderMode),
+        previewAnchor(std::move(previewAnchor)),
+        previewMaxPages(previewMaxPages),
         contentBase(contentBase),
         imageBasePath(imageBasePath),
         tocAnchors(std::move(tocAnchors)) {}

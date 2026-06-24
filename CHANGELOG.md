@@ -8,6 +8,7 @@
 ### Changed
 
 ### Fixed
+- Fixed long stalls when opening footnotes in EPUBs with very large shared notes sections.
 
 ## [v1.3.4] - 2026-06-20
 

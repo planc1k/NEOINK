@@ -47,6 +47,8 @@ class EpubReaderActivity final : public Activity {
   // Set when navigating to a footnote href with a fragment (e.g. #note1).
   // Cleared on the next render after the new section loads and resolves it to a page.
   std::string pendingAnchor;
+  std::string pendingFootnotePreviewAnchor;
+  bool activeFootnotePreview = false;
   int pagesUntilFullRefresh = 0;
   int cachedSpineIndex = 0;
   int cachedChapterPageNumber = 0;
@@ -137,6 +139,9 @@ class EpubReaderActivity final : public Activity {
                       int orientedMarginBottom, int orientedMarginLeft);
   void drawClippingHighlights(const Page& page, int fontId, int orientedMarginTop, int orientedMarginLeft) const;
   void renderStatusBar() const;
+  bool shouldUseFootnotePreview(int targetSpineIndex, const std::string& anchor) const;
+  std::string footnotePreviewCacheSuffix(EpubRenderMode renderMode, const std::string& anchor) const;
+  void clearFootnotePreviewState();
   void silentIndexNextChapterIfNeeded(uint16_t viewportWidth, uint16_t viewportHeight);
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
   void cacheCurrentSectionPosition();

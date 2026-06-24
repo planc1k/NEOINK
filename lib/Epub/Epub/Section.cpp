@@ -207,7 +207,8 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
                                 const bool hyphenationEnabled, const bool embeddedStyle, const uint8_t imageRendering,
                                 const bool bionicReadingEnabled, const bool guideReadingEnabled,
                                 const std::function<void()>& popupFn, bool* imagesWereSuppressed,
-                                bool* layoutAbortedForLowMemory, const EpubRenderMode renderMode) {
+                                bool* layoutAbortedForLowMemory, const EpubRenderMode renderMode,
+                                const SectionBuildOptions buildOptions) {
   const auto localPath = epub->getSpineItem(spineIndex).href;
   const auto tmpHtmlPath = epub->getCachePath() + "/.tmp_" + std::to_string(spineIndex) + ".html";
   const auto tmpSectionPath = filePath + ".tmp";
@@ -216,9 +217,11 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   const bool effectiveBionicReadingEnabled = bionicReadingEnabled;
   const bool effectiveGuideReadingEnabled = guideReadingEnabled;
   LOG_DBG("SCT",
-          "Create section start: spine=%d mode=%u viewport=%ux%u image=%u bionic=%u guide=%u free=%u maxAlloc=%u",
-          spineIndex, static_cast<unsigned>(renderMode), viewportWidth, viewportHeight, imageRendering,
-          effectiveBionicReadingEnabled, effectiveGuideReadingEnabled, ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+          "Create section start: spine=%d mode=%u preview=%u viewport=%ux%u image=%u bionic=%u guide=%u free=%u "
+          "maxAlloc=%u",
+          spineIndex, static_cast<unsigned>(renderMode), buildOptions.isPreview() ? 1U : 0U, viewportWidth,
+          viewportHeight, imageRendering, effectiveBionicReadingEnabled, effectiveGuideReadingEnabled,
+          ESP.getFreeHeap(), ESP.getMaxAllocHeap());
 
   // Create cache directory if it doesn't exist
   {
@@ -318,7 +321,7 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
 
   // Collect TOC anchors for this spine so the parser can insert page breaks at chapter boundaries
   std::vector<std::string> tocAnchors;
-  const int startTocIndex = epub->getTocIndexForSpineIndex(spineIndex);
+  const int startTocIndex = buildOptions.isPreview() ? -1 : epub->getTocIndexForSpineIndex(spineIndex);
   if (startTocIndex >= 0) {
     for (int i = startTocIndex; i < epub->getTocItemsCount(); i++) {
       auto entry = epub->getTocItem(i);
@@ -350,7 +353,8 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
         }
         lut[lutCount++] = {fileOffset, paragraphIndex, listItemIndex};
       },
-      embeddedStyle, contentBase, imageBasePath, imageRendering, std::move(tocAnchors), popupFn, cssParser, renderMode);
+      embeddedStyle, contentBase, imageBasePath, imageRendering, std::move(tocAnchors), popupFn, cssParser, renderMode,
+      buildOptions.isPreview() ? std::string(buildOptions.previewAnchor) : std::string{}, buildOptions.previewMaxPages);
   Hyphenator::setPreferredLanguage(epub->getLanguage());
   LOG_DBG("SCT", "Parser start: spine=%d free=%u maxAlloc=%u", spineIndex, ESP.getFreeHeap(), ESP.getMaxAllocHeap());
   success = visitor.parseAndBuildPages();
