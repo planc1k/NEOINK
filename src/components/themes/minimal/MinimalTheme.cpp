@@ -704,7 +704,7 @@ void MinimalTheme::drawStatsSleepScreen(const GfxRenderer& renderer, const Recen
 }
 
 void MinimalTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
-                                  const std::function<std::string(int index)>& buttonLabel,
+                                  const std::function<const char*(int index)>& buttonLabel,
                                   const std::function<UIIcon(int index)>& rowIcon) const {
   (void)rect;
   (void)rowIcon;
@@ -731,9 +731,10 @@ void MinimalTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCo
       renderer.fillPolygon(triangleXPoints, triangleYPoints, 3, true);
     }
 
-    const std::string label = buttonLabel(i);
-    const int labelW = renderer.getTextWidth(UI_12_FONT_ID, label.c_str());
+    const char* label = buttonLabel != nullptr ? buttonLabel(i) : "";
+    if (!label) label = "";
+    const int labelW = renderer.getTextWidth(UI_12_FONT_ID, label);
     const int labelY = rowY + (kMenuRowHeight - renderer.getLineHeight(UI_12_FONT_ID)) / 2;
-    renderer.drawText(UI_12_FONT_ID, panelX + (panelW - labelW) / 2, labelY, label.c_str());
+    renderer.drawText(UI_12_FONT_ID, panelX + (panelW - labelW) / 2, labelY, label);
   }
 }
