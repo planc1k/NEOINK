@@ -1650,6 +1650,7 @@ void EpubReaderActivity::onEnter() {
   captureGlobalReaderSettings();
   epub->setupCacheDir();
   loadBookReaderSettings();
+  sdFontSystem.ensureLoaded(renderer);
 
   // Configure screen orientation based on settings
   // NOTE: This affects layout math and must be applied before any render calls.
