@@ -36,7 +36,7 @@ void NearbyBookPositionSyncActivity::onEnter() {
 void NearbyBookPositionSyncActivity::onExit() { Activity::onExit(); }
 
 void NearbyBookPositionSyncActivity::loop() {
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) returnToReader();
+  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) returnToReader(true);
 }
 
 void NearbyBookPositionSyncActivity::render(RenderLock&&) {
@@ -69,7 +69,12 @@ bool NearbyBookPositionSyncActivity::addPeer(const uint8_t*) { return false; }
 bool NearbyBookPositionSyncActivity::applyPeerPosition() { return false; }
 bool NearbyBookPositionSyncActivity::mapPeerPosition() { return false; }
 void NearbyBookPositionSyncActivity::updateSyncProgress() {}
-void NearbyBookPositionSyncActivity::returnToReader() { finish(); }
+void NearbyBookPositionSyncActivity::returnToReader(const bool suppressBackRelease) {
+  if (suppressBackRelease) {
+    mappedInput.suppressNextBackRelease();
+  }
+  finish();
+}
 void NearbyBookPositionSyncActivity::setState(const State state) {
   state_ = state;
   requestUpdate();
@@ -387,7 +392,7 @@ void NearbyBookPositionSyncActivity::loop() {
   processEvents();
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    returnToReader();
+    returnToReader(true);
     return;
   }
 
@@ -798,7 +803,9 @@ void NearbyBookPositionSyncActivity::updateSyncProgress() {
   }
 }
 
-void NearbyBookPositionSyncActivity::returnToReader() { activityManager.goToReader(epubPath_); }
+void NearbyBookPositionSyncActivity::returnToReader(const bool suppressBackRelease) {
+  activityManager.goToReader(epubPath_, suppressBackRelease);
+}
 
 void NearbyBookPositionSyncActivity::setState(const State state) {
   if (state_ == state) return;

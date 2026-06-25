@@ -120,7 +120,7 @@ class NearbyBookPositionSyncActivity final : public Activity {
   bool applyPeerPosition();
   bool mapPeerPosition();
   void updateSyncProgress();
-  void returnToReader();
+  void returnToReader(bool suppressBackRelease = false);
   void setState(State state);
   void setError(const std::string& error);
   void renderReady(const std::string& primary, const std::string& detailPrimary) const;
