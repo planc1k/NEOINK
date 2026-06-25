@@ -176,6 +176,14 @@ bool fallbackEstimatedTimeLeft(const BookReadingStats& stats, const float progre
   return seconds > 0;
 }
 
+bool estimatedTimeLeft(const BookReadingStats& stats, const float progressPercent, uint32_t& seconds) {
+  if (stats.estimatedTimeLeftSeconds > 0) {
+    seconds = stats.estimatedTimeLeftSeconds;
+    return true;
+  }
+  return fallbackEstimatedTimeLeft(stats, progressPercent, seconds);
+}
+
 bool estimateFinishDateFromDailyPace(const BookReadingStats& stats, const ReadingStatsDateTime& today,
                                      const uint32_t estimatedReadingSeconds, ReadingStatsDate& outDate) {
   outDate = {};
@@ -242,7 +250,7 @@ void drawDashboardStats(const GfxRenderer& renderer, const Rect& coverRect, cons
   char startedDate[24];
   char finishDate[24];
   uint32_t estimatedSeconds = 0;
-  const bool hasEstimate = fallbackEstimatedTimeLeft(bookStats, progressPercent, estimatedSeconds);
+  const bool hasEstimate = estimatedTimeLeft(bookStats, progressPercent, estimatedSeconds);
   ReadingStatsDateTime today;
   const bool hasToday = getCurrentLocalReadingStatsDateTime(today);
   const ReadingStatsDate endDate = bookStats.isCompleted && bookStats.finishedDate.isValid()
