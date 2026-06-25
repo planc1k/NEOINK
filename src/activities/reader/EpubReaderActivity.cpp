@@ -463,6 +463,45 @@ bool findClippingStoredRangeOnPage(const Page& page, const Clipping& clipping, c
   return true;
 }
 
+uint16_t countVisiblePageWords(const Page& page) {
+  uint16_t count = 0;
+  forEachVisiblePageWord(page, [&](const uint16_t, const PageLine&, const TextBlock&, const size_t) {
+    if (count == UINT16_MAX) return false;
+    count++;
+    return true;
+  });
+  return count;
+}
+
+bool findClippingStoredRangeOnPage(const Page& page, const Clipping& clipping, const uint16_t currentPage,
+                                   const uint16_t currentPageCount, ClippingPageMatch& match) {
+  if (clipping.wordCount == 0 || currentPageCount == 0 || clipping.pageCount != currentPageCount) {
+    return false;
+  }
+  if (clipping.startPage > clipping.endPage || currentPage < clipping.startPage || currentPage > clipping.endPage) {
+    return false;
+  }
+
+  const uint16_t pageWordCount = countVisiblePageWords(page);
+  if (pageWordCount == 0) return false;
+
+  uint16_t startWord = 0;
+  uint16_t endWord = static_cast<uint16_t>(pageWordCount - 1);
+  if (currentPage == clipping.startPage) {
+    if (clipping.startWordIndex >= pageWordCount) return false;
+    startWord = clipping.startWordIndex;
+  }
+  if (currentPage == clipping.endPage) {
+    if (clipping.endWordIndex >= pageWordCount) return false;
+    endWord = clipping.endWordIndex;
+  }
+  if (startWord > endWord) return false;
+
+  match.startWord = startWord;
+  match.endWord = endWord;
+  return true;
+}
+
 uint16_t clampSectionPage(const uint32_t page, const uint16_t pageCount) {
   if (pageCount == 0) return 0;
   return static_cast<uint16_t>(std::min<uint32_t>(page, pageCount - 1));
