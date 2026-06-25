@@ -40,6 +40,8 @@ constexpr int kCoverStatsGap = 15;
 constexpr int kPairInwardShiftX3 = 15;
 constexpr int kTitleTopGap = 28;
 constexpr int kTitleChapterGap = 8;
+constexpr int kBookTitleMaxLines = 2;
+constexpr int kBookChapterMaxLines = 2;
 constexpr int kFooterIconSize = 24;
 constexpr int kFooterIconTextGap = 18;
 constexpr int kFooterBottomGap = 57;
@@ -513,7 +515,7 @@ void drawBookText(const GfxRenderer& renderer, const Rect& coverRect, const Rece
   const int inset = contentInset(renderer);
   const int textW = renderer.getScreenWidth() - inset * 2;
   const char* title = book.title.empty() ? book.path.c_str() : book.title.c_str();
-  auto titleLines = renderer.wrappedText(UI_12_FONT_ID, title, textW, 2, EpdFontFamily::BOLD);
+  auto titleLines = renderer.wrappedText(UI_12_FONT_ID, title, textW, kBookTitleMaxLines, EpdFontFamily::BOLD);
   int textY = coverRect.y + coverRect.height + kTitleTopGap;
   const int titleLineH = renderer.getLineHeight(UI_12_FONT_ID);
   for (const auto& line : titleLines) {
@@ -524,8 +526,12 @@ void drawBookText(const GfxRenderer& renderer, const Rect& coverRect, const Rece
   const char* subtitle =
       (currentChapterTitle != nullptr && currentChapterTitle[0] != '\0') ? currentChapterTitle : book.author.c_str();
   if (subtitle != nullptr && subtitle[0] != '\0') {
-    const std::string visibleSubtitle = renderer.truncatedText(UI_12_FONT_ID, subtitle, textW);
-    renderer.drawText(UI_12_FONT_ID, coverRect.x, textY + kTitleChapterGap, visibleSubtitle.c_str(), black);
+    auto subtitleLines = renderer.wrappedText(UI_12_FONT_ID, subtitle, textW, kBookChapterMaxLines);
+    int subtitleY = textY + kTitleChapterGap;
+    for (const auto& line : subtitleLines) {
+      renderer.drawText(UI_12_FONT_ID, coverRect.x, subtitleY, line.c_str(), black);
+      subtitleY += titleLineH;
+    }
   }
 }
 }  // namespace
