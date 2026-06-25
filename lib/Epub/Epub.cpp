@@ -48,7 +48,7 @@ void normalizeThumbDimensions(int& width, int& height) {
     height = kDefaultThumbHeight;
   }
   if (width <= 0) {
-    width = static_cast<int>((static_cast<int64_t>(height) * 3 + 2) / 5);
+    width = static_cast<int>((static_cast<int64_t>(height) * 2 + 1) / 3);
   }
 }
 

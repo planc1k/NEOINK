@@ -512,7 +512,7 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
   const int tileY = rect.y;
   const bool hasContinueReading = !recentBooks.empty();
   if (coverWidth == 0) {
-    coverWidth = LyraMetrics::values.homeCoverHeight * 0.6;
+    coverWidth = LyraMetrics::values.homeCoverHeight * 2 / 3;
   }
 
   // Draw book card regardless, fill with message based on `hasContinueReading`

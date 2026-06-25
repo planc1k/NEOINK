@@ -148,7 +148,7 @@ void RoundedRaffTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
   const int tileY = rect.y;
   const bool hasContinueReading = !recentBooks.empty();
   if (coverWidth == 0) {
-    coverWidth = RoundedRaffMetrics::values.homeCoverHeight * 0.6;
+    coverWidth = RoundedRaffMetrics::values.homeCoverHeight * 2 / 3;
   }
   const int imgY = tileY + (tileHeight - RoundedRaffMetrics::values.homeCoverHeight) / 2;
   const int tileX = RoundedRaffMetrics::values.contentSidePadding;

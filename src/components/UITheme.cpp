@@ -152,7 +152,7 @@ std::string UITheme::getCoverThumbPath(const std::string& coverBmpPath, int cove
     return "";
   }
   // Use int64_t so large heights cannot overflow before division.
-  const int coverWidth = static_cast<int>((static_cast<int64_t>(coverHeight) * 3 + 2) / 5);
+  const int coverWidth = static_cast<int>((static_cast<int64_t>(coverHeight) * 2 + 1) / 3);
   return getCoverThumbPath(coverBmpPath, coverWidth, coverHeight);
 }
 
