@@ -10,6 +10,7 @@
 ### Changed
 
 ### Fixed
+- Chinese and other large SD-card font EPUBs no longer overlap characters after font or line-spacing changes exhaust the small glyph-advance cache.
 - EPUB grayscale page turns on X3 now use the grayscale-aware display base, reducing the moment where new text appears too dark before the anti-aliased overlay finishes.
 - EPUB chapters with many inline anchors or footnote links are less likely to fail with a memory error when first opened.
 - EPUB clipping selection now follows right-to-left line order when selecting Hebrew and other RTL text.

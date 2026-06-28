@@ -234,13 +234,14 @@ Binary layout:
 
 ## `section.bin`
 
-### Version 41
+### Version 42
 
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
 
-Version 41 includes:
+Version 42 invalidates older section caches so SD-card font layouts are rebuilt
+with corrected glyph-advance measurement for CJK-heavy text. It includes:
 
 - cache-busting fields for font, line compression, extra paragraph spacing,
   forced paragraph indents, paragraph alignment, viewport size, hyphenation,
