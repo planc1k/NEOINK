@@ -701,7 +701,7 @@ ReaderViewportLayout computeReaderViewportLayout(GfxRenderer& renderer, const bo
   const int topStatusBarReservedHeight = ReaderUtils::getTopClockStatusBarReservedHeight();
   if (topStatusBarReservedHeight > 0) {
     layout.marginTop += std::max(static_cast<int>(SETTINGS.screenMargin),
-                                 topStatusBarReservedHeight + ReaderUtils::STATUS_BAR_TEXT_PADDING);
+                                 topStatusBarReservedHeight + ReaderUtils::TOP_CLOCK_TEXT_PADDING);
   } else {
     layout.marginTop += SETTINGS.screenMargin;
   }

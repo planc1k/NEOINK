@@ -578,7 +578,7 @@ void RecentBooksGridActivity::render(RenderLock&&) {
   drawGridHeader(renderer, pageWidth);
   constexpr int contentTop = kLyraGridContentTop;
   constexpr int titleStripHeight = 32;
-  constexpr int titleGridGap = 16;
+  constexpr int titleGridGap = 8;
   constexpr int selectionPadding = 4;
   constexpr int selectionOutlineGap = 2;
   constexpr int selectionOuterInset = selectionPadding + selectionOutlineGap;
@@ -598,7 +598,12 @@ void RecentBooksGridActivity::render(RenderLock&&) {
   } else {
     if (selectorIndex >= 0 && selectorIndex < static_cast<int>(recentBooks.size())) {
       const int titleLh = renderer.getLineHeight(UI_10_FONT_ID);
-      const int titleY = contentTop + (titleStripHeight - titleLh) / 2;
+      // Center the title/progress row in the lane between the header bottom and the
+      // grid top, rather than only within titleStripHeight, so it stays vertically
+      // centered after the grid was nudged up.
+      const int headerBottomY = LyraMetrics::values.topPadding + LyraMetrics::values.headerHeight;
+      const int gridTopY = contentTop + titleStripHeight + titleGridGap;
+      const int titleY = headerBottomY + (gridTopY - headerBottomY - titleLh) / 2;
       const auto& selectedBook = recentBooks[selectorIndex];
       const bool hasProgress = selectedBook.progressLoaded && RecentBookProgress::hasPercent(selectedBook.progress);
       const std::string progressLabel = hasProgress ? RecentBookProgress::formatPercent(selectedBook.progress) : "";
