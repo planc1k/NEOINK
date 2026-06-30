@@ -19,7 +19,6 @@
 #include "FontDownloadActivity.h"
 #include "FontSelectionActivity.h"
 #include "KOReaderSettingsActivity.h"
-#include "LanguageSelectActivity.h"
 #include "MappedInputManager.h"
 #include "OpdsServerListActivity.h"
 #include "OtaUpdateActivity.h"
@@ -360,8 +359,7 @@ void SettingsActivity::closeSubmenu() {
 }
 
 bool SettingsActivity::currentSettingUsesOptionMenu(const SettingInfo& setting) const {
-  return (selectedCategoryIndex == 0 || selectedCategoryIndex == 1 || selectedCategoryIndex == 2) &&
-         setting.nameId != StrId::STR_FONT_FAMILY && setting.type == SettingType::ENUM &&
+  return setting.nameId != StrId::STR_FONT_FAMILY && setting.type == SettingType::ENUM &&
          settingEnumOptionCount(setting) > 2 &&
          (setting.valuePtr != nullptr || (setting.valueGetter && setting.valueSetter));
 }
@@ -385,34 +383,22 @@ void SettingsActivity::openEnumOptionPicker(const SettingInfo& setting) {
   if (currentIndex >= optionCount) currentIndex = 0;
 
   const SettingInfo selectedSetting = setting;
-  startActivityForResult(
-      std::make_unique<OptionSelectionActivity>(renderer, mappedInput, "SettingsOptionSelect", setting.nameId,
-                                                std::move(options), currentIndex),
-      [this, selectedSetting](const ActivityResult& result) {
-        if (result.isCancelled) {
-          requestUpdate();
-          return;
-        }
+  optionPopup.show(setting.nameId, options, currentIndex, [this, selectedSetting](int selectedIndex) {
+    if (selectedSetting.valuePtr != nullptr) {
+      SETTINGS.*(selectedSetting.valuePtr) =
+          enumRawValueForDisplayIndex(selectedSetting, static_cast<uint8_t>(selectedIndex));
+    } else if (selectedSetting.valueSetter) {
+      selectedSetting.valueSetter(static_cast<uint8_t>(selectedIndex));
+    }
 
-        const auto* selection = std::get_if<OptionSelectionResult>(&result.data);
-        if (selection == nullptr) {
-          requestUpdate();
-          return;
-        }
-
-        if (selectedSetting.valuePtr != nullptr) {
-          SETTINGS.*(selectedSetting.valuePtr) = enumRawValueForDisplayIndex(selectedSetting, selection->index);
-        } else if (selectedSetting.valueSetter) {
-          selectedSetting.valueSetter(selection->index);
-        }
-
-        const bool sleepScreenChanged = selectedSetting.valuePtr == &CrossPointSettings::sleepScreen;
-        const bool quickResumeTimeoutChanged = selectedSetting.valuePtr == &CrossPointSettings::quickResumeSleepScreen;
-        syncQuickResumeTimeoutForSleepScreen(sleepScreenChanged, quickResumeTimeoutChanged);
-        SETTINGS.saveToFile();
-        rebuildSettingsLists();
-        requestUpdate();
-      });
+    const bool sleepScreenChanged = selectedSetting.valuePtr == &CrossPointSettings::sleepScreen;
+    const bool quickResumeTimeoutChanged = selectedSetting.valuePtr == &CrossPointSettings::quickResumeSleepScreen;
+    syncQuickResumeTimeoutForSleepScreen(sleepScreenChanged, quickResumeTimeoutChanged);
+    SETTINGS.saveToFile();
+    rebuildSettingsLists();
+    requestUpdate();
+  });
+  requestUpdate();
 }
 
 void SettingsActivity::openScreenMarginPicker(const SettingInfo& setting) {
@@ -445,6 +431,42 @@ void SettingsActivity::openScreenMarginPicker(const SettingInfo& setting) {
         }
         requestUpdate();
       });
+}
+
+void SettingsActivity::openLanguagePicker() {
+  const int languageCount = static_cast<int>(getLanguageCount());
+  if (languageCount <= 0) return;
+
+  std::vector<std::string> options;
+  options.reserve(languageCount);
+  for (int i = 0; i < languageCount; i++) {
+    options.push_back(I18N.getLanguageName(static_cast<Language>(SORTED_LANGUAGE_INDICES[i])));
+  }
+
+  const auto currentLang = static_cast<uint8_t>(I18N.getLanguage());
+  const auto* begin = std::begin(SORTED_LANGUAGE_INDICES);
+  const auto* end = std::end(SORTED_LANGUAGE_INDICES);
+  const auto* it = std::find(begin, end, currentLang);
+  int currentIndex = (it != end) ? static_cast<int>(std::distance(begin, it)) : 0;
+
+  optionPopup.show(StrId::STR_LANGUAGE, options, currentIndex, [this](int selectedIndex) {
+    const int languageCount = static_cast<int>(getLanguageCount());
+    if (selectedIndex < 0 || selectedIndex >= languageCount) {
+      requestUpdate();
+      return;
+    }
+
+    const uint8_t langIndex = SORTED_LANGUAGE_INDICES[selectedIndex];
+    {
+      RenderLock lock(*this);
+      I18N.setLanguage(static_cast<Language>(langIndex));
+    }
+
+    SETTINGS.language = langIndex;
+    SETTINGS.saveToFile();
+    requestUpdate();
+  });
+  requestUpdate();
 }
 
 void SettingsActivity::openStringEditor(const SettingInfo& setting) {
@@ -521,6 +543,8 @@ void SettingsActivity::onExit() {
 }
 
 void SettingsActivity::loop() {
+  if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
+
   bool hasChangedCategory = false;
 
   // Handle actions with early return
@@ -736,7 +760,7 @@ void SettingsActivity::toggleCurrentSetting() {
                                });
         break;
       case SettingAction::Language:
-        startActivityForResult(std::make_unique<LanguageSelectActivity>(renderer, mappedInput), resultHandler);
+        openLanguagePicker();
         break;
       case SettingAction::ClockSync:
         startActivityForResult(std::make_unique<ClockSyncActivity>(renderer, mappedInput), resultHandler);
@@ -845,6 +869,8 @@ void SettingsActivity::openIdleTimeThresholdPicker() {
 }
 
 void SettingsActivity::render(RenderLock&&) {
+  if (optionPopup.processRender(renderer, mappedInput)) return;
+
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();
@@ -907,6 +933,8 @@ void SettingsActivity::render(RenderLock&&) {
           valueText = settingEnumOptionLabel(setting, value);
         } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
           valueText = formatSettingValue(setting);
+        } else if (setting.type == SettingType::ACTION && setting.action == SettingAction::Language) {
+          valueText = I18N.getLanguageName(I18N.getLanguage());
         } else if (setting.type == SettingType::STRING) {
           if (setting.nameId == StrId::STR_DEVICE_NAME) {
             valueText = SETTINGS.getEffectiveDeviceName();
@@ -942,6 +970,7 @@ void SettingsActivity::render(RenderLock&&) {
                       (*currentSettings)[selectedSettingIndex - 1].valuePtr == &CrossPointSettings::screenMargin)
                  ? tr(STR_SELECT)
                  : tr(STR_TOGGLE));
+
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 

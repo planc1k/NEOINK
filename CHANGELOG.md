@@ -9,6 +9,7 @@
 - EPUB reader now uses CrossInk location metadata from optimized EPUBs for word-weighted progress and percent-based jumps.
 
 ### Changed
+- Settings with three or more choices, including Language, now open an inline popup menu instead of cycling through every option one press at a time.
 - EPUB parsing, large-book metadata indexing, and generated cover conversion now use more arena-backed scratch buffers to reduce heap fragmentation during heavy book processing.
 
 ### Fixed

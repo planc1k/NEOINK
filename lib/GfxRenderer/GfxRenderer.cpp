@@ -1462,6 +1462,10 @@ void GfxRenderer::drawImageInverted(const uint8_t bitmap[], const int x, const i
   }
 }
 
+void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, const int size) const {
+  drawIcon(bitmap, x, y, size, size);
+}
+
 void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, const int width, const int height) const {
   if (fontCacheManager_ && fontCacheManager_->isScanning()) return;
 
@@ -1515,6 +1519,10 @@ void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, con
       }
     }
   }
+}
+
+void GfxRenderer::drawIconInverted(const uint8_t bitmap[], const int x, const int y, const int size) const {
+  drawIconInverted(bitmap, x, y, size, size);
 }
 
 void GfxRenderer::drawIconInverted(const uint8_t bitmap[], const int x, const int y, const int width,
