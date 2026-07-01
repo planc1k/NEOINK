@@ -14,6 +14,7 @@
 
 ### Fixed
 - Font selection no longer reopens the font preview after choosing a font.
+- EPUB CSS caches are now validated before reuse so stale stylesheet caches are rebuilt instead of silently opening chapters without publisher CSS.
 - Chinese and other large SD-card font EPUBs no longer overlap characters after font or line-spacing changes exhaust the small glyph-advance cache.
 - EPUB clipping selection now falls back to a built-in UI font if an SD-card reader font cannot be prewarmed, avoiding replacement-glyph pages and low-memory crashes while leaving the reader font unchanged.
 - EPUB cover and thumbnail generation now releases SD-card reader font caches before JPEG/PNG decoding when heap is tight, reducing cover failures with custom fonts selected.

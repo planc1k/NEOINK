@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Arena.h>
 #include <HalStorage.h>
 
 #include <initializer_list>
@@ -111,6 +112,9 @@ class CssParser {
     decltype(rulesBySelector_){}.swap(rulesBySelector_);
     decltype(descendantRules_){}.swap(descendantRules_);
     decltype(cacheRuleOffsets_){}.swap(cacheRuleOffsets_);
+    cachedRuleArena_.release();
+    cachedRules_ = nullptr;
+    cachedRuleTableCount_ = 0;
     cacheIndexLoaded_ = false;
     cachedRuleCount_ = 0;
     cachePartial_ = false;
@@ -198,6 +202,15 @@ class CssParser {
   };
   static_assert(sizeof(SelectorEntry) == CSS_INDEX_BYTES_PER_RULE,
                 "SelectorEntry size changed; update CSS_INDEX_BYTES_PER_RULE");
+  struct CachedRule {
+    uint32_t hash;
+    uint16_t selectorLen;
+    const char* selector;
+    CssStyle style;
+  };
+  Arena cachedRuleArena_;
+  CachedRule* cachedRules_ = nullptr;
+  size_t cachedRuleTableCount_ = 0;
   mutable bool cacheIndexLoaded_ = false;
   mutable size_t cachedRuleCount_ = 0;
   mutable std::vector<SelectorEntry> cacheRuleOffsets_;
@@ -218,6 +231,7 @@ class CssParser {
   static bool tryInterpretLength(std::string_view val, CssLength& out);
   static uint32_t selectorHash(std::string_view selector);
   bool lookupRule(std::string_view selector, CssStyle& outStyle) const;
+  bool lookupArenaRule(std::string_view selector, CssStyle& outStyle) const;
   bool readRuleFromDiskAtOffset(uint32_t ruleOffset, std::string_view selector, CssStyle& outStyle) const;
   static bool readCssStylePayload(FsFile& file, CssStyle& style);
   static bool writeCssStylePayload(FsFile& file, const CssStyle& style);

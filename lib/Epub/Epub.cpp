@@ -469,10 +469,17 @@ Epub::CssParseStatus Epub::parseCssFiles(const bool forceRebuild) const {
 
   LOG_DBG("EBP", "CSS files to parse: %zu", cssFiles.size());
 
-  // See if we have a cached version of the CSS rules
+  // See if we have a usable cached version of the CSS rules. File existence alone is not enough:
+  // stale cache formats are removed by loadFromCache(), then rebuilt below.
   if (cssParser->hasCache() && !forceRebuild) {
-    LOG_DBG("EBP", "CSS cache exists, skipping parseCssFiles");
-    return cssParser->isCachePartial() ? CssParseStatus::Partial : CssParseStatus::Complete;
+    if (cssParser->loadFromCache()) {
+      const bool partialCache = cssParser->isCachePartial();
+      LOG_DBG("EBP", "CSS cache valid, skipping parseCssFiles");
+      cssParser->clear();
+      return partialCache ? CssParseStatus::Partial : CssParseStatus::Complete;
+    }
+    LOG_DBG("EBP", "CSS cache invalid, rebuilding CSS rules");
+    cssParser->clear();
   }
 
   // No cache yet - parse CSS files. If memory runs out partway through, keep
