@@ -200,6 +200,7 @@ void FontSelectionActivity::handleSelection() {
       SETTINGS.sdFontFamilyName[sizeof(SETTINGS.sdFontFamilyName) - 1] = '\0';
     }
   }
+  mappedInput.suppressNextConfirmRelease();
   finish();
 }
 

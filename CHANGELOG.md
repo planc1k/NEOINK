@@ -13,6 +13,7 @@
 - EPUB parsing, large-book metadata indexing, and generated cover conversion now use more arena-backed scratch buffers to reduce heap fragmentation during heavy book processing.
 
 ### Fixed
+- Font selection no longer reopens the font preview after choosing a font.
 - Chinese and other large SD-card font EPUBs no longer overlap characters after font or line-spacing changes exhaust the small glyph-advance cache.
 - EPUB clipping selection now falls back to a built-in UI font if an SD-card reader font cannot be prewarmed, avoiding replacement-glyph pages and low-memory crashes while leaving the reader font unchanged.
 - EPUB cover and thumbnail generation now releases SD-card reader font caches before JPEG/PNG decoding when heap is tight, reducing cover failures with custom fonts selected.
