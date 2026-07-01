@@ -689,9 +689,19 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(FsFile& jpegFile, Print& bm
   ctx.error = false;
 
   const size_t mcuBufBytes = static_cast<size_t>(MAX_MCU_HEIGHT) * effectiveSrcW;
+  size_t scratchBytes = mcuBufBytes + static_cast<size_t>(bytesPerRow);
+  if (smoothUpscale) {
+    scratchBytes += static_cast<size_t>(outWidth) * 3;
+  } else if (needsScaling) {
+    scratchBytes += static_cast<size_t>(outWidth) * sizeof(uint32_t) * 2;
+  }
+  // Keep the conversion in one arena slab. Growing would request another full slab,
+  // which can fail on a fragmented heap even when the next buffer is tiny.
+  scratchBytes += 128;
+
   Arena scratchArena;
-  if (!scratchArena.init(std::max<size_t>(4096, mcuBufBytes))) {
-    LOG_ERR("JPG", "OOM: JPEG BMP scratch arena (%u bytes)", static_cast<unsigned>(mcuBufBytes));
+  if (!scratchArena.init(std::max<size_t>(4096, scratchBytes))) {
+    LOG_ERR("JPG", "OOM: JPEG BMP scratch arena (%u bytes)", static_cast<unsigned>(scratchBytes));
     return false;
   }
 
