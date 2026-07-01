@@ -54,7 +54,6 @@ constexpr size_t MIN_FREE_HEAP_FOR_CSS = 48 * 1024;
 // larger heap floor than basic CSS application so low-memory books can still
 // fall back to the disk-backed selector index.
 constexpr size_t MIN_FREE_HEAP_FOR_CSS_RULE_ARENA = 96 * 1024;
-constexpr size_t CSS_RULE_ARENA_SELECTOR_BYTES_PER_RULE = 32;
 constexpr size_t CSS_RULE_ARENA_EXTRA_BYTES = 1024;
 
 // Maximum length for a single selector string
@@ -869,6 +868,14 @@ uint32_t CssParser::selectorHash(std::string_view selector) {
   return h;
 }
 
+uint32_t CssParser::selectorSecondaryHash(std::string_view selector) {
+  uint32_t h = 5381U;
+  for (char c : selector) {
+    h = ((h << 5U) + h) ^ static_cast<uint8_t>(asciiToLower(c));
+  }
+  return h;
+}
+
 bool CssParser::writeCssStylePayload(FsFile& file, const CssStyle& style) {
   auto writeBytes = [&file](const void* data, const size_t len) -> bool {
     return len == 0 || file.write(reinterpret_cast<const uint8_t*>(data), len) == len;
@@ -1008,12 +1015,13 @@ bool CssParser::lookupArenaRule(std::string_view selector, CssStyle& outStyle) c
   }
 
   const uint32_t h = selectorHash(selector);
+  const uint32_t secondaryHash = selectorSecondaryHash(selector);
   auto* begin = cachedRules_;
   auto* end = cachedRules_ + cachedRuleTableCount_;
   auto* it =
       std::lower_bound(begin, end, h, [](const CachedRule& rule, const uint32_t key) { return rule.hash < key; });
   for (; it != end && it->hash == h; ++it) {
-    if (it->selectorLen == selector.size() && SvEqual{}(std::string_view(it->selector, it->selectorLen), selector)) {
+    if (it->secondaryHash == secondaryHash && it->selectorLen == selector.size()) {
       outStyle = it->style;
       return true;
     }
@@ -1288,9 +1296,7 @@ bool CssParser::loadFromCache() {
   size_t hydratedRuleCount = 0;
   const size_t freeHeapBeforeHydrate = ESP.getFreeHeap();
   if (ruleCount > 0 && freeHeapBeforeHydrate >= MIN_FREE_HEAP_FOR_CSS_RULE_ARENA) {
-    const size_t arenaBytes =
-        (static_cast<size_t>(ruleCount) * (sizeof(CachedRule) + CSS_RULE_ARENA_SELECTOR_BYTES_PER_RULE)) +
-        CSS_RULE_ARENA_EXTRA_BYTES;
+    const size_t arenaBytes = (static_cast<size_t>(ruleCount) * sizeof(CachedRule)) + CSS_RULE_ARENA_EXTRA_BYTES;
     if (cachedRuleArena_.init(arenaBytes)) {
       cachedRules_ = arenaNewArray<CachedRule>(cachedRuleArena_, ruleCount);
       hydrateSimpleRules = cachedRules_ != nullptr;
@@ -1305,7 +1311,9 @@ bool CssParser::loadFromCache() {
 
   // Read each simple rule payload. When heap allows, hydrate into an arena-backed
   // table so resolveStyle() can stay in RAM instead of seeking the SD cache for
-  // every selector lookup during page building.
+  // every selector lookup during page building. Selector text is only needed
+  // while computing the compact lookup fingerprints, so it stays on the stack.
+  char selectorBuf[MAX_SELECTOR_LENGTH];
   for (uint16_t i = 0; i < ruleCount; ++i) {
     const uint32_t recordStart = file.position();
     uint16_t selectorLen = 0;
@@ -1323,20 +1331,6 @@ bool CssParser::loadFromCache() {
     const uint32_t nextRecord = recordStart + sizeof(selectorLen) + selectorLen + CSS_FIXED_STYLE_BYTES;
 
     if (hydrateSimpleRules) {
-      auto* selectorBuf = static_cast<char*>(cachedRuleArena_.alloc(selectorLen, alignof(char)));
-      if (!selectorBuf) {
-        LOG_DBG("CSS", "CSS rule arena ran out of memory; using disk-backed selector lookup");
-        cachedRuleArena_.release();
-        cachedRules_ = nullptr;
-        cachedRuleTableCount_ = 0;
-        hydratedRuleCount = 0;
-        hydrateSimpleRules = false;
-        if (!file.seek(nextRecord)) {
-          cacheRuleOffsets_.clear();
-          return false;
-        }
-        continue;
-      }
       CssStyle style;
       if (file.read(selectorBuf, selectorLen) != selectorLen || !readCssStylePayload(file, style)) {
         LOG_DBG("CSS", "Truncated CSS cache while hydrating selector rule");
@@ -1347,7 +1341,8 @@ bool CssParser::loadFromCache() {
         return false;
       }
       const std::string_view selectorView(selectorBuf, selectorLen);
-      cachedRules_[hydratedRuleCount++] = {selectorHash(selectorView), selectorLen, selectorBuf, style};
+      cachedRules_[hydratedRuleCount++] = {selectorHash(selectorView), selectorSecondaryHash(selectorView), selectorLen,
+                                           style};
     } else {
       if (!file.seek(nextRecord)) {
         cacheRuleOffsets_.clear();
@@ -1357,8 +1352,23 @@ bool CssParser::loadFromCache() {
   }
   if (hydrateSimpleRules) {
     cachedRuleTableCount_ = hydratedRuleCount;
-    std::sort(cachedRules_, cachedRules_ + cachedRuleTableCount_,
-              [](const CachedRule& a, const CachedRule& b) { return a.hash < b.hash; });
+    std::sort(cachedRules_, cachedRules_ + cachedRuleTableCount_, [](const CachedRule& a, const CachedRule& b) {
+      if (a.hash != b.hash) return a.hash < b.hash;
+      if (a.secondaryHash != b.secondaryHash) return a.secondaryHash < b.secondaryHash;
+      return a.selectorLen < b.selectorLen;
+    });
+    for (size_t i = 1; i < cachedRuleTableCount_; ++i) {
+      const auto& prev = cachedRules_[i - 1];
+      const auto& current = cachedRules_[i];
+      if (prev.hash == current.hash && prev.secondaryHash == current.secondaryHash &&
+          prev.selectorLen == current.selectorLen) {
+        LOG_DBG("CSS", "CSS rule fingerprint collision; using disk-backed selector lookup");
+        cachedRuleArena_.release();
+        cachedRules_ = nullptr;
+        cachedRuleTableCount_ = 0;
+        break;
+      }
+    }
     LOG_DBG("CSS", "Hydrated %u CSS rules into arena (%u bytes)", static_cast<unsigned>(cachedRuleTableCount_),
             static_cast<unsigned>(cachedRuleArena_.used()));
   }

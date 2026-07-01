@@ -204,8 +204,8 @@ class CssParser {
                 "SelectorEntry size changed; update CSS_INDEX_BYTES_PER_RULE");
   struct CachedRule {
     uint32_t hash;
+    uint32_t secondaryHash;
     uint16_t selectorLen;
-    const char* selector;
     CssStyle style;
   };
   Arena cachedRuleArena_;
@@ -230,6 +230,7 @@ class CssParser {
   /** Returns true only when a numeric length was parsed (e.g. 2em, 50%). False for auto/inherit/initial. */
   static bool tryInterpretLength(std::string_view val, CssLength& out);
   static uint32_t selectorHash(std::string_view selector);
+  static uint32_t selectorSecondaryHash(std::string_view selector);
   bool lookupRule(std::string_view selector, CssStyle& outStyle) const;
   bool lookupArenaRule(std::string_view selector, CssStyle& outStyle) const;
   bool readRuleFromDiskAtOffset(uint32_t ruleOffset, std::string_view selector, CssStyle& outStyle) const;
