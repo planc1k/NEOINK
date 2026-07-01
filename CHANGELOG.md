@@ -10,6 +10,7 @@
 ### Changed
 - Settings with three or more choices, including Language, now open an inline popup menu instead of cycling through every option one press at a time.
 - EPUB parsing, large-book metadata indexing, and generated cover conversion now use more arena-backed scratch buffers to reduce heap fragmentation during heavy book processing.
+- EPUB section layout reuses more text-line scratch buffers and writes less empty per-word metadata, reducing first-open chapter build work.
 
 ### Fixed
 - Font selection no longer reopens the font preview after choosing a font.

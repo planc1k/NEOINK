@@ -14,8 +14,8 @@
 
 namespace {
 constexpr uint32_t SECTION_CACHE_MAGIC = 0x535843FF;  // bytes: 0xFF, "CXS"
-// v42: busts caches for corrected SD-card font advance measurement in CJK-heavy layouts.
-constexpr uint8_t SECTION_FILE_VERSION = 42;
+// v43: TextBlock background/hyphen flags are stored only when a line uses them.
+constexpr uint8_t SECTION_FILE_VERSION = 43;
 constexpr uint16_t INITIAL_SECTION_PAGE_LUT_ENTRIES = 1024;
 constexpr uint32_t HEADER_SIZE = sizeof(SECTION_CACHE_MAGIC) + sizeof(uint8_t) + sizeof(int) + sizeof(float) +
                                  sizeof(bool) + sizeof(bool) + sizeof(uint8_t) + sizeof(uint16_t) + sizeof(uint16_t) +
@@ -61,11 +61,13 @@ uint32_t Section::onPageComplete(std::unique_ptr<Page> page) {
   }
 
   const uint32_t position = file.position();
+  const uint32_t serializeStart = millis();
   if (!page->serialize(file)) {
     LOG_ERR("SCT", "Failed to serialize page %d", pageCount);
     return 0;
   }
-  LOG_DBG("SCT", "Page %d processed (pos=%lu, free=%u, maxAlloc=%u)", pageCount, static_cast<unsigned long>(position),
+  LOG_DBG("SCT", "Page %d processed (pos=%lu, serialize=%lums, free=%u, maxAlloc=%u)", pageCount,
+          static_cast<unsigned long>(position), static_cast<unsigned long>(millis() - serializeStart),
           ESP.getFreeHeap(), ESP.getMaxAllocHeap());
 
   pageCount++;

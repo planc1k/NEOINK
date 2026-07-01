@@ -234,14 +234,15 @@ Binary layout:
 
 ## `section.bin`
 
-### Version 42
+### Version 43
 
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
 
-Version 42 invalidates older section caches so SD-card font layouts are rebuilt
-with corrected glyph-advance measurement for CJK-heavy text. It includes:
+Version 43 invalidates older section caches so text-block word flags can be
+omitted for lines that do not use CSS backgrounds or layout-inserted hyphens.
+It includes:
 
 - cache-busting fields for font, line compression, extra paragraph spacing,
   forced paragraph indents, paragraph alignment, viewport size, hyphenation,
@@ -252,6 +253,7 @@ with corrected glyph-advance measurement for CJK-heavy text. It includes:
 - paragraph and list-item LUTs used by KOReader sync page refinement
 - optional per-word Bionic Reading split metadata
 - optional per-word Guide Dot x-offset metadata
+- optional per-word text flags for CSS backgrounds and layout-inserted hyphens
 - reading-aid layout that stores Bionic Reading and Guide Dots as per-word metadata instead of temporary layout words
 - publisher CSS page-break handling and adjusted justification spacing baked into page layout
 - table fragments
@@ -265,7 +267,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 41
+#define EXPECTED_VERSION 43
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 96
@@ -342,7 +344,10 @@ struct TextBlock {
         u16 wordGuideDotXOffset[wordCount] [[comment("Guide dot x offset from word start; 0 means no dot")]];
     }
 
-    u8 wordFlags[wordCount] [[comment("bit 0 = black background, bit 1 = layout-inserted trailing hyphen")]];
+    u8 hasWordFlags;
+    if (hasWordFlags != 0) {
+        u8 wordFlags[wordCount] [[comment("bit 0 = black background, bit 1 = layout-inserted trailing hyphen")]];
+    }
 
     BlockStyle blockStyle;
 };

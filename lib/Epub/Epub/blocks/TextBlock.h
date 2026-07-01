@@ -29,6 +29,7 @@ class TextBlock final : public Block {
   std::vector<uint16_t> wordGuideDotXOffset;
   // Per-word flags. Bit 0 paints a simple black CSS background behind this word/token.
   // Bit 1 marks a visible hyphen inserted by layout/hyphenation, not the EPUB text.
+  // Empty when no word in the block needs either flag.
   std::vector<uint8_t> wordBackgroundBlack;
   BlockStyle blockStyle;
 

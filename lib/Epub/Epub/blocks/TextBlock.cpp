@@ -15,9 +15,8 @@ constexpr uint32_t MAX_SERIALIZED_WORD_BYTES = 4096;
 constexpr uint32_t SERIALIZED_TEXT_BLOCK_TAIL_BYTES =
     sizeof(EpdFontFamily::Style) + sizeof(bool) + sizeof(int16_t) * 7 + sizeof(bool) + sizeof(bool) + sizeof(bool);
 constexpr uint32_t SERIALIZED_MIN_WORD_METADATA_BYTES =
-    sizeof(uint32_t) + sizeof(int16_t) + sizeof(EpdFontFamily::Style) + sizeof(uint8_t);
-constexpr uint32_t SERIALIZED_POST_WORD_MIN_METADATA_BYTES =
-    sizeof(int16_t) + sizeof(EpdFontFamily::Style) + sizeof(uint8_t);
+    sizeof(uint32_t) + sizeof(int16_t) + sizeof(EpdFontFamily::Style);
+constexpr uint32_t SERIALIZED_POST_WORD_MIN_METADATA_BYTES = sizeof(int16_t) + sizeof(EpdFontFamily::Style);
 
 uint16_t measureBackgroundWidth(const GfxRenderer& renderer, const int fontId, const std::string& word,
                                 const EpdFontFamily::Style style) {
@@ -91,8 +90,9 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
   // Validate iterator bounds before rendering
   const bool hasBionic = !wordBionicBoundary.empty();
   const bool hasGuideDots = !wordGuideDotXOffset.empty();
+  const bool hasBackgroundFlags = !wordBackgroundBlack.empty();
   if (words.size() != wordXpos.size() || words.size() != wordStyles.size() ||
-      words.size() != wordBackgroundBlack.size() ||
+      (hasBackgroundFlags && words.size() != wordBackgroundBlack.size()) ||
       (hasBionic && (words.size() != wordBionicBoundary.size() || words.size() != wordBionicSuffixX.size())) ||
       (!hasBionic && !wordBionicSuffixX.empty()) || (hasGuideDots && words.size() != wordGuideDotXOffset.size())) {
     LOG_ERR("TXB",
@@ -112,7 +112,8 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
     const auto baseDir = static_cast<BidiUtils::BidiBaseDir>(
         BidiUtils::detectParagraphLevel(words[i].c_str(), blockStyle.isRtl ? 1 : 0));
 
-    if ((wordBackgroundBlack[i] & WORD_FLAG_BACKGROUND_BLACK) != 0 && isWhitespaceOnlyBackgroundToken(words[i])) {
+    if (hasBackgroundFlags && (wordBackgroundBlack[i] & WORD_FLAG_BACKGROUND_BLACK) != 0 &&
+        isWhitespaceOnlyBackgroundToken(words[i])) {
       const uint16_t backgroundWidth = measureBackgroundWidth(renderer, fontId, words[i], currentStyle);
       if (backgroundWidth > 0) {
         renderer.fillRect(wordX, y, backgroundWidth, renderer.getFontAscenderSize(fontId), true);
@@ -205,8 +206,9 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
 bool TextBlock::serialize(FsFile& file) const {
   const bool hasBionic = !wordBionicBoundary.empty();
   const bool hasGuideDots = !wordGuideDotXOffset.empty();
+  const bool hasBackgroundFlags = !wordBackgroundBlack.empty();
   if (words.size() != wordXpos.size() || words.size() != wordStyles.size() ||
-      words.size() != wordBackgroundBlack.size() ||
+      (hasBackgroundFlags && words.size() != wordBackgroundBlack.size()) ||
       (hasBionic && (words.size() != wordBionicBoundary.size() || words.size() != wordBionicSuffixX.size())) ||
       (!hasBionic && !wordBionicSuffixX.empty()) || (hasGuideDots && words.size() != wordGuideDotXOffset.size())) {
     LOG_ERR(
@@ -255,8 +257,13 @@ bool TextBlock::serialize(FsFile& file) const {
       if (!serialization::tryWritePod(file, dx)) return false;
     }
   }
-  for (auto bg : wordBackgroundBlack) {
-    if (!serialization::tryWritePod(file, bg)) return false;
+  if (!serialization::tryWritePod(file, static_cast<uint8_t>(hasBackgroundFlags ? 1 : 0))) {
+    return false;
+  }
+  if (hasBackgroundFlags) {
+    for (auto bg : wordBackgroundBlack) {
+      if (!serialization::tryWritePod(file, bg)) return false;
+    }
   }
 
   // Style (alignment + margins/padding/indent)
@@ -301,7 +308,8 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file) {
   }
 
   const uint32_t minimumRemainingBytes = static_cast<uint32_t>(wc) * SERIALIZED_MIN_WORD_METADATA_BYTES +
-                                         sizeof(uint8_t) + sizeof(uint8_t) + SERIALIZED_TEXT_BLOCK_TAIL_BYTES;
+                                         sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint8_t) +
+                                         SERIALIZED_TEXT_BLOCK_TAIL_BYTES;
   const int remainingBeforeWords = file.available();
   if (remainingBeforeWords < 0 || static_cast<uint32_t>(remainingBeforeWords) < minimumRemainingBytes) {
     LOG_ERR("TXB", "Deserialization failed: truncated block metadata (%u words need at least %lu bytes, %d available)",
@@ -313,7 +321,6 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file) {
   words.resize(wc);
   wordXpos.resize(wc);
   wordStyles.resize(wc);
-  wordBackgroundBlack.resize(wc);
   for (auto& w : words) {
     if (!readBoundedString(file, w)) {
       return nullptr;
@@ -321,7 +328,8 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file) {
   }
 
   const uint32_t remainingMetadataBytes = static_cast<uint32_t>(wc) * SERIALIZED_POST_WORD_MIN_METADATA_BYTES +
-                                          sizeof(uint8_t) + sizeof(uint8_t) + SERIALIZED_TEXT_BLOCK_TAIL_BYTES;
+                                          sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint8_t) +
+                                          SERIALIZED_TEXT_BLOCK_TAIL_BYTES;
   const int remainingAfterWords = file.available();
   if (remainingAfterWords < 0 || static_cast<uint32_t>(remainingAfterWords) < remainingMetadataBytes) {
     LOG_ERR("TXB", "Deserialization failed: truncated post-word metadata (%lu bytes needed, %d available)",
@@ -361,8 +369,16 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(FsFile& file) {
       if (!serialization::tryReadPod(file, dx)) return nullptr;
     }
   }
-  for (auto& bg : wordBackgroundBlack) {
-    if (!serialization::tryReadPod(file, bg)) return nullptr;
+  uint8_t hasBackgroundFlags = 0;
+  if (!serialization::tryReadPod(file, hasBackgroundFlags) || hasBackgroundFlags > 1) {
+    LOG_ERR("TXB", "Deserialization failed: invalid background metadata flag");
+    return nullptr;
+  }
+  if (hasBackgroundFlags) {
+    wordBackgroundBlack.resize(wc);
+    for (auto& bg : wordBackgroundBlack) {
+      if (!serialization::tryReadPod(file, bg)) return nullptr;
+    }
   }
 
   // Style (alignment + margins/padding/indent)
