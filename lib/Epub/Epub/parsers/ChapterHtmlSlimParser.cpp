@@ -39,6 +39,8 @@ constexpr size_t SINGLE_READING_AID_BUFFERED_WORDS_BEFORE_LAYOUT = 240;
 constexpr uint16_t SINGLE_READING_AID_TEXT_RUN_BYTES_BEFORE_LAYOUT = 1536;
 constexpr size_t COMBINED_READING_AID_BUFFERED_WORDS_BEFORE_LAYOUT = 175;
 constexpr uint16_t COMBINED_READING_AID_TEXT_RUN_BYTES_BEFORE_LAYOUT = 1024;
+constexpr size_t SECTION_ADVANCE_PREWARM_READ_BUFFER_SIZE = 512;
+constexpr uint32_t SECTION_ADVANCE_PREWARM_MAX_CODEPOINTS = 4096;
 constexpr uint8_t INITIAL_PAGE_ELEMENT_RESERVE = 8;
 constexpr uint8_t INITIAL_TABLE_FRAGMENT_ROW_RESERVE = 8;
 constexpr uint32_t PAGE_ELEMENT_RESERVE_MIN_MAX_ALLOC = 1024;
@@ -58,6 +60,58 @@ static constexpr const char* const SKIP_TAGS[] = {"head"};
 bool isWhitespace(const char c) { return c == ' ' || c == '\r' || c == '\n' || c == '\t'; }
 
 static char asciiLower(const char c) { return (c >= 'A' && c <= 'Z') ? static_cast<char>(c - 'A' + 'a') : c; }
+
+bool appendUniquePrewarmCodepoint(const uint32_t cp, uint32_t* codepoints, uint32_t& cpCount, const uint32_t maxCount) {
+  if (cp == 0) return false;
+  for (uint32_t i = 0; i < cpCount; ++i) {
+    if (codepoints[i] == cp) return false;
+  }
+  if (cpCount >= maxCount) return true;
+  codepoints[cpCount++] = cp;
+  return false;
+}
+
+void resetPrewarmUtf8(uint32_t& accumulator, uint8_t& remaining) {
+  accumulator = 0;
+  remaining = 0;
+}
+
+bool feedPrewarmUtf8Byte(const uint8_t byte, uint32_t* codepoints, uint32_t& cpCount, uint32_t& accumulator,
+                         uint8_t& remaining) {
+  if (remaining == 0) {
+    if (byte < 0x80) {
+      return appendUniquePrewarmCodepoint(byte, codepoints, cpCount, SECTION_ADVANCE_PREWARM_MAX_CODEPOINTS);
+    }
+    if ((byte & 0xE0) == 0xC0) {
+      accumulator = byte & 0x1F;
+      remaining = 1;
+    } else if ((byte & 0xF0) == 0xE0) {
+      accumulator = byte & 0x0F;
+      remaining = 2;
+    } else if ((byte & 0xF8) == 0xF0) {
+      accumulator = byte & 0x07;
+      remaining = 3;
+    } else {
+      return appendUniquePrewarmCodepoint(REPLACEMENT_GLYPH, codepoints, cpCount,
+                                          SECTION_ADVANCE_PREWARM_MAX_CODEPOINTS);
+    }
+    return false;
+  }
+
+  if ((byte & 0xC0) != 0x80) {
+    resetPrewarmUtf8(accumulator, remaining);
+    return appendUniquePrewarmCodepoint(REPLACEMENT_GLYPH, codepoints, cpCount, SECTION_ADVANCE_PREWARM_MAX_CODEPOINTS);
+  }
+
+  accumulator = (accumulator << 6U) | (byte & 0x3FU);
+  --remaining;
+  if (remaining == 0) {
+    const uint32_t cp = accumulator;
+    accumulator = 0;
+    return appendUniquePrewarmCodepoint(cp, codepoints, cpCount, SECTION_ADVANCE_PREWARM_MAX_CODEPOINTS);
+  }
+  return false;
+}
 
 static bool tokenEqualsIgnoreCase(const char* value, const char* token, const size_t tokenLen) {
   for (size_t i = 0; i < tokenLen; ++i) {
@@ -2365,6 +2419,100 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   }
 }
 
+void ChapterHtmlSlimParser::prewarmSectionAdvanceTable(FsFile& file) const {
+  if (!renderer.isSdCardFont(fontId) || isPreviewBuild()) {
+    return;
+  }
+
+  std::unique_ptr<uint32_t[]> codepoints(new (std::nothrow) uint32_t[SECTION_ADVANCE_PREWARM_MAX_CODEPOINTS]);
+  std::unique_ptr<uint8_t[]> buffer(new (std::nothrow) uint8_t[SECTION_ADVANCE_PREWARM_READ_BUFFER_SIZE]);
+  if (!codepoints || !buffer) {
+    LOG_ERR("EHP", "Failed to allocate section advance prewarm buffers");
+    file.seekSet(0);
+    return;
+  }
+
+  const uint32_t startMs = millis();
+  uint32_t cpCount = 0;
+  uint32_t utf8Accumulator = 0;
+  uint8_t utf8Remaining = 0;
+  bool inTag = false;
+  bool inEntity = false;
+  bool hitCap = false;
+
+  while (file.available() > 0 && !hitCap) {
+    const size_t len = file.read(buffer.get(), SECTION_ADVANCE_PREWARM_READ_BUFFER_SIZE);
+    if (len == 0) {
+      LOG_DBG("EHP", "Section advance prewarm stopped after short read");
+      break;
+    }
+
+    for (size_t i = 0; i < len && !hitCap; ++i) {
+      const uint8_t byte = buffer[i];
+      const char c = static_cast<char>(byte);
+
+      if (inTag) {
+        if (c == '>') {
+          inTag = false;
+        }
+        continue;
+      }
+
+      if (inEntity) {
+        if (c == ';' || isWhitespace(c)) {
+          inEntity = false;
+        } else if (c == '<') {
+          inEntity = false;
+          inTag = true;
+        }
+        continue;
+      }
+
+      if (c == '<') {
+        inTag = true;
+        resetPrewarmUtf8(utf8Accumulator, utf8Remaining);
+        continue;
+      }
+      if (c == '&') {
+        inEntity = true;
+        resetPrewarmUtf8(utf8Accumulator, utf8Remaining);
+        hitCap = appendUniquePrewarmCodepoint(' ', codepoints.get(), cpCount, SECTION_ADVANCE_PREWARM_MAX_CODEPOINTS);
+        continue;
+      }
+      if (isWhitespace(c)) {
+        resetPrewarmUtf8(utf8Accumulator, utf8Remaining);
+        hitCap = appendUniquePrewarmCodepoint(' ', codepoints.get(), cpCount, SECTION_ADVANCE_PREWARM_MAX_CODEPOINTS);
+        continue;
+      }
+
+      hitCap = feedPrewarmUtf8Byte(byte, codepoints.get(), cpCount, utf8Accumulator, utf8Remaining);
+    }
+  }
+
+  if (utf8Remaining != 0 && !hitCap) {
+    hitCap = appendUniquePrewarmCodepoint(REPLACEMENT_GLYPH, codepoints.get(), cpCount,
+                                          SECTION_ADVANCE_PREWARM_MAX_CODEPOINTS);
+  }
+  if (hitCap) {
+    LOG_DBG("EHP", "Section advance prewarm hit unique codepoint cap (%u)",
+            static_cast<unsigned>(SECTION_ADVANCE_PREWARM_MAX_CODEPOINTS));
+  }
+
+  if (!file.seekSet(0)) {
+    LOG_ERR("EHP", "Failed to rewind section file after advance prewarm");
+    return;
+  }
+
+  if (cpCount == 0) {
+    return;
+  }
+
+  renderer.ensureSdCardFontReady(fontId, codepoints.get(), cpCount, /*includeSpace=*/true, hyphenationEnabled,
+                                 /*styleMask=*/0x0F);
+  LOG_DBG("EHP", "Section advance prewarm: codepoints=%u time=%lu ms free=%u maxAlloc=%u",
+          static_cast<unsigned>(cpCount), millis() - startMs, ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+}
+
 bool ChapterHtmlSlimParser::parseAndBuildPages() {
   // Initialize block style stack with a root entry representing "no ancestor block elements".
   // The user's paragraph alignment is set as the default so child elements without explicit
@@ -2437,6 +2585,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
 
   // Compute the time taken to parse and build pages
   const uint32_t chapterStartTime = millis();
+  prewarmSectionAdvanceTable(file);
   do {
     void* const buf = XML_GetBuffer(parser, PARSE_BUFFER_SIZE);
     if (!buf) {

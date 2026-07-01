@@ -1316,6 +1316,37 @@ int SdCardFont::buildAdvanceTable(const std::vector<std::string>& words, bool in
   return buildAdvanceTableRange(words.begin(), words.end(), words.size() > 1, includeHyphen, styleMask);
 }
 
+int SdCardFont::buildAdvanceTableForCodepoints(const uint32_t* sourceCodepoints, uint32_t cpCount, bool includeSpace,
+                                               bool includeHyphen, uint8_t styleMask) {
+  if (!loaded_) return -1;
+  styleMask = resolveStyleMask(styleMask);
+  if (styleMask == 0) return 0;
+
+  const unsigned long startMs = millis();
+  const uint32_t extraCount = (includeSpace ? 1U : 0U) + (includeHyphen ? 1U : 0U);
+  std::unique_ptr<uint32_t[]> codepoints(new (std::nothrow) uint32_t[cpCount + extraCount]);
+  if (!codepoints) {
+    LOG_ERR("SDCF", "buildAdvanceTableForCodepoints: failed to allocate codepoint buffer (%u bytes)",
+            static_cast<unsigned>((cpCount + extraCount) * sizeof(uint32_t)));
+    return -1;
+  }
+
+  uint32_t outCount = 0;
+  for (uint32_t i = 0; i < cpCount; ++i) {
+    const uint32_t cp = sourceCodepoints[i];
+    if (cp == 0) continue;
+    codepoints[outCount++] = cp;
+  }
+  if (includeSpace) codepoints[outCount++] = ' ';
+  if (includeHyphen) codepoints[outCount++] = '-';
+
+  std::sort(codepoints.get(), codepoints.get() + outCount);
+  outCount = static_cast<uint32_t>(std::unique(codepoints.get(), codepoints.get() + outCount) - codepoints.get());
+  const int totalMissed = fetchAdvancesForCodepoints(codepoints.get(), outCount, styleMask);
+  stats_.prewarmTotalMs = millis() - startMs;
+  return totalMissed;
+}
+
 // --- Stats ---
 
 void SdCardFont::logStats(const char* label) {

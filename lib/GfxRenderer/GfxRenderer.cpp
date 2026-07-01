@@ -111,6 +111,18 @@ void GfxRenderer::ensureSdCardFontReady(int fontId, const std::vector<std::strin
   }
 }
 
+void GfxRenderer::ensureSdCardFontReady(int fontId, const uint32_t* codepoints, uint32_t cpCount, bool includeSpace,
+                                        bool includeHyphen, uint8_t styleMask) const {
+  auto it = sdCardFonts_.find(fontId);
+  if (it != sdCardFonts_.end()) {
+    int missed =
+        it->second->buildAdvanceTableForCodepoints(codepoints, cpCount, includeSpace, includeHyphen, styleMask);
+    if (missed > 0) {
+      LOG_DBG("GFX", "ensureSdCardFontReady: %d glyph(s) not found", missed);
+    }
+  }
+}
+
 bool GfxRenderer::releaseSdCardFontForLowMemory(int fontId) const {
   auto it = sdCardFonts_.find(fontId);
   if (it == sdCardFonts_.end()) return false;

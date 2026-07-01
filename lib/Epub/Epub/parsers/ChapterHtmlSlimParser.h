@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arena.h>
+#include <HalStorage.h>
 #include <expat.h>
 
 #include <climits>
@@ -197,6 +198,7 @@ class ChapterHtmlSlimParser {
   void emitCurrentTableBuffer();
   void fallbackCurrentTableBufferToParagraphs(const char* reason);
   void fallbackCurrentTableBufferIfNeeded(const char* stage);
+  void prewarmSectionAdvanceTable(FsFile& file) const;
   // XML callbacks
   static void XMLCALL startElement(void* userData, const XML_Char* name, const XML_Char** atts);
   static void XMLCALL characterData(void* userData, const XML_Char* s, int len);
