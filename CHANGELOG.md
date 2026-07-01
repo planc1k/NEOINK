@@ -14,6 +14,7 @@
 - EPUB CSS cache lookups now hydrate selector rules into arena-backed memory when heap allows, reducing repeated SD-card reads while building pages.
 - EPUB section builds now batch SD-card font advance metric prewarming for a chapter before layout, reducing repeated small SD reads while pages are built.
 - Home and sleep screens now regenerate missing EPUB cover thumbnails on demand instead of generating them during reader startup.
+- EPUB cover generation now caches the extracted source cover image and Home reuses one metadata load for highlighted-book progress and chapter title.
 
 ### Fixed
 - Font selection no longer reopens the font preview after choosing a font.

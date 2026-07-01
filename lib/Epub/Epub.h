@@ -126,6 +126,8 @@ class Epub {
 
  private:
   bool loadCrossInkLocations();
+  std::string getCachedCoverImagePath(const std::string& coverImageHref) const;
+  bool ensureCachedCoverImage(const std::string& coverImageHref, std::string& outPath) const;
   bool generateThumbBmpInternal(int width, int height, bool adaptiveContain, const GfxRenderer* renderer,
                                 int readerFontId) const;
 };

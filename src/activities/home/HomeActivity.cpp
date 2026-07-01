@@ -167,6 +167,44 @@ BookReadingStats loadRecentBookStats(const RecentBook& book) {
   return BookReadingStats::load(cachePath);
 }
 
+bool loadEpubHighlightedContext(const RecentBook& book, const bool loadProgress, const bool loadChapterTitle,
+                                float* progressPercent, std::string* chapterTitle) {
+  if (!FsHelpers::hasEpubExtension(book.path) || (!loadProgress && !loadChapterTitle)) {
+    return false;
+  }
+
+  Epub epub(book.path, "/.crosspoint");
+  if (!epub.load(false, true)) {
+    return false;
+  }
+
+  EpubReaderUtils::Progress progress;
+  if (!EpubReaderUtils::loadProgress(epub, progress, "HOME")) {
+    return false;
+  }
+
+  if (loadProgress && progressPercent) {
+    if (progress.hasPageCount && progress.pageCount > 0) {
+      const float chapterProgress =
+          static_cast<float>(progress.pageNumber + 1) / static_cast<float>(progress.pageCount);
+      *progressPercent =
+          std::clamp(epub.calculateProgress(progress.spineIndex, chapterProgress) * 100.0f, 0.0f, 100.0f);
+    } else {
+      *progressPercent = -1.0f;
+    }
+  }
+
+  if (loadChapterTitle && chapterTitle) {
+    chapterTitle->clear();
+    const auto spineItem = epub.getSpineItem(progress.spineIndex);
+    if (spineItem.tocIndex >= 0) {
+      *chapterTitle = epub.getTocItem(spineItem.tocIndex).title;
+    }
+  }
+
+  return true;
+}
+
 void updateRecentBookCoverPath(const RecentBook& book, const std::string& coverBmpPath) {
   if (!RECENT_BOOKS.updateBook(book.path, book.title, book.author, coverBmpPath)) {
     LOG_ERR("HOME", "failed to update recent book metadata: %s", book.path.c_str());
@@ -348,30 +386,6 @@ std::string dashboardHomeCoverPath(const RecentBook& book, int coverHeight) {
   }
   return UITheme::getCoverThumbPath(book.coverBmpPath, dashboardHomeCoverWidth(coverHeight),
                                     dashboardHomeCoverHeight(coverHeight));
-}
-
-std::string loadRecentBookChapterTitle(const RecentBook& book) {
-  if (!FsHelpers::hasEpubExtension(book.path)) {
-    return {};
-  }
-
-  Epub epub(book.path, "/.crosspoint");
-  if (!epub.load(false, true)) {
-    return {};
-  }
-
-  EpubReaderUtils::Progress progress;
-  if (!EpubReaderUtils::loadProgress(epub, progress, "HOME")) {
-    return {};
-  }
-
-  const auto spineItem = epub.getSpineItem(progress.spineIndex);
-  if (spineItem.tocIndex < 0) {
-    return {};
-  }
-
-  const auto tocItem = epub.getTocItem(spineItem.tocIndex);
-  return tocItem.title;
 }
 
 void appendCarouselCoverStateToKey(std::string& key, const RecentBook& book) {
@@ -941,15 +955,25 @@ void HomeActivity::updateHighlightedBookContext() {
   const int idx = getHighlightedBookIndex();
   const bool useCachedStats = idx >= 0 && bookStatsCached && idx < kMaxCachedBooks;
   if (idx >= 0) {
+    const RecentBook& book = recentBooks[idx];
+    const bool isEpub = FsHelpers::hasEpubExtension(book.path);
+    const bool loadChapterTitle = isDashboardTheme();
     if (useCachedStats) {
       currentBookStats = cachedBookStats[idx];
       currentBookProgressPercent = cachedBookProgress[idx];
+      if (loadChapterTitle && isEpub) {
+        loadEpubHighlightedContext(book, false, true, nullptr, &currentBookChapterTitle);
+      }
     } else {
-      currentBookStats = loadRecentBookStats(recentBooks[idx]);
-      currentBookProgressPercent = RecentBookProgress::loadPercent(recentBooks[idx]);
-    }
-    if (isDashboardTheme()) {
-      currentBookChapterTitle = loadRecentBookChapterTitle(recentBooks[idx]);
+      currentBookStats = loadRecentBookStats(book);
+      if (isEpub) {
+        loadEpubHighlightedContext(book, true, loadChapterTitle, &currentBookProgressPercent, &currentBookChapterTitle);
+      } else {
+        currentBookProgressPercent = RecentBookProgress::loadPercent(book);
+      }
+      if (loadChapterTitle && !isEpub) {
+        currentBookChapterTitle.clear();
+      }
     }
   }
 
