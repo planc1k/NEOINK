@@ -18,6 +18,7 @@
 
 ### Fixed
 - Auto Turn interval settings and related action prompts opened from a long-press shortcut now stay open after releasing the shortcut button.
+- EPUB footnote previews no longer show a clipped `Footnotes` status-bar label when status-bar titles are hidden.
 - Font selection no longer reopens the font preview after choosing a font.
 - EPUB CSS caches are now validated before reuse so stale stylesheet caches are rebuilt instead of silently opening chapters without publisher CSS.
 - Chinese and other large SD-card font EPUBs no longer overlap characters after font or line-spacing changes exhaust the small glyph-advance cache.
