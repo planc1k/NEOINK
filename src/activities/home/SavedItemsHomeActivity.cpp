@@ -13,40 +13,12 @@
 #include "CrossPointState.h"
 #include "FileBrowserActionActivity.h"
 #include "MappedInputManager.h"
+#include "components/CompactHeader.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
 namespace {
 constexpr unsigned long SAVED_ITEM_DELETE_HOLD_MS = 1000;
-constexpr int kSavedItemsHeaderHeight = 67;
-constexpr int kSavedItemsHeaderTopGap = 6;
-constexpr int kSavedItemsHeaderTitleLift = 5;
-constexpr int kSavedItemsHeaderBaselineLift = 2;
-
-int savedItemsContentTop(const ThemeMetrics& metrics) {
-  return metrics.topPadding + std::min(metrics.headerHeight, kSavedItemsHeaderHeight) + kSavedItemsHeaderTopGap;
-}
-
-void drawSavedItemsHeader(const GfxRenderer& renderer, const char* title) {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const int pageWidth = renderer.getScreenWidth();
-  GUI.drawHeader(renderer,
-                 Rect{0, metrics.topPadding, pageWidth, std::min(metrics.headerHeight, kSavedItemsHeaderHeight)}, "");
-
-  const int visibleHeaderHeight = std::min(metrics.headerHeight, kSavedItemsHeaderHeight);
-  const int availableH = visibleHeaderHeight - metrics.batteryBarHeight;
-  const int titleX = metrics.contentSidePadding;
-  const int titleLineHeight = renderer.getLineHeight(UI_12_FONT_ID);
-  const int titleY =
-      metrics.topPadding + metrics.batteryBarHeight + (availableH - titleLineHeight) / 2 - kSavedItemsHeaderTitleLift;
-  const int titleBaselineY = titleY + renderer.getFontAscenderSize(UI_12_FONT_ID) - kSavedItemsHeaderBaselineLift;
-  const int batteryStartX = pageWidth - metrics.contentSidePadding - metrics.batteryWidth;
-  const int titleRightX = batteryStartX - metrics.contentSidePadding;
-  const int maxTitleWidth = std::max(1, titleRightX - titleX);
-  const std::string visibleTitle = renderer.truncatedText(UI_12_FONT_ID, title, maxTitleWidth, EpdFontFamily::BOLD);
-  renderer.drawText(UI_12_FONT_ID, titleX, titleBaselineY - renderer.getFontAscenderSize(UI_12_FONT_ID),
-                    visibleTitle.c_str(), true, EpdFontFamily::BOLD);
-}
 
 void mergeBookmarkEntry(std::vector<SavedBookEntry>& out, const BookmarkedBookEntry& entry) {
   auto it = std::find_if(out.begin(), out.end(), [&](const SavedBookEntry& existing) {
@@ -136,7 +108,11 @@ void SavedItemsHomeActivity::loop() {
     return;
   }
 
-  const int pageItems = UITheme::getInstance().getNumberOfItemsPerPage(renderer, true, false, true, true);
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int contentTop = CompactHeader::contentTop(metrics);
+  const int contentHeight =
+      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+  const int pageItems = std::max(1, contentHeight / metrics.listWithSubtitleRowHeight);
   const int listSize = static_cast<int>(books.size());
 
   buttonNavigator.onNextRelease([this, listSize] {
@@ -164,9 +140,9 @@ void SavedItemsHomeActivity::render(RenderLock&&) {
   const auto pageHeight = renderer.getScreenHeight();
   const auto& metrics = UITheme::getInstance().getMetrics();
 
-  drawSavedItemsHeader(renderer, tr(STR_BOOKMARKS_AND_CLIPPINGS));
+  CompactHeader::drawTitle(renderer, tr(STR_BOOKMARKS_AND_CLIPPINGS));
 
-  const int contentTop = savedItemsContentTop(metrics);
+  const int contentTop = CompactHeader::contentTop(metrics);
   const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
 
   if (books.empty()) {

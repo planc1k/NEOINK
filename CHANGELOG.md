@@ -17,7 +17,7 @@
 - EPUB cover generation now caches the extracted source cover image and Home reuses one metadata load for highlighted-book progress and chapter title.
 
 ### Fixed
-- Reading Stats and Bookmarks & Clippings on X3 now keep their headers aligned without crowding the battery indicator or divider.
+- Reading Stats, Bookmarks & Clippings, Settings, File Browser, and Recent Books on X3 now keep their headers aligned without crowding the battery indicator or divider.
 - Auto Turn interval settings and related action prompts opened from a long-press shortcut now stay open after releasing the shortcut button.
 - Font selection no longer reopens the font preview after choosing a font.
 - EPUB CSS caches are now validated before reuse so stale stylesheet caches are rebuilt instead of silently opening chapters without publisher CSS.
