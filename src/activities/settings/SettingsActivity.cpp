@@ -32,7 +32,7 @@
 #include "activities/util/IntervalSelectionActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "activities/util/OptionSelectionActivity.h"
-#include "components/HeaderDate.h"
+#include "components/CompactHeader.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -42,7 +42,6 @@ const StrId SettingsActivity::categoryNames[categoryCount] = {StrId::STR_CAT_DIS
 namespace {
 constexpr int systemVersionFooterSideMargin = 20;
 constexpr int systemVersionFooterBottomInset = 15;
-constexpr int roundedRaffHeaderDateYOffset = 13;
 constexpr size_t controlsParentBaseCount = 3;
 constexpr size_t controlsPowerMinCount = 2;
 constexpr size_t controlsPowerMaxCount = 3;
@@ -877,26 +876,20 @@ void SettingsActivity::render(RenderLock&&) {
 
   const auto& metrics = UITheme::getInstance().getMetrics();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_SETTINGS_TITLE));
-  int headerDateLineBottom = headerDateLineBottomY(renderer, metrics);
-  if (SETTINGS.uiTheme == CrossPointSettings::ROUNDEDRAFF) {
-    headerDateLineBottom += roundedRaffHeaderDateYOffset;
-  }
-  drawHeaderDateAtLineBottom(renderer, pageWidth, headerDateLineBottom);
+  CompactHeader::drawTitle(renderer, tr(STR_SETTINGS_TITLE), true);
 
   std::vector<TabInfo> tabs;
   tabs.reserve(categoryCount);
   for (int i = 0; i < categoryCount; i++) {
     tabs.push_back({I18N.get(categoryNames[i]), selectedCategoryIndex == i});
   }
-  GUI.drawTabBar(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight}, tabs,
-                 selectedSettingIndex == 0);
+  const int tabBarTop = CompactHeader::headerBottomY(metrics);
+  GUI.drawTabBar(renderer, Rect{0, tabBarTop, pageWidth, metrics.tabBarHeight}, tabs, selectedSettingIndex == 0);
 
   const auto& settings = *currentSettings;
-  Rect listRect{0, metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing,
-                pageWidth,
-                pageHeight - (metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight +
-                              metrics.buttonHintsHeight + metrics.verticalSpacing * 2)};
+  Rect listRect{
+      0, tabBarTop + metrics.tabBarHeight + metrics.verticalSpacing, pageWidth,
+      pageHeight - (tabBarTop + metrics.tabBarHeight + metrics.buttonHintsHeight + metrics.verticalSpacing * 2)};
   const StrId submenuTitleId = activeSubmenuTitleId();
   if (submenuTitleId != StrId::STR_NONE_OPT) {
     constexpr int submenuHeaderFontId = UI_10_FONT_ID;
