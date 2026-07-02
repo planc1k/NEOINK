@@ -4489,7 +4489,7 @@ void EpubReaderActivity::renderStatusBar() const {
       (!activeFootnotePreview && formatTimeLeftLabel(timeLeftLabel, sizeof(timeLeftLabel))) ? timeLeftLabel : nullptr;
   GUI.drawStatusBar(renderer, bookProgress, currentPage, pageCount, title, 0, textYOffset, bookmarked, timeLeft,
                     ReaderUtils::readerDarkModeEnabled(), chapterProgress * 100.0f, static_cast<int>(referencePage),
-                    static_cast<int>(referencePageCount));
+                    static_cast<int>(referencePageCount), !activeFootnotePreview);
   GUI.drawTopStatusBarClock(renderer, UITheme::getInstance().getMetrics().topPadding, nullptr, true, 0,
                             ReaderUtils::readerDarkModeEnabled());
 }

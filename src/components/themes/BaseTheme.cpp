@@ -753,7 +753,7 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
                               const int pageCount, std::string title, const int paddingBottom, const int textYOffset,
                               const bool isPageBookmarked, const char* timeLeftLabel, const bool darkMode,
                               const float chapterProgressPercent, const int stableCurrentPage,
-                              const int stablePageCount) const {
+                              const int stablePageCount, const bool showProgress) const {
   const bool foregroundBlack = !darkMode;
   auto metrics = UITheme::getInstance().getMetrics();
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
@@ -766,7 +766,8 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   int progressTextWidth = 0;
 
   const bool showStablePageNumbers = SETTINGS.stablePageNumbers && stableCurrentPage > 0 && stablePageCount > 0;
-  if (SETTINGS.statusBarBookProgressPercentage || SETTINGS.statusBarChapterPageCount || showStablePageNumbers) {
+  if (showProgress &&
+      (SETTINGS.statusBarBookProgressPercentage || SETTINGS.statusBarChapterPageCount || showStablePageNumbers)) {
     // Right aligned text for progress counter
     char progressStr[48];
 
@@ -796,7 +797,7 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   }
 
   // Draw Progress Bar
-  if (SETTINGS.statusBarProgressBar != CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE_PROGRESS) {
+  if (showProgress && SETTINGS.statusBarProgressBar != CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE_PROGRESS) {
     const int progressBarMaxWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
     const int progressBarY = renderer.getScreenHeight() - orientedMarginBottom -
                              ((SETTINGS.statusBarProgressBarThickness + 1) * 2) - paddingBottom;
