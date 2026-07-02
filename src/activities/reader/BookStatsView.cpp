@@ -18,6 +18,7 @@ constexpr int kStatsButtonHintTopGap = 10;
 constexpr int kStandaloneNoRtcMaxTopCardHeightDivisor = 2;
 constexpr int kStandaloneNoRtcMaxVerticalOffset = 32;
 constexpr int kPerBookRtcTopCardMaxExtra = 84;
+constexpr int kStatsHeaderBaselineLift = 2;
 
 struct StatsLayout {
   int headerHeight;
@@ -234,14 +235,16 @@ void drawHeaderTitle(const GfxRenderer& renderer, const char* title, const int h
   const int titleX = metrics.contentSidePadding;
   const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
   const int titleY = metrics.topPadding + metrics.batteryBarHeight + (availableH - lineHeight) / 2 - titleLiftPx;
+  const int titleBaselineY = titleY + renderer.getFontAscenderSize(UI_12_FONT_ID) - kStatsHeaderBaselineLift;
   const int batteryStartX = screenWidth - metrics.contentSidePadding - metrics.batteryWidth;
   const int dateStartX = showDate ? screenWidth - headerDateReservedWidth(renderer) : screenWidth;
   const int titleRightX = std::min(batteryStartX, dateStartX) - metrics.contentSidePadding;
   const int maxTitleWidth = std::max(1, titleRightX - titleX);
   const std::string truncTitle = renderer.truncatedText(UI_12_FONT_ID, title, maxTitleWidth, EpdFontFamily::BOLD);
-  renderer.drawText(UI_12_FONT_ID, titleX, titleY, truncTitle.c_str(), true, EpdFontFamily::BOLD);
+  renderer.drawText(UI_12_FONT_ID, titleX, titleBaselineY - renderer.getFontAscenderSize(UI_12_FONT_ID),
+                    truncTitle.c_str(), true, EpdFontFamily::BOLD);
   if (showDate) {
-    drawHeaderDateAtLineBottom(renderer, screenWidth, titleY + lineHeight);
+    drawHeaderDateAtBaseline(renderer, screenWidth, titleBaselineY);
   }
 }
 
