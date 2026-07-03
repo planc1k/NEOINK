@@ -3,6 +3,7 @@
 
 ### Added
 - Dashboard UI theme for the Home screen, combining the current book cover, reading stats, streak, and reader type in one layout.
+- Reading Stats support for XTC and XTCH books, including the XTC reader menu, Home and sleep screen stats, mark finished, delete stats, and cache-clearing preservation.
 - Nearby Position Sync for sending or applying the current EPUB position between two CrossInk devices over ESP-NOW.
 - Web EPUB optimizer now writes CrossInk location metadata into optimized EPUBs so future reader builds can use stable word-based positions across layout changes.
 - EPUB reader now uses CrossInk location metadata from optimized EPUBs for word-weighted progress and percent-based jumps.
