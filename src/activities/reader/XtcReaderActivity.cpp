@@ -26,6 +26,10 @@
 #include "components/themes/lyra/LyraCarouselTheme.h"
 #include "fontIds.h"
 
+namespace {
+constexpr unsigned long MIN_READING_STATS_PAGE_MS = 2000UL;
+}
+
 void XtcReaderActivity::onEnter() {
   Activity::onEnter();
 
@@ -40,6 +44,11 @@ void XtcReaderActivity::onEnter() {
 
   // Load saved progress
   loadProgress();
+
+  stats = BookReadingStats::load(xtc->getCachePath());
+  globalStats = GlobalReadingStats::load();
+  sessionReadingSeconds = 0;
+  hasSessionStartLocalDateTime = getCurrentLocalReadingStatsDateTime(sessionStartLocalDateTime);
 
   // Save current XTC as last opened book and add to recent books
   APP_STATE.openEpubPath = xtc->getPath();
@@ -59,6 +68,8 @@ void XtcReaderActivity::onExit() {
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
 
+  commitReadingStats();
+
   // Generate carousel thumbnails while XTC is still loaded so the home screen
   // can display the cover on the very first render without a loading popup.
   if (xtc &&
@@ -74,12 +85,14 @@ void XtcReaderActivity::loop() {
   // Enter chapter selection activity
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (xtc && xtc->hasChapters() && !xtc->getChapters().empty()) {
+      pauseReadingStatsTimer("chapter_selection");
       startActivityForResult(
           std::make_unique<XtcReaderChapterSelectionActivity>(renderer, mappedInput, xtc, currentPage),
           [this](const ActivityResult& result) {
             if (!result.isCancelled) {
               currentPage = std::get<PageResult>(result.data).page;
             }
+            resumeReadingStatsTimer("chapter_selection_return");
           });
     }
   }
@@ -200,12 +213,19 @@ void XtcReaderActivity::loop() {
         return;
       }
 
+      uint32_t forwardReadSeconds = 0;
+      const bool shouldRecordForwardRead =
+          nextLongPressed && forwardPageReadElapsed(forwardReadSeconds, "front_long_press");
+      recordCurrentPageReadingTime("front_long_press");
       if (prevLongPressed) {
         currentPage = currentPage >= 10 ? currentPage - 10 : 0;
       } else {
         currentPage += 10;
         if (currentPage >= xtc->getPageCount()) {
           currentPage = xtc->getPageCount();
+        }
+        if (shouldRecordForwardRead) {
+          recordForwardPageTurn(forwardReadSeconds);
         }
       }
       requestUpdate();
@@ -248,6 +268,7 @@ void XtcReaderActivity::loop() {
   const int skipAmount = skipPages ? 10 : 1;
 
   if (prevTriggered) {
+    recordCurrentPageReadingTime("page_back");
     if (currentPage >= static_cast<uint32_t>(skipAmount)) {
       currentPage -= skipAmount;
     } else {
@@ -255,12 +276,115 @@ void XtcReaderActivity::loop() {
     }
     requestUpdate();
   } else if (nextTriggered) {
+    uint32_t forwardReadSeconds = 0;
+    const bool shouldRecordForwardRead = forwardPageReadElapsed(forwardReadSeconds, "page_forward");
+    recordCurrentPageReadingTime("page_forward");
     currentPage += skipAmount;
     if (currentPage >= xtc->getPageCount()) {
       currentPage = xtc->getPageCount();  // Allow showing "End of book"
     }
+    if (shouldRecordForwardRead) {
+      recordForwardPageTurn(forwardReadSeconds);
+    }
     requestUpdate();
   }
+}
+
+void XtcReaderActivity::pauseReadingStatsTimer(const char* source) {
+  recordCurrentPageReadingTime(source);
+  pageShownAtMs = 0UL;
+}
+
+void XtcReaderActivity::resumeReadingStatsTimer(const char*) {
+  if (xtc && currentPage < xtc->getPageCount()) {
+    pageShownAtMs = millis();
+  } else {
+    pageShownAtMs = 0UL;
+  }
+}
+
+bool XtcReaderActivity::currentPageReadingSecondsForStats(uint32_t& seconds, const char* source) const {
+  seconds = 0;
+  if (!SETTINGS.shouldTrackReadingStats() || pageShownAtMs == 0UL) {
+    return false;
+  }
+
+  const unsigned long elapsedMs = millis() - pageShownAtMs;
+  const uint32_t elapsedSeconds = static_cast<uint32_t>(elapsedMs / 1000UL);
+  if (elapsedSeconds == 0) {
+    return false;
+  }
+
+  const uint32_t thresholdSeconds = SETTINGS.getReadingIdleTimeThresholdSeconds();
+  if (elapsedSeconds > thresholdSeconds) {
+    LOG_DBG("XTR", "Reading time interval rejected as idle: source=%s seconds=%lu threshold=%lu",
+            source ? source : "unknown", static_cast<unsigned long>(elapsedSeconds),
+            static_cast<unsigned long>(thresholdSeconds));
+    return false;
+  }
+
+  seconds = elapsedSeconds;
+  return true;
+}
+
+bool XtcReaderActivity::forwardPageReadElapsed(uint32_t& seconds, const char*) const {
+  seconds = 0;
+  if (!SETTINGS.shouldTrackReadingStats() || pageShownAtMs == 0UL) {
+    return false;
+  }
+
+  const unsigned long elapsedMs = millis() - pageShownAtMs;
+  if (elapsedMs < MIN_READING_STATS_PAGE_MS) {
+    return false;
+  }
+
+  const uint32_t elapsedSeconds = static_cast<uint32_t>(elapsedMs / 1000UL);
+  if (elapsedSeconds > SETTINGS.getReadingIdleTimeThresholdSeconds()) {
+    return false;
+  }
+
+  seconds = elapsedSeconds;
+  return true;
+}
+
+void XtcReaderActivity::recordCurrentPageReadingTime(const char* source) {
+  uint32_t seconds = 0;
+  if (currentPageReadingSecondsForStats(seconds, source)) {
+    sessionReadingSeconds = sessionReadingSeconds > UINT32_MAX - seconds ? UINT32_MAX : sessionReadingSeconds + seconds;
+  }
+  pageShownAtMs = 0UL;
+}
+
+void XtcReaderActivity::recordForwardPageTurn(uint32_t seconds) {
+  (void)seconds;
+  stats.totalPagesTurned++;
+  globalStats.totalPagesTurned++;
+}
+
+void XtcReaderActivity::commitReadingStats() {
+  if (!xtc || !SETTINGS.shouldTrackReadingStats()) {
+    return;
+  }
+
+  recordCurrentPageReadingTime("reader_exit");
+  const uint32_t elapsedSecs = sessionReadingSeconds;
+  if (elapsedSecs >= 60) {
+    stats.sessionCount++;
+    globalStats.totalSessions++;
+  }
+  if (elapsedSecs >= 10) {
+    stats.totalReadingSeconds += elapsedSecs;
+    globalStats.totalReadingSeconds += elapsedSecs;
+    if (hasSessionStartLocalDateTime) {
+      stats.recordReadingSpan(sessionStartLocalDateTime, elapsedSecs);
+      globalStats.recordReadingSpan(sessionStartLocalDateTime, elapsedSecs);
+    }
+    if (elapsedSecs >= 120 && !stats.startDateManual && !stats.startDate.isValid() && hasSessionStartLocalDateTime) {
+      stats.startDate = sessionStartLocalDateTime.date;
+    }
+  }
+  stats.save(xtc->getCachePath());
+  globalStats.save();
 }
 
 bool XtcReaderActivity::executeLongPressBackAction() {
@@ -309,6 +433,7 @@ void XtcReaderActivity::render(RenderLock&&) {
   }
 
   renderPage();
+  pageShownAtMs = millis();
   saveProgress();
 }
 
