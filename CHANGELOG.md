@@ -17,6 +17,7 @@
 - EPUB cover generation now caches the extracted source cover image and Home reuses one metadata load for highlighted-book progress and chapter title.
 
 ### Fixed
+- KOSync now frees SD-card font registry memory before TLS requests and releases the EPUB before upload, reducing sync low-memory failures with many SD fonts installed.
 - Reading Stats, Bookmarks & Clippings, Settings, File Browser, and Recent Books on X3 now keep their headers aligned without crowding the battery indicator or divider.
 - Auto Turn interval settings and related action prompts opened from a long-press shortcut now stay open after releasing the shortcut button.
 - EPUB footnote previews no longer show a clipped `Footnotes` status-bar label when status-bar titles are hidden.

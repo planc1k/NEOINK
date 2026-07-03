@@ -103,6 +103,17 @@ void SdCardFontSystem::releaseLoadedFont(GfxRenderer& renderer) {
   LOG_DBG("SDFS", "Released SD card font before low-memory operation: %s", familyName.c_str());
 }
 
+void SdCardFontSystem::releaseForNetwork(GfxRenderer& renderer) {
+  releaseLoadedFont(renderer);
+
+  const int familyCount = registry_.getFamilyCount();
+  if (familyCount == 0) return;
+
+  registry_.clear();
+  registryDirty_.store(true, std::memory_order_release);
+  LOG_DBG("SDFS", "Released SD font registry before network operation (%d families)", familyCount);
+}
+
 int SdCardFontSystem::resolveFontId(const char* familyName, uint8_t /*fontSizeEnum*/) const {
   // The manager loads exactly one size (closest to SETTINGS.fontSize), so the
   // enum is implicit — always return the single loaded font ID for this family.
