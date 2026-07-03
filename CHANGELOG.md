@@ -31,6 +31,7 @@
 - EPUB clipping selection now follows right-to-left line order when selecting Hebrew and other RTL text.
 - Lyra Carousel no longer shows a blank carousel after returning from WiFi-related File Transfer screens and moving between the menu row and book row.
 - Stable page numbers now work with EPUBs optimized by v1.3.4 as well as newer optimized EPUBs.
+- Generated SD-card font packages now request the same core glyph ranges as built-in reader fonts.
 
 ## [v1.3.4] - 2026-06-24
 
