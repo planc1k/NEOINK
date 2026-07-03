@@ -1777,7 +1777,7 @@ function exportLogToFile(filename = null, isBatch = false) {
 const DEFENSIVE_STYLE = '<style type="text/css">img,svg{max-width:100%;height:auto}body{overflow-wrap:break-word}table{max-width:100%;table-layout:fixed}pre,code{white-space:pre-wrap;word-wrap:break-word}*{box-sizing:border-box}</style>';
 const CROSSINK_LOCATION_MANIFEST_PATH = 'META-INF/x-locations.json';
 const CROSSINK_LOCATION_WORDS_PER_UNIT = 64;
-const CROSSINK_REFERENCE_WORDS_PER_PAGE = 250;
+const CROSSINK_REFERENCE_WORDS_PER_PAGE = 275;
 
 /** Escape a string for safe insertion into XML attribute values / text content. */
 function xmlEscape(str) {
