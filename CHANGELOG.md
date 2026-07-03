@@ -12,6 +12,7 @@
 
 - Large EPUBs and SD-card font-heavy books now build pages with less temporary memory churn, reducing slow first opens and low-memory failures.
 - Home and sleep screens now do more EPUB cover and thumbnail work on demand, reducing reader startup work and reusing cached cover data where possible.
+- ChareInk is no longer bundled as a built-in reader font choice, reducing firmware size while keeping the remaining built-in fonts' fallback glyph coverage.
 
 ### Fixed
 
