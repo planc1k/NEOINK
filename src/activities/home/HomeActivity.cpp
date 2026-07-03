@@ -159,7 +159,7 @@ std::string getRecentBookCachePath(const RecentBook& book) {
 }
 
 BookReadingStats loadRecentBookStats(const RecentBook& book) {
-  if (!FsHelpers::hasEpubExtension(book.path)) {
+  if (!FsHelpers::hasEpubExtension(book.path) && !FsHelpers::hasXtcExtension(book.path)) {
     return BookReadingStats{};
   }
 
@@ -412,7 +412,7 @@ void appendCarouselCoverStateToKey(std::string& key, const RecentBook& book) {
   const std::string cachePath = getRecentBookCachePath(book);
   if (!cachePath.empty()) {
     appendHashedFileStateToKey(key, cachePath + "/progress.bin");
-    if (FsHelpers::hasEpubExtension(book.path)) {
+    if (FsHelpers::hasEpubExtension(book.path) || FsHelpers::hasXtcExtension(book.path)) {
       appendHashedFileStateToKey(key, cachePath + "/stats_v5.bin");
     }
   } else {

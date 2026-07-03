@@ -7,6 +7,7 @@
 #include <HalStorage.h>
 #include <I18n.h>
 #include <PNGdec.h>
+#include <Xtc.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -234,13 +235,22 @@ RecentBook recentBookForPath(const std::string& path) {
   return loadedBook;
 }
 
-std::string epubCachePathFor(const std::string& path) { return Epub::cachePathForFilePath(path, "/.crosspoint"); }
+std::string bookStatsCachePathFor(const std::string& path) {
+  if (FsHelpers::hasEpubExtension(path)) {
+    return Epub::cachePathForFilePath(path, "/.crosspoint");
+  }
+  if (FsHelpers::hasXtcExtension(path)) {
+    return Xtc(path, "/.crosspoint").getCachePath();
+  }
+  return {};
+}
 
 BookReadingStats loadBookStatsForPath(const std::string& path) {
-  if (!FsHelpers::hasEpubExtension(path)) {
+  const std::string cachePath = bookStatsCachePathFor(path);
+  if (cachePath.empty()) {
     return BookReadingStats{};
   }
-  return BookReadingStats::load(epubCachePathFor(path));
+  return BookReadingStats::load(cachePath);
 }
 
 std::string loadChapterTitleForPath(const std::string& path) {

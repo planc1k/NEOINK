@@ -251,7 +251,7 @@ void RecentBooksActivity::showBookActionMenu(const size_t bookIndex, const bool 
             return;
           case FileBrowserAction::ToggleCompleted: {
             bool completed = false;
-            if (BookActions::toggleEpubCompleted(book.path, book.title, completed)) {
+            if (BookActions::toggleBookCompleted(book.path, book.title, completed)) {
               BookActions::drawToast(renderer, completed ? tr(STR_MARKED_FINISHED) : tr(STR_MARKED_UNFINISHED));
               delay(1000);
             }

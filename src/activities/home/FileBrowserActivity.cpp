@@ -627,7 +627,7 @@ void FileBrowserActivity::showFileActionMenu(const std::string& entry, bool igno
                 });
             return;
           case FileBrowserAction::ToggleCompleted:
-            if (BookActions::toggleEpubCompleted(fullPath, getFileName(entry), completedFeedbackIsFinished)) {
+            if (BookActions::toggleBookCompleted(fullPath, getFileName(entry), completedFeedbackIsFinished)) {
               pendingCompletedFeedback = true;
               completedFeedbackShowTime = millis();
             }
