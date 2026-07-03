@@ -47,7 +47,9 @@ DEFAULT_OUTPUT = SCRIPT_DIR / "output"
 DOWNLOAD_DIR = SCRIPT_DIR / "downloaded_fonts"
 INSTANCE_DIR = SCRIPT_DIR / "instanced_fonts"
 DEFAULT_FALLBACK_FONT = EPDFONTS_DIR / "builtinFonts/source/NotoSans/NotoSans-Regular.ttf"
-PATCHED_INTERVAL_PRESETS = ("punctuation",)
+# Every generated SD-card reader font should cover the same core glyph ranges
+# as the built-in reader fonts. Families can still add extra script presets.
+PATCHED_INTERVAL_PRESETS = ("builtin",)
 
 
 def is_url(value: str) -> bool:
