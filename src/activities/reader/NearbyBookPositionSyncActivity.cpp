@@ -2,12 +2,42 @@
 
 #ifdef SIMULATOR
 
+#include <Arduino.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
 
+#include <algorithm>
+#include <cstdio>
+#include <cstring>
+
+#include "CrossPointSettings.h"
+#include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+
+namespace {
+
+constexpr uint32_t SIM_PERCENTAGE_SCALE = 1000000;
+constexpr uint32_t SIM_DISCOVERY_MS = 700;
+constexpr uint32_t SIM_RESULT_MS = 1500;
+
+uint32_t percentageToQ(const float percentage) {
+  const float clamped = std::max(0.0f, std::min(1.0f, percentage));
+  return static_cast<uint32_t>(clamped * static_cast<float>(SIM_PERCENTAGE_SCALE));
+}
+
+float qToPercentage(const uint32_t percentageQ) {
+  return static_cast<float>(std::min(percentageQ, SIM_PERCENTAGE_SCALE)) / static_cast<float>(SIM_PERCENTAGE_SCALE);
+}
+
+std::string documentMatchingDetail() {
+  const StrId methodLabel =
+      KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME ? StrId::STR_FILENAME : StrId::STR_BINARY;
+  return std::string(tr(STR_DOCUMENT_MATCHING)) + ": " + I18N.get(methodLabel);
+}
+
+}  // namespace
 
 NearbyBookPositionSyncActivity::NearbyBookPositionSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                                std::shared_ptr<Epub> epub, const std::string& epubPath,
@@ -29,35 +59,138 @@ NearbyBookPositionSyncActivity::~NearbyBookPositionSyncActivity() = default;
 
 void NearbyBookPositionSyncActivity::onEnter() {
   Activity::onEnter();
-  setState(State::ERROR);
-  errorMessage_ = tr(STR_NEARBY_POSITION_SIMULATOR_UNAVAILABLE);
+  prepareLocalPosition();
+  setState(State::READY);
 }
 
 void NearbyBookPositionSyncActivity::onExit() { Activity::onExit(); }
 
 void NearbyBookPositionSyncActivity::loop() {
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) returnToReader(true);
+  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+    returnToReader(true);
+    return;
+  }
+
+  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    if (state_ == State::READY || state_ == State::SYNCED || state_ == State::ERROR) {
+      startSync();
+      return;
+    }
+    if (state_ == State::SHOWING_RESULT) {
+      applyPeerPosition();
+      return;
+    }
+  }
+
+  updateSyncProgress();
 }
 
 void NearbyBookPositionSyncActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
+  Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
 
   renderer.clearScreen();
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_NEARBY_POSITION_SYNC));
-  renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, errorMessage_.c_str(), true, EpdFontFamily::BOLD);
+  GUI.drawHeader(renderer, Rect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight},
+                 tr(STR_NEARBY_POSITION_SYNC));
+
+  if (state_ == State::SHOWING_RESULT) {
+    renderComparison();
+    renderer.displayBuffer();
+    return;
+  }
+
+  std::string primary;
+  std::string detail;
+  std::string detailSecondary;
+  switch (state_) {
+    case State::STARTING:
+      primary = tr(STR_LOADING_POPUP);
+      break;
+    case State::READY:
+      primary = tr(STR_NEARBY_POSITION_READY);
+      detail = std::string(tr(STR_DEVICE_NAME)) + ": " + SETTINGS.getEffectiveDeviceName();
+      detailSecondary = documentMatchingDetail();
+      break;
+    case State::DISCOVERING:
+      primary = tr(STR_NEARBY_POSITION_SCANNING);
+      break;
+    case State::SYNCING:
+      primary = tr(STR_NEARBY_POSITION_WAITING);
+      detail = std::string(tr(STR_DEVICE_NAME)) + ": " + peerName_;
+      break;
+    case State::SHOWING_RESULT:
+      break;
+    case State::APPLYING:
+      primary = tr(STR_NEARBY_POSITION_APPLYING);
+      break;
+    case State::SYNCED:
+      primary = tr(STR_NEARBY_POSITION_SYNCED);
+      detail = std::string(tr(STR_DEVICE_NAME)) + ": " + peerName_;
+      break;
+    case State::ERROR:
+      primary = tr(STR_ERROR_MSG);
+      detail = errorMessage_;
+      break;
+  }
+
+  if (state_ == State::READY || state_ == State::SYNCED || state_ == State::ERROR) {
+    renderReady(primary, detail, detailSecondary);
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_NEARBY_POSITION_SHARE_BUTTON), "", "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, true);
+    renderer.displayBuffer();
+    return;
+  }
+
+  const int top = screen.y + screen.height / 2 - 40;
+  UITheme::drawCenteredText(renderer, screen, UI_10_FONT_ID, top, primary.c_str(), true, EpdFontFamily::BOLD);
+  if (!detail.empty()) {
+    UITheme::drawCenteredText(renderer, screen, UI_10_FONT_ID, top + renderer.getLineHeight(UI_10_FONT_ID) + 8,
+                              detail.c_str());
+  }
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, true);
   renderer.displayBuffer();
 }
 
 void NearbyBookPositionSyncActivity::enqueueEspNowPacket(const uint8_t*, const uint8_t*, int) {}
-bool NearbyBookPositionSyncActivity::prepareLocalPosition() { return false; }
-bool NearbyBookPositionSyncActivity::ensureEpubLoaded() { return false; }
-bool NearbyBookPositionSyncActivity::beginEspNow() { return false; }
+bool NearbyBookPositionSyncActivity::prepareLocalPosition() {
+  if (localPrepared_) return true;
+
+  localPosition_.percentageQ = percentageToQ(localKoPosition_.percentage);
+  localPosition_.spineIndex = std::max(0, currentSpineIndex_);
+  localPosition_.pageNumber = std::max(0, currentPage_);
+  localPosition_.totalPages = std::max(1, totalPagesInSpine_);
+  if (currentParagraphIndex_.has_value() && *currentParagraphIndex_ != UINT16_MAX) {
+    localPosition_.paragraphIndex = *currentParagraphIndex_;
+    localPosition_.hasParagraphIndex = true;
+  }
+
+  const int localTotalPages = std::max(1, totalPagesInSpine_);
+  peerCrossPoint_.spineIndex = currentSpineIndex_;
+  peerCrossPoint_.pageNumber = std::min(currentPage_ + 3, std::max(0, localTotalPages - 1));
+  peerCrossPoint_.totalPages = localTotalPages;
+  peerPosition_.percentageQ = percentageToQ(std::min(1.0f, localKoPosition_.percentage + 0.03f));
+  peerPosition_.spineIndex = peerCrossPoint_.spineIndex;
+  peerPosition_.pageNumber = peerCrossPoint_.pageNumber;
+  peerPosition_.totalPages = peerCrossPoint_.totalPages;
+  peerName_ = "Simulator X4";
+  peerId_ = "simulator";
+
+  localPrepared_ = true;
+  return true;
+}
+bool NearbyBookPositionSyncActivity::ensureEpubLoaded() { return true; }
+bool NearbyBookPositionSyncActivity::beginEspNow() { return true; }
 void NearbyBookPositionSyncActivity::endEspNow() {}
-void NearbyBookPositionSyncActivity::startSync() {}
+void NearbyBookPositionSyncActivity::startSync() {
+  prepareLocalPosition();
+  sourceMode_ = false;
+  peerSeen_ = false;
+  peerPositionReceived_ = false;
+  localPositionAcked_ = false;
+  syncStartedMs_ = millis();
+  setState(State::DISCOVERING);
+}
 void NearbyBookPositionSyncActivity::processEvents() {}
 void NearbyBookPositionSyncActivity::handleEvent(const SyncEvent&) {}
 bool NearbyBookPositionSyncActivity::sendPacket(PacketType, const uint8_t*) { return false; }
@@ -66,9 +199,25 @@ bool NearbyBookPositionSyncActivity::sendDeviceName(const uint8_t*) { return fal
 bool NearbyBookPositionSyncActivity::sendLocalPosition() { return false; }
 bool NearbyBookPositionSyncActivity::sendAck(const uint8_t*) { return false; }
 bool NearbyBookPositionSyncActivity::addPeer(const uint8_t*) { return false; }
-bool NearbyBookPositionSyncActivity::applyPeerPosition() { return false; }
-bool NearbyBookPositionSyncActivity::mapPeerPosition() { return false; }
-void NearbyBookPositionSyncActivity::updateSyncProgress() {}
+bool NearbyBookPositionSyncActivity::applyPeerPosition() {
+  setState(State::SYNCED);
+  return true;
+}
+bool NearbyBookPositionSyncActivity::mapPeerPosition() { return true; }
+void NearbyBookPositionSyncActivity::updateSyncProgress() {
+  if (state_ != State::DISCOVERING && state_ != State::SYNCING) return;
+
+  const uint32_t elapsedMs = millis() - syncStartedMs_;
+  if (state_ == State::DISCOVERING && elapsedMs >= SIM_DISCOVERY_MS) {
+    peerSeen_ = true;
+    setState(State::SYNCING);
+    return;
+  }
+  if (elapsedMs >= SIM_RESULT_MS) {
+    peerPositionReceived_ = true;
+    setState(State::SHOWING_RESULT);
+  }
+}
 void NearbyBookPositionSyncActivity::returnToReader(const bool suppressBackRelease) {
   if (suppressBackRelease) {
     mappedInput.suppressNextBackRelease();
@@ -83,8 +232,74 @@ void NearbyBookPositionSyncActivity::setError(const std::string& error) {
   errorMessage_ = error;
   setState(State::ERROR);
 }
-void NearbyBookPositionSyncActivity::renderReady(const std::string&, const std::string&) const {}
-void NearbyBookPositionSyncActivity::renderComparison() const {}
+void NearbyBookPositionSyncActivity::renderReady(const std::string& primary, const std::string& detailPrimary,
+                                                 const std::string& detailSecondary) const {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+  int y = screen.y + metrics.topPadding + metrics.headerHeight + 70;
+
+  UITheme::drawCenteredText(renderer, screen, UI_10_FONT_ID, y, primary.c_str(), true, EpdFontFamily::BOLD);
+  y += renderer.getLineHeight(UI_10_FONT_ID) + metrics.verticalSpacing;
+  if (!detailPrimary.empty()) {
+    UITheme::drawCenteredText(renderer, screen, SMALL_FONT_ID, y, detailPrimary.c_str(), true);
+    y += renderer.getLineHeight(SMALL_FONT_ID) + metrics.verticalSpacing;
+  }
+  if (!detailSecondary.empty()) {
+    UITheme::drawCenteredText(renderer, screen, SMALL_FONT_ID, y, detailSecondary.c_str(), true);
+    y += renderer.getLineHeight(SMALL_FONT_ID) + metrics.verticalSpacing;
+  }
+  if (state_ == State::READY) {
+    UITheme::drawCenteredText(renderer, screen, SMALL_FONT_ID, y, tr(STR_NEARBY_POSITION_READY_HINT), true);
+  }
+}
+void NearbyBookPositionSyncActivity::renderComparison() const {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+  int top = screen.y + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+
+  renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_NEARBY_POSITION_FOUND), true, EpdFontFamily::BOLD);
+
+  const int peerTocIndex = epub_ ? epub_->getTocIndexForSpineIndex(peerCrossPoint_.spineIndex) : -1;
+  const std::string peerChapter =
+      (epub_ && peerTocIndex >= 0)
+          ? epub_->getTocItem(peerTocIndex).title
+          : (std::string(tr(STR_SECTION_PREFIX)) + std::to_string(peerCrossPoint_.spineIndex + 1));
+  const std::string localChapter = !localChapterName_.empty()
+                                       ? localChapterName_
+                                       : (std::string(tr(STR_SECTION_PREFIX)) + std::to_string(currentSpineIndex_ + 1));
+
+  renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, top + 40, tr(STR_NEARBY_LABEL), true);
+  char peerChapterStr[128];
+  snprintf(peerChapterStr, sizeof(peerChapterStr), "  %s", peerChapter.c_str());
+  renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, top + 65, peerChapterStr);
+  char peerPageStr[64];
+  snprintf(peerPageStr, sizeof(peerPageStr), tr(STR_PAGE_OVERALL_FORMAT), peerCrossPoint_.pageNumber + 1,
+           qToPercentage(peerPosition_.percentageQ) * 100.0f);
+  renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, top + 90, peerPageStr);
+  if (!peerName_.empty()) {
+    char deviceStr[64];
+    snprintf(deviceStr, sizeof(deviceStr), tr(STR_DEVICE_FROM_FORMAT), peerName_.c_str());
+    renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, top + 115, deviceStr);
+  }
+
+  renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, top + 150, tr(STR_LOCAL_LABEL), true);
+  char localChapterStr[128];
+  snprintf(localChapterStr, sizeof(localChapterStr), "  %s", localChapter.c_str());
+  renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, top + 175, localChapterStr);
+  char localPageStr[64];
+  snprintf(localPageStr, sizeof(localPageStr), tr(STR_PAGE_TOTAL_OVERALL_FORMAT), currentPage_ + 1, totalPagesInSpine_,
+           qToPercentage(localPosition_.percentageQ) * 100.0f);
+  renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, top + 200, localPageStr);
+
+  const int optionY = top + 230;
+  const int optionHeight = 30;
+  renderer.fillRect(screen.x, optionY - 2, screen.width - 1, optionHeight);
+  renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, optionY, tr(STR_APPLY_NEARBY_POSITION),
+                    false);
+
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), "", "");
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, true);
+}
 
 #else
 
@@ -187,6 +402,12 @@ uint32_t percentageToQ(const float percentage) {
 
 float qToPercentage(const uint32_t percentageQ) {
   return static_cast<float>(std::min(percentageQ, PERCENTAGE_SCALE)) / static_cast<float>(PERCENTAGE_SCALE);
+}
+
+std::string documentMatchingDetail() {
+  const StrId methodLabel =
+      KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME ? StrId::STR_FILENAME : StrId::STR_BINARY;
+  return std::string(tr(STR_DOCUMENT_MATCHING)) + ": " + I18N.get(methodLabel);
 }
 
 size_t boundedLength(const char* text, const size_t maxBytes) {
@@ -835,6 +1056,7 @@ void NearbyBookPositionSyncActivity::render(RenderLock&&) {
 
   std::string primary;
   std::string detail;
+  std::string detailSecondary;
   switch (state_) {
     case State::STARTING:
       primary = tr(STR_LOADING_POPUP);
@@ -842,6 +1064,7 @@ void NearbyBookPositionSyncActivity::render(RenderLock&&) {
     case State::READY:
       primary = tr(STR_NEARBY_POSITION_READY);
       detail = std::string(tr(STR_DEVICE_NAME)) + ": " + SETTINGS.getEffectiveDeviceName();
+      detailSecondary = documentMatchingDetail();
       break;
     case State::DISCOVERING:
       primary = tr(STR_NEARBY_POSITION_SCANNING);
@@ -866,7 +1089,7 @@ void NearbyBookPositionSyncActivity::render(RenderLock&&) {
   }
 
   if (state_ == State::READY || state_ == State::SYNCED || state_ == State::ERROR) {
-    renderReady(primary, detail);
+    renderReady(primary, detail, detailSecondary);
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_NEARBY_POSITION_SHARE_BUTTON), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, true);
     renderer.displayBuffer();
@@ -884,7 +1107,8 @@ void NearbyBookPositionSyncActivity::render(RenderLock&&) {
   renderer.displayBuffer();
 }
 
-void NearbyBookPositionSyncActivity::renderReady(const std::string& primary, const std::string& detailPrimary) const {
+void NearbyBookPositionSyncActivity::renderReady(const std::string& primary, const std::string& detailPrimary,
+                                                 const std::string& detailSecondary) const {
   const auto& metrics = UITheme::getInstance().getMetrics();
   Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
   int y = screen.y + metrics.topPadding + metrics.headerHeight + 70;
@@ -893,6 +1117,10 @@ void NearbyBookPositionSyncActivity::renderReady(const std::string& primary, con
   y += renderer.getLineHeight(UI_10_FONT_ID) + metrics.verticalSpacing;
   if (!detailPrimary.empty()) {
     UITheme::drawCenteredText(renderer, screen, SMALL_FONT_ID, y, detailPrimary.c_str(), true);
+    y += renderer.getLineHeight(SMALL_FONT_ID) + metrics.verticalSpacing;
+  }
+  if (!detailSecondary.empty()) {
+    UITheme::drawCenteredText(renderer, screen, SMALL_FONT_ID, y, detailSecondary.c_str(), true);
     y += renderer.getLineHeight(SMALL_FONT_ID) + metrics.verticalSpacing;
   }
   if (state_ == State::READY) {

@@ -123,6 +123,7 @@ class NearbyBookPositionSyncActivity final : public Activity {
   void returnToReader(bool suppressBackRelease = false);
   void setState(State state);
   void setError(const std::string& error);
-  void renderReady(const std::string& primary, const std::string& detailPrimary) const;
+  void renderReady(const std::string& primary, const std::string& detailPrimary,
+                   const std::string& detailSecondary) const;
   void renderComparison() const;
 };
