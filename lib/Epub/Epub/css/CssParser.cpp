@@ -54,6 +54,7 @@ constexpr size_t MIN_FREE_HEAP_FOR_CSS = 48 * 1024;
 // larger heap floor than basic CSS application so low-memory books can still
 // fall back to the disk-backed selector index.
 constexpr size_t MIN_FREE_HEAP_FOR_CSS_RULE_ARENA = 96 * 1024;
+constexpr size_t CSS_RULE_ARENA_MIN_FREE_AFTER_ALLOC = 80 * 1024;
 constexpr size_t CSS_RULE_ARENA_EXTRA_BYTES = 1024;
 
 // Maximum length for a single selector string
@@ -1294,8 +1295,9 @@ bool CssParser::loadFromCache() {
   bool hydrateSimpleRules = false;
   size_t hydratedRuleCount = 0;
   const size_t freeHeapBeforeHydrate = ESP.getFreeHeap();
-  if (ruleCount > 0 && freeHeapBeforeHydrate >= MIN_FREE_HEAP_FOR_CSS_RULE_ARENA) {
-    const size_t arenaBytes = (static_cast<size_t>(ruleCount) * sizeof(CachedRule)) + CSS_RULE_ARENA_EXTRA_BYTES;
+  const size_t arenaBytes = (static_cast<size_t>(ruleCount) * sizeof(CachedRule)) + CSS_RULE_ARENA_EXTRA_BYTES;
+  if (ruleCount > 0 && freeHeapBeforeHydrate >= MIN_FREE_HEAP_FOR_CSS_RULE_ARENA &&
+      freeHeapBeforeHydrate >= arenaBytes + CSS_RULE_ARENA_MIN_FREE_AFTER_ALLOC) {
     if (cachedRuleArena_.init(arenaBytes)) {
       cachedRules_ = arenaNewArray<CachedRule>(cachedRuleArena_, ruleCount);
       hydrateSimpleRules = cachedRules_ != nullptr;
@@ -1305,7 +1307,9 @@ bool CssParser::loadFromCache() {
       }
     }
   } else if (ruleCount > 0) {
-    LOG_DBG("CSS", "Skipping CSS rule arena hydration (free heap=%u)", static_cast<unsigned>(freeHeapBeforeHydrate));
+    LOG_DBG("CSS", "Skipping CSS rule arena hydration (free heap=%u need free>=%u for %u-byte arena)",
+            static_cast<unsigned>(freeHeapBeforeHydrate),
+            static_cast<unsigned>(arenaBytes + CSS_RULE_ARENA_MIN_FREE_AFTER_ALLOC), static_cast<unsigned>(arenaBytes));
   }
 
   // Read each simple rule payload. When heap allows, hydrate into an arena-backed

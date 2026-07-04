@@ -109,6 +109,8 @@ class Section {
                   bool embeddedStyle, uint8_t imageRendering, bool bionicReadingEnabled, bool guideReadingEnabled,
                   EpubRenderMode renderMode = EpubRenderMode::CrossInkDefault, SectionBuildOptions buildOptions = {});
   bool buildSomeMore(int maxPages);
+  bool lastBuildImagesWereSuppressed() const { return lastImagesWereSuppressed_; }
+  bool lastBuildLayoutAbortedForLowMemory() const { return lastLayoutAbortedForLowMemory_; }
   bool isBuilding() const { return static_cast<bool>(build_); }
   bool isBuildComplete() const { return buildComplete_; }
   // Best-known total page count: the exact pageCount once finalized, or a smoothed byte-based

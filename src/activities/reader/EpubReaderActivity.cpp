@@ -3850,14 +3850,23 @@ void EpubReaderActivity::render(RenderLock&& lock) {
                                   viewportHeight, SETTINGS.hyphenationEnabled, profile.embeddedStyle,
                                   SETTINGS.imageRendering, profile.bionicReadingEnabled, profile.guideReadingEnabled,
                                   profile.renderMode, buildOptions)) {
+            bool buildFailed = false;
             while (!section->isBuildComplete() && (anchorJump ? !section->findAnchor(pendingAnchor)
                                                               : static_cast<int>(section->pageCount) <= target)) {
               if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
                 LOG_ERR("ERS", "Failed during incremental section build");
+                buildFailed = true;
                 break;
               }
             }
-            buildSucceeded = section->pageCount > 0 || section->isBuildComplete();
+            attemptImagesWereSuppressed = attemptImagesWereSuppressed || section->lastBuildImagesWereSuppressed();
+            attemptLayoutAbortedForLowMemory =
+                attemptLayoutAbortedForLowMemory || section->lastBuildLayoutAbortedForLowMemory();
+            buildSucceeded = !buildFailed && (section->pageCount > 0 || section->isBuildComplete());
+          } else {
+            attemptImagesWereSuppressed = attemptImagesWereSuppressed || section->lastBuildImagesWereSuppressed();
+            attemptLayoutAbortedForLowMemory =
+                attemptLayoutAbortedForLowMemory || section->lastBuildLayoutAbortedForLowMemory();
           }
         }
         imagesWereSuppressed = imagesWereSuppressed || attemptImagesWereSuppressed;

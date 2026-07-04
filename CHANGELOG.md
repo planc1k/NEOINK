@@ -29,6 +29,7 @@
 - Web EPUB optimizer no longer leaves transparent PNG artwork blank or replaced by alt text.
 - EPUB grayscale page turns on X3 now use the grayscale-aware display base, reducing the moment where new text appears too dark before the anti-aliased overlay finishes.
 - EPUB chapters with many inline anchors, footnote links, or malformed XHTML are less likely to fail or get stuck on the indexing screen.
+- EPUB chapters with large publisher style caches and SD-card fonts now keep more heap available during indexing and retry lighter render modes after low-memory incremental builds.
 - EPUB opening and image rendering now handle more low-memory allocation failures without rebooting, and landscape image pages read less cached image data during tiled grayscale rendering.
 - EPUB clipping selection now follows right-to-left line order when selecting Hebrew and other RTL text.
 - Lyra Carousel no longer shows a blank carousel after returning from WiFi-related File Transfer screens and moving between the menu row and book row.
