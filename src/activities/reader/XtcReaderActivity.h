@@ -12,7 +12,9 @@
 #include <string>
 #include <utility>
 
+#include "BookReadingStats.h"
 #include "EndOfBookOptions.h"
+#include "GlobalReadingStats.h"
 #include "activities/Activity.h"
 
 class XtcReaderActivity final : public Activity {
@@ -20,6 +22,12 @@ class XtcReaderActivity final : public Activity {
 
   uint32_t currentPage = 0;
   int pagesUntilFullRefresh = 0;
+  unsigned long pageShownAtMs = 0UL;
+  uint32_t sessionReadingSeconds = 0;
+  BookReadingStats stats;
+  GlobalReadingStats globalStats;
+  ReadingStatsDateTime sessionStartLocalDateTime;
+  bool hasSessionStartLocalDateTime = false;
   bool longPowerPageTurnHandled = false;
   bool frontButtonLongPressHandled = false;
   bool longPressBackHandled = false;
@@ -34,12 +42,25 @@ class XtcReaderActivity final : public Activity {
   };
 
   void renderPage();
-  // Opens chapter selection when the book has chapters (short-press Confirm); no-op otherwise
-  void openChapterSelection();
   void renderStatusBarOverlay(StatusBarOverlayPosition position) const;
   StatusBarInfo getStatusBarInfo() const;
   void saveProgress() const;
   void loadProgress();
+  void pauseReadingStatsTimer(const char* source = "unknown");
+  void resumeReadingStatsTimer(const char* source = "unknown");
+  bool currentPageReadingSecondsForStats(uint32_t& seconds, const char* source) const;
+  bool forwardPageReadElapsed(uint32_t& seconds, const char* source) const;
+  void recordCurrentPageReadingTime(const char* source = "unknown");
+  void recordForwardPageTurn(uint32_t seconds);
+  void commitReadingStats();
+  void resetCurrentBookStatsAfterDelete();
+  void setBookCompleted(bool isCompleted);
+  float getCurrentBookProgressPercent() const;
+  void openChapterSelection();
+  void openReadingStats();
+  void deleteBookStats();
+  void deleteBookCache();
+  void onReaderMenuConfirm(int action);
   bool executeLongPressBackAction();
 
  public:
