@@ -4,45 +4,30 @@
 
 ### Added
 
-- Dashboard UI theme for the Home screen, combining the current book cover, reading stats, streak, and reader type in one layout.
+- Dashboard UI theme for the Home screen, showing the current book cover and reading stats.
 - Nearby Position Sync for sending or applying the current EPUB position between two CrossInk devices over ESP-NOW.
-- Web EPUB optimizer now writes CrossInk location metadata into optimized EPUBs so future reader builds can use stable word-based positions across layout changes.
-- EPUB reader now uses CrossInk location metadata from optimized EPUBs for word-weighted progress and percent-based jumps.
-- The web EPUB optimizer can now split EPUB sections over 2,000 visible words into smaller reader sections before upload to improve rendering.
-- Optimized EPUBs with split sections can preserve original-chapter page counts and chapter time-left estimates when chapter-group metadata is available.
+- Web EPUB optimizer support for CrossInk location metadata and optional long-section splitting, so optimized EPUBs can keep better progress and render oversized chapters more reliably.
 
 ### Changed
 
-- Settings with three or more choices, including Language, now open an inline popup menu instead of cycling through every option one press at a time.
-- EPUB parsing, large-book metadata indexing, and generated cover conversion now use more arena-backed scratch buffers to reduce heap fragmentation during heavy book processing.
-- EPUB section layout reuses more text-line scratch buffers and writes less empty per-word metadata, reducing first-open chapter build work.
-- EPUB CSS cache lookups now hydrate selector rules into arena-backed memory when heap allows, reducing repeated SD-card reads while building pages.
-- EPUB section builds now batch SD-card font advance metric prewarming for a chapter before layout, reducing repeated small SD reads while pages are built.
-- Home and sleep screens now regenerate missing EPUB cover thumbnails on demand instead of generating them during reader startup.
-- EPUB cover generation now caches the extracted source cover image and Home reuses one metadata load for highlighted-book progress and chapter title.
+- Large EPUBs and SD-card font-heavy books now build pages with less temporary memory churn, reducing slow first opens and low-memory failures.
+- Home and sleep screens now do more EPUB cover and thumbnail work on demand, reducing reader startup work and reusing cached cover data where possible.
 
 ### Fixed
 
-- Web file manager action buttons now handle filenames with special characters safely.
-- Web file manager rename now rejects unsafe filename characters before saving the new name.
-- Reading Stats, Bookmarks & Clippings, Settings, File Browser, and Recent Books on X3 now keep their headers aligned without crowding the battery indicator or divider.
-- Auto Turn interval settings and related action prompts opened from a long-press shortcut now stay open after releasing the shortcut button.
-- EPUB footnote previews no longer show a clipped `Footnotes` status-bar label when status-bar titles are hidden.
+- Web file manager actions now handle filenames with special characters safely and reject unsafe rename characters before saving.
+- Auto Turn interval settings and related action prompts opened from long-press shortcuts now stay open after releasing the shortcut button.
+- EPUB footnote previews no longer show clipped status-bar labels or misleading reader progress indicators.
 - Font selection no longer reopens the font preview after choosing a font.
-- EPUB CSS caches are now validated before reuse so stale stylesheet caches are rebuilt instead of silently opening chapters without publisher CSS.
-- Chinese and other large SD-card font EPUBs no longer overlap characters after font or line-spacing changes exhaust the small glyph-advance cache.
-- EPUB clipping selection now falls back to a built-in UI font if an SD-card reader font cannot be prewarmed, avoiding replacement-glyph pages and low-memory crashes while leaving the reader font unchanged.
-- EPUB cover and thumbnail generation now releases SD-card reader font caches before JPEG/PNG decoding when heap is tight, reducing cover failures with custom fonts selected.
-- Web EPUB optimizer now preserves transparent PNG artwork instead of converting it into JPEGs that can leave title pages empty or show image alt text.
-- Web EPUB optimizer now converts transparent PNG artwork into baseline JPEGs.
+- EPUB chapters now rebuild stale publisher CSS caches instead of opening without the book's styling.
+- Large SD-card font EPUBs no longer overlap characters after font or line-spacing changes, and clipping selection can fall back to a built-in UI font when needed.
+- EPUB cover and thumbnail generation is more reliable with custom SD-card fonts selected.
+- Web EPUB optimizer no longer leaves transparent PNG artwork blank or replaced by alt text.
 - EPUB grayscale page turns on X3 now use the grayscale-aware display base, reducing the moment where new text appears too dark before the anti-aliased overlay finishes.
-- EPUB chapters with many inline anchors or footnote links are less likely to fail with a memory error when first opened.
-- EPUB chapters with malformed XHTML now show a warning page instead of getting stuck on the indexing screen.
-- EPUB footnote preview pages no longer show misleading reader progress indicators for the small temporary notes batch.
+- EPUB chapters with many inline anchors, footnote links, or malformed XHTML are less likely to fail or get stuck on the indexing screen.
 - EPUB clipping selection now follows right-to-left line order when selecting Hebrew and other RTL text.
 - Lyra Carousel no longer shows a blank carousel after returning from WiFi-related File Transfer screens and moving between the menu row and book row.
-- Stable page numbers now work with EPUBs optimized by v1.3.4 as well as newer optimized EPUBs.
-- Generated SD-card font packages now request the same core glyph ranges as built-in reader fonts.
+- Generated SD-card font packages now include the same core glyph coverage as built-in reader fonts.
 
 ## [v1.3.4] - 2026-06-24
 
