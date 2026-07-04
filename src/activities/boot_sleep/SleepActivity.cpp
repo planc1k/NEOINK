@@ -670,7 +670,7 @@ void SleepActivity::renderReadingStatsSleepScreen() const {
   if (!sleepCoverFilterInvertsGeneratedScreen()) {
     renderer.invertScreen();
   }
-  renderer.displayBuffer(HalDisplay::HALF_REFRESH, TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
+  renderer.displayBuffer(HalDisplay::FULL_REFRESH, TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
 }
 
 void SleepActivity::renderMinimalSleepScreen() const {
@@ -692,7 +692,7 @@ void SleepActivity::renderMinimalSleepScreen() const {
   if (sleepCoverFilterInvertsGeneratedScreen()) {
     renderer.invertScreen();
   }
-  renderer.displayBuffer(HalDisplay::HALF_REFRESH, TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
+  renderer.displayBuffer(HalDisplay::FULL_REFRESH, TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
 }
 
 void SleepActivity::renderMinimalStatsSleepScreen() const {
@@ -715,7 +715,7 @@ void SleepActivity::renderMinimalStatsSleepScreen() const {
   if (sleepCoverFilterInvertsGeneratedScreen()) {
     renderer.invertScreen();
   }
-  renderer.displayBuffer(HalDisplay::HALF_REFRESH, TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
+  renderer.displayBuffer(HalDisplay::FULL_REFRESH, TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
 }
 
 void SleepActivity::renderDashboardSleepScreen() const {
@@ -743,7 +743,7 @@ void SleepActivity::renderDashboardSleepScreen() const {
   if (sleepCoverFilterInvertsGeneratedScreen()) {
     renderer.invertScreen();
   }
-  renderer.displayBuffer(HalDisplay::HALF_REFRESH, TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
+  renderer.displayBuffer(HalDisplay::FULL_REFRESH, TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
 }
 
 void SleepActivity::renderLastScreenSleepScreen() const {
@@ -753,7 +753,7 @@ void SleepActivity::renderLastScreenSleepScreen() const {
   } else {
     renderer.drawImage(MoonIcon, 0, pageHeight - MOONICON_HEIGHT, MOONICON_WIDTH, MOONICON_HEIGHT);
   }
-  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+  renderer.displayBuffer(HalDisplay::FULL_REFRESH);
 }
 
 void SleepActivity::renderBlankSleepScreen() const {
