@@ -12,6 +12,7 @@
 #include <string>
 #include <utility>
 
+#include "EndOfBookOptions.h"
 #include "activities/Activity.h"
 
 class XtcReaderActivity final : public Activity {
@@ -22,6 +23,8 @@ class XtcReaderActivity final : public Activity {
   bool longPowerPageTurnHandled = false;
   bool frontButtonLongPressHandled = false;
   bool longPressBackHandled = false;
+  // Next-book suggestion menu for the End-of-Book screen
+  EndOfBookOptions endOfBookOptions;
 
   enum class StatusBarOverlayPosition { Bottom, Top };
   struct StatusBarInfo {
@@ -31,6 +34,8 @@ class XtcReaderActivity final : public Activity {
   };
 
   void renderPage();
+  // Opens chapter selection when the book has chapters (short-press Confirm); no-op otherwise
+  void openChapterSelection();
   void renderStatusBarOverlay(StatusBarOverlayPosition position) const;
   StatusBarInfo getStatusBarInfo() const;
   void saveProgress() const;

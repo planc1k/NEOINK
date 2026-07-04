@@ -1831,6 +1831,78 @@ void EpubReaderActivity::onExit() {
   restoreGlobalReaderSettings();
 }
 
+void EpubReaderActivity::openReaderMenu() {
+  int currentPage = 0;
+  int totalPages = 0;
+  float bookProgress = 0.0f;
+  uint16_t bmSpine = static_cast<uint16_t>(currentSpineIndex);
+  float bmProgress = 0.0f;
+  int bookmarkPageCount = 1;
+  bool isBookCompleted = stats.isCompleted;
+  bool previewActive = false;
+  {
+    // Serialize EPUB metadata/file access with the render task.
+    RenderLock lock(*this);
+    previewActive = activeFootnotePreview;
+    currentPage = section ? section->currentPage + 1 : 0;
+    totalPages = section ? section->estimatedTotalPages() : 0;
+    bmSpine = static_cast<uint16_t>(currentSpineIndex);
+    bmProgress = (section && totalPages > 0) ? static_cast<float>(section->currentPage) / totalPages : 0.0f;
+    bookmarkPageCount = totalPages > 0 ? totalPages : 1;
+    isBookCompleted = stats.isCompleted;
+    bookProgress = getCurrentBookProgressPercent();
+  }
+  const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
+
+  pauseReadingPaceTimer("reader_menu");
+  startActivityForResult(
+      std::make_unique<EpubReaderMenuActivity>(
+          renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent, SETTINGS.orientation,
+          !previewActive && !currentPageFootnotes.empty(), !BOOKMARKS.getBookmarks().empty(), CLIPPINGS.hasClippings(),
+          !previewActive && BOOKMARKS.hasBookmarkForPage(bmSpine, bmProgress, bookmarkPageCount), isBookCompleted,
+          automaticPageTurnActive, getAutoPageTurnIntervalSeconds(),
+          SETTINGS.statusBarTimeLeft != CrossPointSettings::STATUS_BAR_TIME_LEFT::TIME_LEFT_HIDE,
+          saveReaderOptionsForBook, this, saveGlobalSettingsForBookReader, this, beginGlobalSettingsEditForBookReader,
+          this, !previewActive && epub && epub->hasStablePageNumbers(), endGlobalSettingsEditForBookReader, this),
+      [this](const ActivityResult& result) {
+        if (const auto* clipping = std::get_if<ClippingJumpResult>(&result.data)) {
+          applyOrientation(clipping->orientation);
+          if (clipping->settingsChanged) {
+            sdFontSystem.ensureLoaded(renderer);
+            RenderLock lock(*this);
+            if (section) {
+              cacheCurrentSectionPosition();
+            }
+            section.reset();  // Force re-layout with changed reader settings
+          }
+          handleClippingJump(*clipping);
+          requestUpdate();
+          return;
+        }
+
+        // Always apply orientation change even if the menu was cancelled
+        const auto* menu = std::get_if<MenuResult>(&result.data);
+        if (menu == nullptr) {
+          resumeReadingPaceTimer("reader_menu_return");
+          requestUpdate();
+          return;
+        }
+        applyOrientation(menu->orientation);
+        if (menu->settingsChanged) {
+          sdFontSystem.ensureLoaded(renderer);
+          RenderLock lock(*this);
+          if (section) {
+            cacheCurrentSectionPosition();
+          }
+          section.reset();  // Force re-layout with changed reader settings
+        }
+        resumeReadingPaceTimer("reader_menu_return");
+        if (!result.isCancelled) {
+          onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu->action));
+        }
+      });
+}
+
 void EpubReaderActivity::loop() {
   if (!epub) {
     // Should never happen
@@ -1995,6 +2067,32 @@ void EpubReaderActivity::loop() {
       return;
     }
   }
+
+  // While the end screen suggestion menu is showing it owns Confirm/Back/navigation
+  // input. Anything it doesn't handle (e.g. long-press Back) falls through to the
+  // regular handlers below; page turns are absorbed by the end-of-book block.
+  if (atEndOfBook && endOfBookOptions.menuActive()) {
+    std::string openPath;
+    switch (endOfBookOptions.handleMenuInput(mappedInput, &openPath)) {
+      case EndOfBookOptions::Action::OpenBook:
+        activityManager.goToReader(openPath);
+        return;
+      case EndOfBookOptions::Action::GoHome:
+        onGoHome();
+        return;
+      case EndOfBookOptions::Action::LastPage:
+        currentSpineIndex = std::max(epub->getSpineItemsCount() - 1, 0);
+        nextPageNumber = 0;
+        pendingPageJump = std::numeric_limits<uint16_t>::max();
+        requestUpdate();
+        return;
+      case EndOfBookOptions::Action::Redraw:
+        requestUpdate();
+        return;
+      case EndOfBookOptions::Action::None:
+        break;
+    }
+  }
   if (SETTINGS.longPressMenuAction != CrossPointSettings::LONG_MENU_OFF &&
       mappedInput.isPressed(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() >= longPressMenuMs) {
     longPressMenuHandled = true;
@@ -2006,76 +2104,7 @@ void EpubReaderActivity::loop() {
 
   // Enter reader menu activity.
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    int currentPage = 0;
-    int totalPages = 0;
-    float bookProgress = 0.0f;
-    uint16_t bmSpine = static_cast<uint16_t>(currentSpineIndex);
-    float bmProgress = 0.0f;
-    int bookmarkPageCount = 1;
-    bool isBookCompleted = stats.isCompleted;
-    bool previewActive = false;
-    {
-      // Serialize EPUB metadata/file access with the render task.
-      RenderLock lock(*this);
-      previewActive = activeFootnotePreview;
-      currentPage = section ? section->currentPage + 1 : 0;
-      totalPages = section ? section->estimatedTotalPages() : 0;
-      bmSpine = static_cast<uint16_t>(currentSpineIndex);
-      bmProgress = (section && totalPages > 0) ? static_cast<float>(section->currentPage) / totalPages : 0.0f;
-      bookmarkPageCount = totalPages > 0 ? totalPages : 1;
-      isBookCompleted = stats.isCompleted;
-      bookProgress = getCurrentBookProgressPercent();
-    }
-    const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
-
-    pauseReadingPaceTimer("reader_menu");
-    startActivityForResult(
-        std::make_unique<EpubReaderMenuActivity>(
-            renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent, SETTINGS.orientation,
-            !previewActive && !currentPageFootnotes.empty(), !BOOKMARKS.getBookmarks().empty(),
-            CLIPPINGS.hasClippings(),
-            !previewActive && BOOKMARKS.hasBookmarkForPage(bmSpine, bmProgress, bookmarkPageCount), isBookCompleted,
-            automaticPageTurnActive, getAutoPageTurnIntervalSeconds(),
-            SETTINGS.statusBarTimeLeft != CrossPointSettings::STATUS_BAR_TIME_LEFT::TIME_LEFT_HIDE,
-            saveReaderOptionsForBook, this, saveGlobalSettingsForBookReader, this, beginGlobalSettingsEditForBookReader,
-            this, !previewActive && epub && epub->hasStablePageNumbers(), endGlobalSettingsEditForBookReader, this),
-        [this](const ActivityResult& result) {
-          if (const auto* clipping = std::get_if<ClippingJumpResult>(&result.data)) {
-            applyOrientation(clipping->orientation);
-            if (clipping->settingsChanged) {
-              sdFontSystem.ensureLoaded(renderer);
-              RenderLock lock(*this);
-              if (section) {
-                cacheCurrentSectionPosition();
-              }
-              section.reset();  // Force re-layout with changed reader settings
-            }
-            handleClippingJump(*clipping);
-            requestUpdate();
-            return;
-          }
-
-          // Always apply orientation change even if the menu was cancelled
-          const auto* menu = std::get_if<MenuResult>(&result.data);
-          if (menu == nullptr) {
-            resumeReadingPaceTimer("reader_menu_return");
-            requestUpdate();
-            return;
-          }
-          applyOrientation(menu->orientation);
-          if (menu->settingsChanged) {
-            sdFontSystem.ensureLoaded(renderer);
-            RenderLock lock(*this);
-            if (section) {
-              cacheCurrentSectionPosition();
-            }
-            section.reset();  // Force re-layout with changed reader settings
-          }
-          resumeReadingPaceTimer("reader_menu_return");
-          if (!result.isCancelled) {
-            onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu->action));
-          }
-        });
+    openReaderMenu();
   }
 
   if (longPressBackHandled) {
@@ -2235,8 +2264,14 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  // At end of the book, forward button goes home and back button returns to last page
+  // At end of the book with no suggestion menu, forward button goes home and back
+  // button returns to last page
   if (currentSpineIndex > 0 && currentSpineIndex >= epub->getSpineItemsCount()) {
+    if (endOfBookOptions.menuActive()) {
+      // Selection movement was handled above; absorb leftover page-turn triggers so
+      // e.g. "previous" at the top of the list doesn't jump back into the book
+      return;
+    }
     if (nextTriggered) {
       onGoHome();
     } else {
@@ -3687,8 +3722,11 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 
   // Show end of book screen
   if (currentSpineIndex == epub->getSpineItemsCount()) {
+    // Sole load site: runs on the render task (serialized by RenderLock); the main
+    // task only reads the suggestions once the loaded flag is published
+    endOfBookOptions.loadOnce(epub->getPath());
     renderer.clearScreen();
-    renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_END_OF_BOOK), true, EpdFontFamily::BOLD);
+    endOfBookOptions.render(renderer, mappedInput);
     renderer.displayBuffer();
     automaticPageTurnActive = false;
     showPendingSyncSaveError();

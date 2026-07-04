@@ -79,13 +79,17 @@ std::string normalisePath(const std::string& path) {
   return result;
 }
 
+bool naturalLess(const std::string& str1, const std::string& str2) {
+  return naturalCompare(str1.c_str(), str2.c_str()) < 0;
+}
+
 void sortFileList(std::vector<std::string>& strs) {
   std::sort(begin(strs), end(strs), [](const std::string& str1, const std::string& str2) {
     const bool isDir1 = str1.back() == '/';
     const bool isDir2 = str2.back() == '/';
     if (isDir1 != isDir2) return isDir1;
 
-    return naturalCompare(str1.c_str(), str2.c_str()) < 0;
+    return naturalLess(str1, str2);
   });
 }
 
