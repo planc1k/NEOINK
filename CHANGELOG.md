@@ -16,6 +16,7 @@
 
 ### Fixed
 
+- KOSync now frees SD-card font registry memory before TLS requests and releases the EPUB before upload, reducing sync low-memory failures with many SD fonts installed.
 - Web file manager actions now handle filenames with special characters safely and reject unsafe rename characters before saving.
 - Auto Turn interval settings and related action prompts opened from long-press shortcuts now stay open after releasing the shortcut button.
 - EPUB footnote previews no longer show clipped status-bar labels or misleading reader progress indicators.
