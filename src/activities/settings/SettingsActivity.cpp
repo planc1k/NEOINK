@@ -434,7 +434,6 @@ void SettingsActivity::openScreenMarginPicker(const SettingInfo& setting) {
 
 void SettingsActivity::openLanguagePicker() {
   const int languageCount = static_cast<int>(getLanguageCount());
-  if (languageCount <= 0) return;
 
   std::vector<std::string> options;
   options.reserve(languageCount);

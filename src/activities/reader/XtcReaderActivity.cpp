@@ -560,8 +560,8 @@ void XtcReaderActivity::deleteBookStats() {
       std::make_unique<ConfirmationActivity>(renderer, mappedInput, confirmationHeading(StrId::STR_DELETE_BOOK_STATS),
                                              xtc ? xtc->getTitle() : std::string{}),
       [this](const ActivityResult& result) {
-        bool statsDeleted = false;
         if (!result.isCancelled && xtc) {
+          bool statsDeleted = false;
           {
             RenderLock lock(*this);
             statsDeleted = BookReadingStats::remove(xtc->getCachePath());
@@ -586,8 +586,8 @@ void XtcReaderActivity::deleteBookCache() {
       std::make_unique<ConfirmationActivity>(renderer, mappedInput, confirmationHeading(StrId::STR_DELETE_CACHE),
                                              xtc ? xtc->getTitle() : std::string{}),
       [this](const ActivityResult& result) {
-        bool cacheDeleted = false;
         if (!result.isCancelled && xtc) {
+          bool cacheDeleted = false;
           {
             RenderLock lock(*this);
             stats.save(xtc->getCachePath());

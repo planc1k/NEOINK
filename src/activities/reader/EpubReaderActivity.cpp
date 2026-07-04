@@ -1835,10 +1835,10 @@ void EpubReaderActivity::openReaderMenu() {
   int currentPage = 0;
   int totalPages = 0;
   float bookProgress = 0.0f;
-  uint16_t bmSpine = static_cast<uint16_t>(currentSpineIndex);
+  uint16_t bmSpine;
   float bmProgress = 0.0f;
   int bookmarkPageCount = 1;
-  bool isBookCompleted = stats.isCompleted;
+  bool isBookCompleted;
   bool previewActive = false;
   {
     // Serialize EPUB metadata/file access with the render task.

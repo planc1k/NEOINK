@@ -250,7 +250,7 @@ void drawDashboardStats(const GfxRenderer& renderer, const Rect& coverRect, cons
   const int blockH = statsBlockHeight(renderer);
   const bool showRtcStats = gpio.deviceIsX3();
   const int rowCount = showRtcStats ? kStatsRowCount : kStatsRowCountX4;
-  const BookReadingStats emptyStats;
+  const BookReadingStats emptyStats{};
   const BookReadingStats& bookStats = stats != nullptr ? *stats : emptyStats;
   char value[40];
   char label[40];

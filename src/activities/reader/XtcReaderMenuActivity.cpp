@@ -24,7 +24,7 @@ XtcReaderMenuActivity::XtcReaderMenuActivity(GfxRenderer& renderer, MappedInputM
       items(buildMenuItems(hasChapters, isBookCompleted)) {}
 
 std::vector<XtcReaderMenuActivity::MenuItem> XtcReaderMenuActivity::buildMenuItems(const bool hasChapters,
-                                                                                  const bool isBookCompleted) {
+                                                                                   const bool isBookCompleted) {
   std::vector<MenuItem> menuItems;
   menuItems.reserve(5);
   if (hasChapters) {
