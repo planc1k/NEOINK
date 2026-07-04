@@ -27,6 +27,7 @@
 - EPUB cover and thumbnail generation now releases SD-card reader font caches before JPEG/PNG decoding when heap is tight, reducing cover failures with custom fonts selected.
 - EPUB grayscale page turns on X3 now use the grayscale-aware display base, reducing the moment where new text appears too dark before the anti-aliased overlay finishes.
 - EPUB chapters with many inline anchors or footnote links are less likely to fail with a memory error when first opened.
+- EPUB chapters with malformed XHTML now show a warning page instead of getting stuck on the indexing screen.
 - EPUB footnote preview pages no longer show misleading reader progress indicators for the small temporary notes batch.
 - EPUB clipping selection now follows right-to-left line order when selecting Hebrew and other RTL text.
 - Lyra Carousel no longer shows a blank carousel after returning from WiFi-related File Transfer screens and moving between the menu row and book row.

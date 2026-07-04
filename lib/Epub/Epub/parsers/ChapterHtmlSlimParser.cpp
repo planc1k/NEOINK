@@ -4,6 +4,7 @@
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
+#include <I18n.h>
 #include <Logging.h>
 #include <MemoryBudget.h>
 #include <Utf8.h>
@@ -44,6 +45,9 @@ constexpr uint32_t SECTION_ADVANCE_PREWARM_MAX_CODEPOINTS = 4096;
 constexpr uint8_t INITIAL_PAGE_ELEMENT_RESERVE = 8;
 constexpr uint8_t INITIAL_TABLE_FRAGMENT_ROW_RESERVE = 8;
 constexpr uint32_t PAGE_ELEMENT_RESERVE_MIN_MAX_ALLOC = 1024;
+constexpr uint16_t WARNING_PAGE_SIDE_MARGIN = 24;
+constexpr uint8_t WARNING_TITLE_MAX_LINES = 2;
+constexpr uint8_t WARNING_BODY_MAX_LINES = 6;
 // Cap chapter anchors so converter-generated IDs do not grow memory without bound.
 constexpr size_t MAX_ANCHORS_PER_CHAPTER = 1024;
 constexpr size_t MAX_PENDING_FOOTNOTES_BEFORE_LAYOUT = Page::MAX_FOOTNOTES_PER_PAGE * 3;
@@ -1007,6 +1011,96 @@ void ChapterHtmlSlimParser::fallbackCurrentTableBufferIfNeeded(const char* stage
   if (!MemoryBudget::hasHeap(heap, MIN_FREE_HEAP_FOR_TABLE_BUFFERING, MIN_MAX_ALLOC_FOR_TABLE_BUFFERING)) {
     fallbackCurrentTableBufferToParagraphs(stage);
   }
+}
+
+void ChapterHtmlSlimParser::flushMalformedPartialContent() {
+  if (partWordBufferIndex > 0) {
+    flushPartWordBuffer();
+  }
+
+  if (tableDepth > 0) {
+    if (tableDepth == 1 && currentTextBlock) {
+      finalizeCurrentTableCell();
+    }
+    if (currentTableBuffer) {
+      fallbackCurrentTableBufferToParagraphs("malformed markup");
+    }
+    tableDepth = 0;
+    tableRowIndex = 0;
+    tableColIndex = 0;
+    currentTableCellIsHeader = false;
+    currentTableCellColSpan = 1;
+  }
+}
+
+bool ChapterHtmlSlimParser::appendMalformedMarkupWarningPage() {
+  if (currentPage && !currentPage->elements.empty()) {
+    completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
+    completedPageCount++;
+  }
+  currentPage.reset();
+
+  if (!startNewPage("malformed markup warning")) {
+    return false;
+  }
+
+  const uint16_t textWidth =
+      viewportWidth > WARNING_PAGE_SIDE_MARGIN * 2 ? viewportWidth - WARNING_PAGE_SIDE_MARGIN * 2 : viewportWidth;
+  const auto titleLines = renderer.wrappedText(fontId, tr(STR_EPUB_CHAPTER_INCOMPLETE_TITLE), textWidth,
+                                               WARNING_TITLE_MAX_LINES, EpdFontFamily::BOLD);
+  const auto bodyLines =
+      renderer.wrappedText(fontId, tr(STR_EPUB_CHAPTER_INCOMPLETE_BODY), textWidth, WARNING_BODY_MAX_LINES);
+  const int lineHeight = effectiveLineHeight();
+  const int titleBodyGap = lineHeight;
+  const int contentLineCount = static_cast<int>(titleLines.size() + bodyLines.size());
+  const int contentHeight =
+      contentLineCount * lineHeight + (!titleLines.empty() && !bodyLines.empty() ? titleBodyGap : 0);
+  int y = std::max(0, (static_cast<int>(viewportHeight) - contentHeight) / 2);
+
+  auto addLine = [this](const std::string& line, const EpdFontFamily::Style style, const int yPos) -> bool {
+    std::vector<std::string> words;
+    std::vector<int16_t> xPos;
+    std::vector<EpdFontFamily::Style> styles;
+    words.reserve(1);
+    xPos.reserve(1);
+    styles.reserve(1);
+    words.push_back(line);
+    xPos.push_back(0);
+    styles.push_back(style);
+
+    auto block =
+        std::make_shared<TextBlock>(std::move(words), std::move(xPos), std::move(styles), std::vector<uint8_t>{},
+                                    std::vector<uint16_t>{}, std::vector<uint16_t>{}, std::vector<uint8_t>{});
+    auto pageLine = std::make_shared<PageLine>(
+        std::move(block),
+        static_cast<int16_t>(
+            std::max(0, (static_cast<int>(viewportWidth) - renderer.getTextWidth(fontId, line.c_str(), style)) / 2)),
+        static_cast<int16_t>(yPos));
+    currentPage->elements.push_back(std::move(pageLine));
+    return true;
+  };
+
+  for (const auto& line : titleLines) {
+    if (!addLine(line, EpdFontFamily::BOLD, y)) return false;
+    y += lineHeight;
+  }
+  if (!titleLines.empty() && !bodyLines.empty()) {
+    y += titleBodyGap;
+  }
+  for (const auto& line : bodyLines) {
+    if (!addLine(line, EpdFontFamily::REGULAR, y)) return false;
+    y += lineHeight;
+  }
+
+  if (!currentPage || currentPage->elements.empty()) {
+    LOG_ERR("EHP", "Failed to create malformed markup warning page");
+    return false;
+  }
+
+  completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
+  completedPageCount++;
+  currentPage.reset();
+  return true;
 }
 
 void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
@@ -2514,6 +2608,7 @@ void ChapterHtmlSlimParser::prewarmSectionAdvanceTable(FsFile& file) const {
 }
 
 bool ChapterHtmlSlimParser::parseAndBuildPages() {
+  malformedMarkupTruncated = false;
   // Initialize block style stack with a root entry representing "no ancestor block elements".
   // The user's paragraph alignment is set as the default so child elements without explicit
   // text-align inherit it correctly through getCombinedBlockStyle.
@@ -2618,13 +2713,17 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
     if (parseStatus == XML_STATUS_ERROR && !previewStopRequested) {
       LOG_ERR("EHP", "Parse error at line %lu:\n%s", XML_GetCurrentLineNumber(parser),
               XML_ErrorString(XML_GetErrorCode(parser)));
-      destroyXmlParser(parser);
-      activeParser = nullptr;
-      file.close();
-      parseArena_.release();
-      inlineStyleBuf_ = nullptr;
-      blockStyleBuf_ = nullptr;
-      return false;
+      if (isPreviewBuild()) {
+        destroyXmlParser(parser);
+        activeParser = nullptr;
+        file.close();
+        parseArena_.release();
+        inlineStyleBuf_ = nullptr;
+        blockStyleBuf_ = nullptr;
+        return false;
+      }
+      malformedMarkupTruncated = true;
+      done = true;
     }
     if (previewStopRequested || parseStatus == XML_STATUS_SUSPENDED) {
       done = true;
@@ -2649,6 +2748,17 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   activeParser = nullptr;
   file.close();
 
+  if (malformedMarkupTruncated) {
+    LOG_DBG("EHP", "Malformed markup encountered; finalizing partial chapter content");
+    flushMalformedPartialContent();
+    if (lowMemoryAbort) {
+      parseArena_.release();
+      inlineStyleBuf_ = nullptr;
+      blockStyleBuf_ = nullptr;
+      return false;
+    }
+  }
+
   // Process last page if there is still text
   if (isPreviewBuild() && !previewAnchorFound) {
     LOG_ERR("EHP", "Preview anchor '%s' was not found", previewAnchor.c_str());
@@ -2671,13 +2781,21 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
       pendingAnchorId.clear();
       pendingAnchorFromInlineA = false;
     }
-    if (currentPage && !currentPage->elements.empty()) {
-      completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
-      completedPageCount++;
-      stopPreviewIfPageLimitReached();
-    }
-    currentPage.reset();
     currentTextBlock.reset();
+  }
+  if (!previewStopRequested && currentPage && !currentPage->elements.empty()) {
+    completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
+    completedPageCount++;
+    stopPreviewIfPageLimitReached();
+  }
+  currentPage.reset();
+
+  if (malformedMarkupTruncated && !appendMalformedMarkupWarningPage()) {
+    LOG_ERR("EHP", "Failed to append malformed markup warning page");
+    parseArena_.release();
+    inlineStyleBuf_ = nullptr;
+    blockStyleBuf_ = nullptr;
+    return false;
   }
 
   LOG_DBG("EHP", "Parse arena used %u bytes", (unsigned)parseArena_.used());

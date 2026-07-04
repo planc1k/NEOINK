@@ -77,6 +77,7 @@ class ChapterHtmlSlimParser {
   uint16_t previewMaxPages = 0;
   bool previewAnchorFound = false;
   bool previewStopRequested = false;
+  bool malformedMarkupTruncated = false;
   XML_Parser activeParser = nullptr;
 
   // Style tracking (replaces depth-based approach)
@@ -198,6 +199,8 @@ class ChapterHtmlSlimParser {
   void emitCurrentTableBuffer();
   void fallbackCurrentTableBufferToParagraphs(const char* reason);
   void fallbackCurrentTableBufferIfNeeded(const char* stage);
+  void flushMalformedPartialContent();
+  bool appendMalformedMarkupWarningPage();
   void prewarmSectionAdvanceTable(FsFile& file) const;
   // XML callbacks
   static void XMLCALL startElement(void* userData, const XML_Char* name, const XML_Char** atts);
