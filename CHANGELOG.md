@@ -12,6 +12,7 @@
 ### Changed
 
 - Large EPUBs and SD-card font-heavy books now build pages with less temporary memory churn, reducing slow first opens and low-memory failures.
+- EPUB indexing now avoids more small temporary allocations while processing text and HTML attributes.
 - Home and sleep screens now do more EPUB cover and thumbnail work on demand, reducing reader startup work and reusing cached cover data where possible.
 - ChareInk is no longer bundled as a built-in reader font choice, reducing firmware size while keeping the remaining built-in fonts' fallback glyph coverage.
 
@@ -28,6 +29,7 @@
 - Web EPUB optimizer no longer leaves transparent PNG artwork blank or replaced by alt text.
 - EPUB grayscale page turns on X3 now use the grayscale-aware display base, reducing the moment where new text appears too dark before the anti-aliased overlay finishes.
 - EPUB chapters with many inline anchors, footnote links, or malformed XHTML are less likely to fail or get stuck on the indexing screen.
+- EPUB opening and image rendering now handle more low-memory allocation failures without rebooting, and landscape image pages read less cached image data during tiled grayscale rendering.
 - EPUB clipping selection now follows right-to-left line order when selecting Hebrew and other RTL text.
 - Lyra Carousel no longer shows a blank carousel after returning from WiFi-related File Transfer screens and moving between the menu row and book row.
 - Generated SD-card font packages now include the same core glyph coverage as built-in reader fonts.

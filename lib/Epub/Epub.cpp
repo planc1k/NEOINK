@@ -6,6 +6,7 @@
 #include <HalStorage.h>
 #include <JpegToBmpConverter.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <MemoryBudget.h>
 #include <PngToBmpConverter.h>
 #include <Utf8.h>
@@ -57,6 +58,22 @@ void normalizeThumbDimensions(int& width, int& height) {
   if (width <= 0) {
     width = static_cast<int>((static_cast<int64_t>(height) * 2 + 1) / 3);
   }
+}
+
+std::unique_ptr<BookMetadataCache> makeBookMetadataCacheNoThrow(const std::string& cachePath) {
+  auto cache = makeUniqueNoThrow<BookMetadataCache>(cachePath);
+  if (!cache) {
+    LOG_ERR("EBP", "OOM: BookMetadataCache (%u free, %u max alloc)", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+  }
+  return cache;
+}
+
+std::unique_ptr<CssParser> makeCssParserNoThrow(const std::string& cachePath) {
+  auto parser = makeUniqueNoThrow<CssParser>(cachePath);
+  if (!parser) {
+    LOG_ERR("EBP", "OOM: CssParser (%u free, %u max alloc)", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+  }
+  return parser;
 }
 
 bool cachedBmpMatchesDimensions(const std::string& path, const int width, const int height,
@@ -584,9 +601,16 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   LOG_DBG("EBP", "Loading ePub: %s", filepath.c_str());
 
   // Initialize spine/TOC cache
-  bookMetadataCache.reset(new BookMetadataCache(cachePath));
+  bookMetadataCache = makeBookMetadataCacheNoThrow(cachePath);
+  if (!bookMetadataCache) {
+    return false;
+  }
   // Always create CssParser - needed for inline style parsing even without CSS files
-  cssParser.reset(new CssParser(cachePath));
+  cssParser = makeCssParserNoThrow(cachePath);
+  if (!cssParser) {
+    bookMetadataCache.reset();
+    return false;
+  }
 
   // Try to load existing cache first
   if (bookMetadataCache->load()) {
@@ -622,7 +646,10 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
         }
         bookMetadataCache.reset();
         const CssParseStatus cssStatus = parseCssFiles(forceCssRebuild);
-        bookMetadataCache.reset(new BookMetadataCache(cachePath));
+        bookMetadataCache = makeBookMetadataCacheNoThrow(cachePath);
+        if (!bookMetadataCache) {
+          return false;
+        }
         if (!bookMetadataCache->load()) {
           LOG_ERR("EBP", "Failed to reload cache after CSS rebuild");
           return false;
@@ -740,7 +767,10 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   }
 
   // Reload the cache from disk so it's in the correct state
-  bookMetadataCache.reset(new BookMetadataCache(cachePath));
+  bookMetadataCache = makeBookMetadataCacheNoThrow(cachePath);
+  if (!bookMetadataCache) {
+    return false;
+  }
   if (!bookMetadataCache->load()) {
     LOG_ERR("EBP", "Failed to reload cache after writing");
     return false;

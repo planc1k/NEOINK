@@ -46,6 +46,7 @@ class ParsedText {
   std::vector<uint8_t> lineBackgroundBlackScratch;
   std::vector<uint16_t> visualOrderScratch;
 
+  void reserveTokenCapacity(size_t additionalTokens);
   int resolveFirstLineIndent(bool isFirstLine, const GfxRenderer& renderer, int fontId) const;
   bool calculateGapMetrics(ArenaVector<int16_t>& naturalGaps, ArenaVector<uint8_t>& gapSlots,
                            const GfxRenderer& renderer, int fontId);

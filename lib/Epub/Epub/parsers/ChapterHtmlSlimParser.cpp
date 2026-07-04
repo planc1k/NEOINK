@@ -6,6 +6,7 @@
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <MemoryBudget.h>
 #include <Utf8.h>
 #include <XmlParserUtils.h>
@@ -17,6 +18,7 @@
 #include <cstdlib>
 #include <iterator>
 #include <new>
+#include <string_view>
 
 #include "Epub.h"
 #include "Epub/Page.h"
@@ -559,11 +561,11 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
   wordsExtractedInBlock = 0;
 }
 
-void ChapterHtmlSlimParser::pushCssAncestor(const int depth, const char* tag, const std::string& classAttr) {
+void ChapterHtmlSlimParser::pushCssAncestor(const int depth, const char* tag, const std::string_view classAttr) {
   if (usesSimpleCssLookup()) {
     return;
   }
-  ancestorStack_.push_back({depth, std::string(tag), classAttr});
+  ancestorStack_.push_back({depth, std::string(tag), std::string(classAttr)});
 }
 
 void ChapterHtmlSlimParser::finalizeCurrentTableCell() {
@@ -1130,24 +1132,25 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     self->xpathListItemIndex++;
   }
 
-  // Extract class, style, and id attributes
-  std::string classAttr;
-  std::string styleAttr;
-  std::string dirAttr;
+  // Borrow parser-owned attribute bytes during this callback; copy only when
+  // storing an ancestor/id beyond the current element start.
+  std::string_view classAttr;
+  std::string_view styleAttr;
+  const char* dirAttr = nullptr;
   if (atts != nullptr) {
     for (int i = 0; atts[i]; i += 2) {
+      const char* attrValue = atts[i + 1] ? atts[i + 1] : "";
       if (strcmp(atts[i], "class") == 0) {
-        classAttr = atts[i + 1];
+        classAttr = attrValue;
       } else if (strcmp(atts[i], "style") == 0) {
-        styleAttr = atts[i + 1];
+        styleAttr = attrValue;
       } else if (strcmp(atts[i], "id") == 0) {
-        if (self->isPreviewBuild() && self->previewAnchorFound &&
-            strcmp(atts[i + 1], self->previewAnchor.c_str()) == 0) {
+        if (self->isPreviewBuild() && self->previewAnchorFound && strcmp(attrValue, self->previewAnchor.c_str()) == 0) {
           continue;
         }
         // Defer both anchor recording and TOC page breaks until startNewTextBlock,
         // after the previous block is flushed to pages via makePages().
-        const char* idValue = atts[i + 1];
+        const char* idValue = attrValue;
         const bool isTocAnchor =
             std::find(self->tocAnchors.begin(), self->tocAnchors.end(), idValue) != self->tocAnchors.end();
         if (isTocAnchor || (!isNonNavigableInlineElement(name) && self->anchorData.size() < MAX_ANCHORS_PER_CHAPTER)) {
@@ -1161,7 +1164,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
           self->pendingAnchorFromInlineA = !isTocAnchor && strcmp(name, "a") == 0;
         }
       } else if (strcmp(atts[i], "dir") == 0) {
-        dirAttr = atts[i + 1];
+        dirAttr = attrValue;
       }
     }
   }
@@ -1185,11 +1188,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
   }
 
-  if (!dirAttr.empty()) {
-    if (strcasecmp(dirAttr.c_str(), "rtl") == 0) {
+  if (dirAttr && dirAttr[0] != '\0') {
+    if (strcasecmp(dirAttr, "rtl") == 0) {
       cssStyle.direction = CssTextDirection::Rtl;
       cssStyle.defined.direction = 1;
-    } else if (strcasecmp(dirAttr.c_str(), "ltr") == 0) {
+    } else if (strcasecmp(dirAttr, "ltr") == 0) {
       cssStyle.direction = CssTextDirection::Ltr;
       cssStyle.defined.direction = 1;
     }
@@ -1317,7 +1320,14 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     const float emSize = self->renderer.getLineHeight(self->fontId) * self->lineCompression;
     auto tableBlockStyle = BlockStyle::fromCssStyle(cssStyle, emSize, CssTextAlign::Left, self->viewportWidth);
 
-    self->currentTableBuffer.reset(new BufferedTable());
+    self->currentTableBuffer = makeUniqueNoThrow<BufferedTable>();
+    if (!self->currentTableBuffer) {
+      const auto heap = MemoryBudget::snapshot();
+      LOG_ERR("EHP", "Failed to buffer table (%u free, %u max alloc); aborting section build", heap.freeHeap,
+              heap.maxAllocHeap);
+      self->lowMemoryAbort = true;
+      return;
+    }
     self->currentTableBuffer->blockStyle = tableBlockStyle;
     self->tableDepth += 1;
     self->tableRowIndex = 0;
