@@ -36,6 +36,28 @@ bool isSupportedLocationsFormat(const char* format) {
   return std::strcmp(format, kXLocationsFormat) == 0 || std::strcmp(format, kLegacyXLocationsFormat) == 0;
 }
 
+void buildXLocationsJsonFilter(JsonDocument& filter) {
+  JsonObject root = filter.to<JsonObject>();
+  root["format"] = true;
+  root["version"] = true;
+  root["totalLocations"] = true;
+  root["totalWords"] = true;
+  root["totalCharacters"] = true;
+  root["wordsPerReferencePage"] = true;
+  root["charactersPerReferencePage"] = true;
+  root["totalReferencePages"] = true;
+
+  JsonArray spine = root["spine"].to<JsonArray>();
+  JsonObject spineEntry = spine.add<JsonObject>();
+  spineEntry["index"] = true;
+  spineEntry["startLocation"] = true;
+  spineEntry["endLocation"] = true;
+  spineEntry["wordStart"] = true;
+  spineEntry["wordCount"] = true;
+  spineEntry["characterStart"] = true;
+  spineEntry["characterCount"] = true;
+}
+
 float clampUnit(const float value) {
   if (value <= 0.0f) {
     return 0.0f;
@@ -1163,8 +1185,11 @@ bool Epub::loadXLocations() {
     return false;
   }
 
+  JsonDocument filter;
+  buildXLocationsJsonFilter(filter);
   JsonDocument doc;
-  const DeserializationError err = deserializeJson(doc, reinterpret_cast<const char*>(manifestData), bytesRead);
+  const DeserializationError err = deserializeJson(doc, reinterpret_cast<const char*>(manifestData), bytesRead,
+                                                   DeserializationOption::Filter(filter.as<JsonVariantConst>()));
   free(manifestData);
 
   if (err) {
