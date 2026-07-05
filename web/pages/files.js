@@ -479,7 +479,7 @@ function setOverlap(value) {
  */
 async function extractImagesForPreview(file) {
   const zip = await JSZip.loadAsync(file);
-  const imageExtensions = [".png", ".gif", ".webp", ".bmp", ".jpg", ".jpeg"];
+  const imageExtensions = [".png", ".gif", ".webp", ".bmp", ".jpg", ".jpeg", ".svg"];
 
   // Collect all image paths first
   const allImages = [];
@@ -668,11 +668,11 @@ async function extractImagesForPreview(file) {
   const images = [];
   for (const path of orderedImages) {
     const data = await zip.files[path].async("arraybuffer");
-    const blob = new Blob([data]);
+    const blob = new Blob([data], { type: imageMimeType(path) });
     const dataUrl = URL.createObjectURL(blob);
 
     // Get dimensions
-    const dims = await getImageDimensions(data);
+    const dims = await getImageDimensions(data, path);
 
     // Check if this is the cover image
     const isCover = path === coverImagePath || (path.toLowerCase().includes("cover") && images.length === 0);
@@ -720,9 +720,9 @@ async function extractImagesForPreview(file) {
 /**
  * Get image dimensions from array buffer
  */
-function getImageDimensions(data) {
+function getImageDimensions(data, filename = "") {
   return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(new Blob([data]));
+    const url = URL.createObjectURL(new Blob([data], { type: imageMimeType(filename) }));
     const img = new Image();
     img.onload = () => {
       URL.revokeObjectURL(url);
@@ -2469,7 +2469,7 @@ function fixOPF(opfText, opfOriginal, opfDir, splitImages = {}) {
     for (const item of items) {
       const href = item.getAttribute("href") || "";
       const type = item.getAttribute("media-type") || "";
-      if (href.endsWith(".jpg") && type.match(/^image\/(png|gif|webp|bmp)$/)) {
+      if (href.endsWith(".jpg") && type.match(/^image\/(png|gif|webp|bmp|svg\+xml)$/)) {
         item.setAttribute("media-type", "image/jpeg");
       }
     }
@@ -2492,7 +2492,7 @@ function fixOPF(opfText, opfOriginal, opfDir, splitImages = {}) {
     for (const [splitKey, splitInfo] of Object.entries(splitImages)) {
       const parts = splitInfo.parts || splitInfo;
       let origHref = opfDir && splitKey.startsWith(opfDir + "/") ? splitKey.substring(opfDir.length + 1) : splitKey;
-      const origHrefJpg = origHref.replace(/\.(png|gif|webp|bmp|jpeg)$/i, ".jpg");
+      const origHrefJpg = origHref.replace(/\.(png|gif|webp|bmp|jpeg|svg)$/i, ".jpg");
       const part1Href = origHrefJpg.replace(/\.jpg$/i, "_part1.jpg");
 
       for (const item of items) {
@@ -2521,18 +2521,18 @@ function fixOPF(opfText, opfOriginal, opfDir, splitImages = {}) {
   } catch (e) {
     // Regex fallback
     t = t.replace(
-      /(<(?:\w+:)?item\b[^>]*href="[^"]+\.jpg"[^>]*)media-type="image\/(png|gif|webp|bmp)"/g,
+      /(<(?:\w+:)?item\b[^>]*href="[^"]+\.jpg"[^>]*)media-type="image\/(png|gif|webp|bmp|svg\+xml)"/g,
       '$1media-type="image/jpeg"',
     );
     t = t.replace(
-      /(<(?:\w+:)?item\b[^>]*)media-type="image\/(png|gif|webp|bmp)"([^>]*href="[^"]+\.jpg")/g,
+      /(<(?:\w+:)?item\b[^>]*)media-type="image\/(png|gif|webp|bmp|svg\+xml)"([^>]*href="[^"]+\.jpg")/g,
       '$1media-type="image/jpeg"$3',
     );
     t = t.replace(/\s+svg(?=["'\s>])/g, "");
     for (const [splitKey, splitInfo] of Object.entries(splitImages)) {
       const parts = splitInfo.parts || splitInfo;
       let origHref = opfDir && splitKey.startsWith(opfDir + "/") ? splitKey.substring(opfDir.length + 1) : splitKey;
-      const origHrefJpg = origHref.replace(/\.(png|gif|webp|bmp|jpeg)$/i, ".jpg");
+      const origHrefJpg = origHref.replace(/\.(png|gif|webp|bmp|jpeg|svg)$/i, ".jpg");
       const part1Href = origHrefJpg.replace(/\.jpg$/i, "_part1.jpg");
       const origImgRegex = new RegExp(`(href=["'])(${escapeRegex(origHref)}|${escapeRegex(origHrefJpg)})(["'])`, "gi");
       t = t.replace(origImgRegex, `$1${part1Href}$3`);
@@ -2838,7 +2838,7 @@ function applyGrayscale(ctx, width, height) {
 const IMAGE_LOAD_TIMEOUT_MS = 30000; // 30 second timeout for image loading
 async function processImage(data, imageState = 0, imagePath = "") {
   return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(new Blob([data]));
+    const url = URL.createObjectURL(new Blob([data], { type: imageMimeType(imagePath) }));
     const img = new Image();
     const origSize = data.byteLength;
     // Set up timeout to handle cases where image never loads
@@ -3278,6 +3278,16 @@ async function processImage(data, imageState = 0, imagePath = "") {
   });
 }
 
+function imageMimeType(filename) {
+  const lower = (filename || "").toLowerCase();
+  if (lower.endsWith(".svg")) return "image/svg+xml";
+  if (lower.endsWith(".png")) return "image/png";
+  if (lower.endsWith(".gif")) return "image/gif";
+  if (lower.endsWith(".webp")) return "image/webp";
+  if (lower.endsWith(".bmp")) return "image/bmp";
+  return "image/jpeg";
+}
+
 // Convert EPUB file - returns converted blob
 async function convertEpubFile(file, progressCallback) {
   const startTime = Date.now();
@@ -3297,8 +3307,8 @@ async function convertEpubFile(file, progressCallback) {
   const renamed = {};
   zip.forEach((p) => {
     const l = p.toLowerCase();
-    if (l.match(/\.(png|gif|webp|bmp|jpeg)$/)) {
-      renamed[p] = p.replace(/\.(png|gif|webp|bmp|jpeg)$/i, ".jpg");
+    if (l.match(/\.(png|gif|webp|bmp|jpeg|svg)$/)) {
+      renamed[p] = p.replace(/\.(png|gif|webp|bmp|jpeg|svg)$/i, ".jpg");
     }
   });
 
@@ -3325,7 +3335,7 @@ async function convertEpubFile(file, progressCallback) {
     if (fileObj.dir || path === "mimetype") continue;
     const low = path.toLowerCase();
 
-    if (low.match(/\.(png|gif|webp|bmp|jpg|jpeg)$/)) {
+    if (low.match(/\.(png|gif|webp|bmp|jpg|jpeg|svg)$/)) {
       const data = await fileObj.async("arraybuffer");
       const imageState = getImageState(path);
 
@@ -3468,7 +3478,7 @@ async function convertEpubFile(file, progressCallback) {
             const origName = splitInfo.origName;
             const origDir = splitInfo.origDir;
             const parts = splitInfo.parts;
-            const newName = origName.replace(/\.(png|gif|webp|bmp|jpeg)$/i, ".jpg");
+            const newName = origName.replace(/\.(png|gif|webp|bmp|jpeg|svg)$/i, ".jpg");
 
             // Extract immediate parent directory for collision prevention
             const splitDirParts = origDir.split("/").filter((p) => p);
@@ -3625,7 +3635,7 @@ async function convertEpubFile(file, progressCallback) {
     if (fileObj.dir || path === "mimetype") continue;
     const low = path.toLowerCase();
     if (low === X_LOCATION_MANIFEST_PATH.toLowerCase()) continue;
-    if (low.match(/\.(png|gif|webp|bmp|jpg|jpeg)$/) || low.match(/\.(xhtml|html|htm)$/) || low.endsWith(".opf"))
+    if (low.match(/\.(png|gif|webp|bmp|jpg|jpeg|svg)$/) || low.match(/\.(xhtml|html|htm)$/) || low.endsWith(".opf"))
       continue;
 
     let data = await fileObj.async("arraybuffer");

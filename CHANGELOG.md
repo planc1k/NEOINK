@@ -31,6 +31,7 @@
 - Large SD-card font EPUBs no longer overlap characters after font or line-spacing changes, and clipping selection can fall back to a built-in UI font when needed.
 - EPUB cover and thumbnail generation is more reliable with custom SD-card fonts selected.
 - Web EPUB optimizer no longer leaves transparent PNG artwork blank or replaced by alt text.
+- Web EPUB optimizer now rasterizes SVG images to JPEG so optimized EPUBs preserve more dividers and artwork on-device.
 - Unsupported SVG images in EPUB chapters are now skipped silently instead of triggering low-memory image warnings.
 - EPUB grayscale page turns on X3 now use the grayscale-aware display base, reducing the moment where new text appears too dark before the anti-aliased overlay finishes.
 - EPUB chapters with many inline anchors, footnote links, or malformed XHTML are less likely to fail or get stuck on the indexing screen.
