@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- EPUB clipping selection now works from footnote previews.
+
 ## [v1.4.0] - 2026-07-04
 
 ### Added
