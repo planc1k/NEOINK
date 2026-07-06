@@ -111,6 +111,27 @@ h2 {
 .modal.picker-mode {
       max-width: 920px;
     }
+.modal.image-preview-mode {
+      max-width: 640px;
+    }
+.image-preview-stage {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: auto;
+      margin-bottom: 15px;
+      border-radius: 6px;
+    }
+.image-preview-stage img {
+      max-width: 100%;
+      max-height: 65vh;
+      object-fit: contain;
+    }
+#imagePreviewDownload {
+      display: inline-block;
+      width: auto;
+      text-decoration: none;
+    }
 .picker-columns.picker-active {
       display: flex;
       flex-direction: row;

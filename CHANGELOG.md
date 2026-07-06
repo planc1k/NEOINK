@@ -6,6 +6,7 @@
 - Nearby Position Sync for sending or applying the current EPUB position between two CrossInk devices over ESP-NOW.
 - Web EPUB optimizer support for CrossInk location metadata, so optimized EPUBs can keep better progress and stable page numbers.
 - Reading Stats support for XTC and XTCH books, including reader menus, Home and sleep screen stats, mark finished, delete stats, and preserving stats when clearing book caches.
+- Web file manager image previews, so PNG, JPEG, BMP, GIF, and WebP files can be viewed inline before downloading.
 
 ### Changed
 

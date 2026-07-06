@@ -104,6 +104,7 @@ async function hydrate() {
         if (overlay.id === "deleteModal") return closeDeleteModal();
         if (overlay.id === "renameModal") return closeRenameModal();
         if (overlay.id === "moveModal") return closeMoveModal();
+        if (overlay.id === "imagePreviewModal") return closeImagePreview();
         overlay.classList.remove("open");
       }
     });
@@ -197,8 +198,13 @@ async function hydrate() {
         // Checkbox cell + file row
         fileTableContent += `<tr class="${file.isEpub ? "epub-file" : ""}">`;
         fileTableContent += `<td><input type="checkbox" class="select-item" data-path="${encodeURIComponent(filePath)}" data-name="${escapeHtml(file.name)}" data-type="file"></td>`;
-        fileTableContent += `<td><span class="file-icon">${file.isEpub ? "📗" : "📄"}</span>`;
-        fileTableContent += `<a rel="noopener noreferrer" target="_blank" href="/download?path=${encodeURIComponent(filePath)}" class="file-link">${escapeHtml(file.name)}</a>`;
+        const fileIsImage = isImageFile(file.name);
+        fileTableContent += `<td><span class="file-icon">${file.isEpub ? "📗" : fileIsImage ? "🖼️" : "📄"}</span>`;
+        if (fileIsImage) {
+          fileTableContent += `<a href="${downloadUrl(filePath)}" class="file-link image-preview-link">${escapeHtml(file.name)}</a>`;
+        } else {
+          fileTableContent += `<a rel="noopener noreferrer" target="_blank" href="${downloadUrl(filePath)}" class="file-link">${escapeHtml(file.name)}</a>`;
+        }
         fileTableContent += "</td>";
         fileTableContent += file.isEpub
           ? '<td><span class="epub-badge">EPUB</span></td>'
@@ -219,6 +225,28 @@ async function hydrate() {
       button.addEventListener("click", handleFileActionClick);
     });
   }
+}
+
+function isImageFile(name) {
+  return /\.(png|jpe?g|bmp|gif|webp)$/i.test(name);
+}
+
+function downloadUrl(filePath) {
+  return `/download?path=${encodeURIComponent(filePath)}`;
+}
+
+function openImagePreview(url, name) {
+  const img = document.getElementById("imagePreviewImg");
+  document.getElementById("imagePreviewName").textContent = name;
+  img.src = url;
+  img.alt = name;
+  document.getElementById("imagePreviewDownload").href = url;
+  document.getElementById("imagePreviewModal").classList.add("open");
+}
+
+function closeImagePreview() {
+  document.getElementById("imagePreviewModal").classList.remove("open");
+  document.getElementById("imagePreviewImg").src = "";
 }
 
 function handleFileActionClick(event) {
@@ -1070,6 +1098,13 @@ function getStateLabel(state) {
 
 // Initialize quality settings handlers
 document.addEventListener("DOMContentLoaded", function () {
+  document.getElementById("file-table").addEventListener("click", function (event) {
+    const link = event.target.closest(".image-preview-link");
+    if (!link) return;
+    event.preventDefault();
+    openImagePreview(link.getAttribute("href"), link.textContent);
+  });
+
   const qualitySlider = document.getElementById("qualitySlider");
   const qualityInput = document.getElementById("qualityInput");
 
