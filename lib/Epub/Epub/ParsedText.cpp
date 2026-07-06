@@ -1447,8 +1447,12 @@ bool ParsedText::extractLine(Arena& scratchArena, const size_t breakIndex, const
     }
   }
 
-  processLine(std::make_shared<TextBlock>(std::move(outWords), std::move(outXPos), std::move(outStyles),
-                                          std::move(outBoundaries), std::move(outSuffixX),
-                                          std::move(outGuideDotXOffset), std::move(outBackgroundBlack), blockStyle));
+  auto block = std::make_shared<TextBlock>(outWords, outXPos, outStyles, outBoundaries, outSuffixX, outGuideDotXOffset,
+                                           outBackgroundBlack, blockStyle);
+  if (!block->valid()) {
+    LOG_ERR("PTX", "Dropping line: TextBlock arena allocation failed");
+    return false;
+  }
+  processLine(std::move(block));
   return true;
 }

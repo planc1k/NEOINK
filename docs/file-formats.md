@@ -229,15 +229,14 @@ Binary layout:
 
 ## `section.bin`
 
-### Version 43
+### Version 44
 
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
 
-Version 43 invalidates older section caches so text-block word flags can be
-omitted for lines that do not use CSS backgrounds or layout-inserted hyphens.
-It includes:
+Version 44 invalidates older section caches so `TextBlock` word data can be
+stored as one flat arena. It includes:
 
 - cache-busting fields for font, line compression, extra paragraph spacing,
   forced paragraph indents, paragraph alignment, viewport size, hyphenation,
@@ -254,6 +253,12 @@ It includes:
 - table fragments
 - per-page footnote entries
 - per-page publisher page markers
+- serialized word style bits for underline, strikethrough, superscript, and
+  subscript
+- flat TextBlock word storage: per-word arrays plus one shared NUL-terminated
+  text blob, replacing length-prefixed word strings and parallel vectors. The
+  on-disk order mirrors the in-RAM arena so the firmware reads a whole block
+  payload with a single allocation and a single SD read
 
 ImHex pattern:
 
@@ -262,7 +267,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 43
+#define EXPECTED_VERSION 44
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 96
@@ -324,24 +329,28 @@ struct BlockStyle {
 
 struct TextBlock {
     u16 wordCount;
-    String words[wordCount];
-    s16 wordXPos[wordCount];
-    WordStyle wordStyle[wordCount];
-
-    u8 hasFocus;
-    if (hasFocus != 0) {
-        u8 wordFocusBoundary[wordCount] [[comment("UTF-8 byte boundary between bold prefix and suffix")]];
-        u16 wordFocusSuffixX[wordCount] [[comment("Suffix x offset from word start")]];
-    }
-
+    u8 hasBionic;
     u8 hasGuideDots;
-    if (hasGuideDots != 0) {
-        u16 wordGuideDotXOffset[wordCount] [[comment("Guide dot x offset from word start; 0 means no dot")]];
-    }
-
     u8 hasWordFlags;
-    if (hasWordFlags != 0) {
-        u8 wordFlags[wordCount] [[comment("bit 0 = black background, bit 1 = layout-inserted trailing hyphen")]];
+    u16 textBytes [[comment("Total size of text[], including one NUL per word")]];
+
+    if (wordCount > 0) {
+        u16 textOff[wordCount] [[comment("Byte offset of word i's text within text[]")]];
+        s16 wordXPos[wordCount];
+        if (hasBionic != 0) {
+            u16 wordBionicSuffixX[wordCount] [[comment("Suffix x offset from word start")]];
+        }
+        if (hasGuideDots != 0) {
+            u16 wordGuideDotXOffset[wordCount] [[comment("Guide dot x offset from word start; 0 means no dot")]];
+        }
+        WordStyle wordStyle[wordCount];
+        if (hasBionic != 0) {
+            u8 wordBionicBoundary[wordCount] [[comment("UTF-8 byte boundary between bold prefix and suffix")]];
+        }
+        if (hasWordFlags != 0) {
+            u8 wordFlags[wordCount] [[comment("bit 0 = black background, bit 1 = layout-inserted trailing hyphen")]];
+        }
+        char text[textBytes] [[comment("All words back to back, each NUL-terminated")]];
     }
 
     BlockStyle blockStyle;

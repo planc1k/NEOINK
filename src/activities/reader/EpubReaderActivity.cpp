@@ -214,19 +214,23 @@ void applySafeModeReaderSettings() {
   SETTINGS.guideReadingEnabled = 0;
 }
 
-bool hasEmSpacePrefix(const std::string& text) {
-  return text.size() >= 3 && static_cast<unsigned char>(text[0]) == 0xE2 &&
-         static_cast<unsigned char>(text[1]) == 0x80 && static_cast<unsigned char>(text[2]) == 0x83;
+bool hasEmSpacePrefix(const char* text) {
+  return text && static_cast<unsigned char>(text[0]) == 0xE2 && static_cast<unsigned char>(text[1]) == 0x80 &&
+         static_cast<unsigned char>(text[2]) == 0x83;
 }
 
-bool hasVisibleWordText(const std::string& text) {
-  const char* cursor = text.c_str() + (hasEmSpacePrefix(text) ? 3 : 0);
+bool hasEmSpacePrefix(const std::string& text) { return text.size() >= 3 && hasEmSpacePrefix(text.c_str()); }
+
+bool hasVisibleWordText(const char* text) {
+  const char* cursor = text + (hasEmSpacePrefix(text) ? 3 : 0);
   while (*cursor) {
     if (*cursor != ' ' && *cursor != '\t' && *cursor != '\r' && *cursor != '\n') return true;
     cursor++;
   }
   return false;
 }
+
+bool hasVisibleWordText(const std::string& text) { return hasVisibleWordText(text.c_str()); }
 
 uint8_t largestBlockPercent(const MemoryBudget::HeapSnapshot& heap) {
   if (heap.freeHeap == 0) {
@@ -316,10 +320,14 @@ bool advanceClipCursorToToken(const std::string& text, const uint16_t targetInde
   return false;
 }
 
-bool wordMatchesToken(const std::string& word, const char* token, const size_t tokenLen) {
+bool wordMatchesToken(const char* word, const char* token, const size_t tokenLen) {
   if (!token || tokenLen == 0) return false;
-  const char* visibleWord = word.c_str() + (hasEmSpacePrefix(word) ? 3 : 0);
+  const char* visibleWord = word + (hasEmSpacePrefix(word) ? 3 : 0);
   return std::strlen(visibleWord) == tokenLen && std::strncmp(visibleWord, token, tokenLen) == 0;
+}
+
+bool wordMatchesToken(const std::string& word, const char* token, const size_t tokenLen) {
+  return wordMatchesToken(word.c_str(), token, tokenLen);
 }
 
 template <typename Callback>
@@ -331,13 +339,10 @@ bool forEachVisiblePageWord(const Page& page, Callback&& callback) {
     if (!line.getBlock()) continue;
 
     const auto& block = *line.getBlock();
-    const auto& wordList = block.getWords();
-    const auto& xpos = block.getWordXpos();
-    const auto& styles = block.getWordStyles();
-    const size_t count = std::min({wordList.size(), xpos.size(), styles.size()});
-    for (size_t i = 0; i < count; ++i) {
-      const std::string& word = wordList[i];
-      const char* visibleWord = word.c_str() + (hasEmSpacePrefix(word) ? 3 : 0);
+    const uint16_t count = block.wordCount();
+    for (uint16_t i = 0; i < count; ++i) {
+      const char* word = block.wordText(i);
+      const char* visibleWord = word + (hasEmSpacePrefix(word) ? 3 : 0);
       bool hasVisibleText = false;
       for (const char* p = visibleWord; *p != '\0'; ++p) {
         if (*p != ' ' && *p != '\t' && *p != '\r' && *p != '\n') {
@@ -375,7 +380,7 @@ bool matchClipRunFromPageWord(const Page& page, const Clipping& clipping, const 
       return true;
     }
 
-    const std::string& word = block.getWords()[i];
+    const char* word = block.wordText(static_cast<uint16_t>(i));
     if (!wordMatchesToken(word, token, tokenLen)) {
       stoppedByMismatch = true;
       return false;
@@ -423,7 +428,7 @@ bool findClippingTextOnPage(const Page& page, const Clipping& clipping, Clipping
   bool found = false;
 
   forEachVisiblePageWord(page, [&](const uint16_t wordIndex, const PageLine&, const TextBlock& block, const size_t i) {
-    const std::string& word = block.getWords()[i];
+    const char* word = block.wordText(static_cast<uint16_t>(i));
     const char* cursor = clipping.text.c_str();
     const char* token = nullptr;
     size_t tokenLen = 0;
@@ -779,10 +784,14 @@ int clampPercent(int percent) {
   return percent;
 }
 
-bool isSnippetWhitespace(const std::string& word) {
-  if (word.empty()) return true;
-  return std::all_of(word.begin(), word.end(),
-                     [](const char c) { return c == ' ' || c == '\r' || c == '\n' || c == '\t'; });
+bool isSnippetWhitespace(const char* word) {
+  if (!word || *word == '\0') return true;
+  for (const char* cursor = word; *cursor != '\0'; ++cursor) {
+    if (*cursor != ' ' && *cursor != '\r' && *cursor != '\n' && *cursor != '\t') {
+      return false;
+    }
+  }
+  return true;
 }
 
 void buildBookmarkSnippet(const Page& page, char* out, const size_t outSize) {
@@ -794,14 +803,15 @@ void buildBookmarkSnippet(const Page& page, char* out, const size_t outSize) {
     if (el->getTag() != TAG_PageLine) continue;
     const auto& line = static_cast<const PageLine&>(*el);
     if (!line.getBlock()) continue;
-    const auto& words = line.getBlock()->getWords();
-    for (const auto& word : words) {
+    const auto& block = *line.getBlock();
+    for (uint16_t i = 0; i < block.wordCount(); ++i) {
+      const char* word = block.wordText(i);
       if (isSnippetWhitespace(word)) continue;
       const size_t separatorLen = len > 0 ? 1 : 0;
-      const size_t wordLen = word.size();
+      const size_t wordLen = std::strlen(word);
       if (len + separatorLen + wordLen >= outSize) return;
       if (separatorLen > 0) out[len++] = ' ';
-      memcpy(out + len, word.c_str(), wordLen);
+      memcpy(out + len, word, wordLen);
       len += wordLen;
       out[len] = '\0';
     }
@@ -2521,10 +2531,10 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
             if (el->getTag() == TAG_PageLine) {
               const auto& line = static_cast<const PageLine&>(*el);
               if (line.getBlock()) {
-                const auto& words = line.getBlock()->getWords();
-                for (const auto& w : words) {
+                const auto& block = *line.getBlock();
+                for (uint16_t i = 0; i < block.wordCount(); ++i) {
                   if (!fullText.empty()) fullText += " ";
-                  fullText += w;
+                  fullText += block.wordText(i);
                 }
               }
             }
@@ -2999,19 +3009,16 @@ void EpubReaderActivity::startClipSelection() {
         if (!line.getBlock()) continue;
 
         const auto& block = *line.getBlock();
-        const auto& xpos = block.getWordXpos();
-        const auto& wordList = block.getWords();
-        const auto& styles = block.getWordStyles();
-        const size_t count = std::min({wordList.size(), xpos.size(), styles.size()});
+        const uint16_t count = block.wordCount();
         if (renderer.isSdCardFont(readerFontId) && count > 0) {
-          uint8_t styleMask = 0;
-          for (size_t i = 0; i < count; ++i) {
-            styleMask |= static_cast<uint8_t>(1u << (static_cast<uint8_t>(styles[i]) & 0x03));
+          for (uint16_t i = 0; i < count; ++i) {
+            const uint8_t styleMask = static_cast<uint8_t>(1u << (static_cast<uint8_t>(block.wordStyle(i)) & 0x03));
+            renderer.ensureSdCardFontReady(readerFontId, block.wordText(i), styleMask);
           }
-          renderer.ensureSdCardFontReady(readerFontId, wordList, /*includeHyphen=*/false, styleMask);
         }
-        for (size_t i = 0; i < count; ++i) {
-          if (!hasVisibleWordText(wordList[i])) continue;
+        for (uint16_t i = 0; i < count; ++i) {
+          const char* wordText = block.wordText(i);
+          if (!hasVisibleWordText(wordText)) continue;
           if (words.size() >= maxSelectableWords) {
             if (!wordLimitLogged) {
               LOG_ERR("CLIP", "Selectable word cap hit (%u words); clipping range truncated",
@@ -3021,21 +3028,21 @@ void EpubReaderActivity::startClipSelection() {
             break;
           }
 
-          const auto textStyle = static_cast<EpdFontFamily::Style>(styles[i] & ~EpdFontFamily::UNDERLINE);
-          int wordWidth = renderer.getTextAdvanceX(readerFontId, wordList[i].c_str(), textStyle);
+          const auto textStyle = static_cast<EpdFontFamily::Style>(block.wordStyle(i) & ~EpdFontFamily::UNDERLINE);
+          int wordWidth = renderer.getTextAdvanceX(readerFontId, wordText, textStyle);
           if (wordWidth <= 0) continue;
 
           WordRef word;
-          word.x = layout.marginLeft + line.xPos + xpos[i];
+          word.x = layout.marginLeft + line.xPos + block.wordXpos(i);
           word.y = layout.marginTop + line.yPos;
-          if (i + 1 < count && xpos[i + 1] > xpos[i]) {
-            wordWidth = std::min(wordWidth, static_cast<int>(xpos[i + 1] - xpos[i]));
+          if (i + 1 < count && block.wordXpos(i + 1) > block.wordXpos(i)) {
+            wordWidth = std::min(wordWidth, static_cast<int>(block.wordXpos(i + 1) - block.wordXpos(i)));
           }
           word.w = wordWidth;
           word.h = lineHeight;
           word.pageIdx = pageIdx;
           word.pageWordIndex = pageWordCounts[pageIdx]++;
-          word.text = wordList[i];
+          word.text = wordText;
           word.style = textStyle;
           word.endsWithInsertedHyphen = block.wordEndsWithInsertedHyphen(i);
           word.lineIsRtl = block.getBlockStyle().isRtl;
@@ -4494,46 +4501,46 @@ void EpubReaderActivity::drawClippingHighlights(const Page& page, const int font
     return false;
   };
 
-  forEachVisiblePageWord(
-      page, [&](const uint16_t pageWordIndex, const PageLine& line, const TextBlock& block, const size_t i) {
-        if (!isHighlightedWord(pageWordIndex)) {
-          return true;
-        }
+  forEachVisiblePageWord(page, [&](const uint16_t pageWordIndex, const PageLine& line, const TextBlock& block,
+                                   const size_t i) {
+    if (!isHighlightedWord(pageWordIndex)) {
+      return true;
+    }
 
-        const auto& wordList = block.getWords();
-        const auto& xpos = block.getWordXpos();
-        const auto& styles = block.getWordStyles();
-        if (i >= wordList.size() || i >= xpos.size() || i >= styles.size()) {
-          return true;
-        }
+    const auto wordIndex = static_cast<uint16_t>(i);
+    if (wordIndex >= block.wordCount()) {
+      return true;
+    }
 
-        const std::string& wordText = wordList[i];
-        const bool hasEmSpace = hasEmSpacePrefix(wordText);
-        const char* visibleText = wordText.c_str() + (hasEmSpace ? 3 : 0);
-        const auto textStyle = static_cast<EpdFontFamily::Style>(styles[i] & ~EpdFontFamily::UNDERLINE);
-        const int skipX = hasEmSpace ? renderer.getTextAdvanceX(fontId, "\xe2\x80\x83", textStyle) : 0;
-        const int wordX = orientedMarginLeft + line.xPos + xpos[i] + skipX;
-        const int wordY = orientedMarginTop + line.yPos;
-        int wordW = renderer.getTextAdvanceX(fontId, wordText.c_str(), textStyle) - skipX;
-        const int wordH = renderer.getLineHeight(fontId);
-        if (i + 1 < wordList.size() && i + 1 < xpos.size() && i + 1 < styles.size()) {
-          const std::string& nextWordText = wordList[i + 1];
-          const bool nextHasEmSpace = hasEmSpacePrefix(nextWordText);
-          const auto nextTextStyle = static_cast<EpdFontFamily::Style>(styles[i + 1] & ~EpdFontFamily::UNDERLINE);
-          const int nextSkipX = nextHasEmSpace ? renderer.getTextAdvanceX(fontId, "\xe2\x80\x83", nextTextStyle) : 0;
-          const int nextWordX = orientedMarginLeft + line.xPos + xpos[i + 1] + nextSkipX;
-          if (isHighlightedWord(pageWordIndex + 1) && nextWordX > wordX + wordW) {
-            wordW = nextWordX - wordX;
-          } else if (nextWordX > wordX && wordW > nextWordX - wordX) {
-            wordW = nextWordX - wordX;
-          }
-        }
-        if (wordW > 0) {
-          renderer.fillRectDither(wordX, wordY, wordW, wordH, Color::LightGray);
-          renderer.drawText(fontId, wordX, wordY, visibleText, foregroundBlack, textStyle);
-        }
-        return true;
-      });
+    const char* wordText = block.wordText(wordIndex);
+    const bool hasEmSpace = hasEmSpacePrefix(wordText);
+    const char* visibleText = wordText + (hasEmSpace ? 3 : 0);
+    const auto textStyle = static_cast<EpdFontFamily::Style>(block.wordStyle(wordIndex) & ~EpdFontFamily::UNDERLINE);
+    const int skipX = hasEmSpace ? renderer.getTextAdvanceX(fontId, "\xe2\x80\x83", textStyle) : 0;
+    const int wordX = orientedMarginLeft + line.xPos + block.wordXpos(wordIndex) + skipX;
+    const int wordY = orientedMarginTop + line.yPos;
+    int wordW = renderer.getTextAdvanceX(fontId, wordText, textStyle) - skipX;
+    const int wordH = renderer.getLineHeight(fontId);
+    if (wordIndex + 1 < block.wordCount()) {
+      const uint16_t nextIndex = wordIndex + 1;
+      const char* nextWordText = block.wordText(nextIndex);
+      const bool nextHasEmSpace = hasEmSpacePrefix(nextWordText);
+      const auto nextTextStyle =
+          static_cast<EpdFontFamily::Style>(block.wordStyle(nextIndex) & ~EpdFontFamily::UNDERLINE);
+      const int nextSkipX = nextHasEmSpace ? renderer.getTextAdvanceX(fontId, "\xe2\x80\x83", nextTextStyle) : 0;
+      const int nextWordX = orientedMarginLeft + line.xPos + block.wordXpos(nextIndex) + nextSkipX;
+      if (isHighlightedWord(pageWordIndex + 1) && nextWordX > wordX + wordW) {
+        wordW = nextWordX - wordX;
+      } else if (nextWordX > wordX && wordW > nextWordX - wordX) {
+        wordW = nextWordX - wordX;
+      }
+    }
+    if (wordW > 0) {
+      renderer.fillRectDither(wordX, wordY, wordW, wordH, Color::LightGray);
+      renderer.drawText(fontId, wordX, wordY, visibleText, foregroundBlack, textStyle);
+    }
+    return true;
+  });
 }
 
 void EpubReaderActivity::renderStatusBar() const {
