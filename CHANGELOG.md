@@ -22,6 +22,7 @@
 
 ### Fixed
 
+- EPUB Reading Stats no longer drops unsaved page-turn counts after viewing the stats screen mid-session.
 - KOSync now frees SD-card font registry memory before TLS requests and releases the EPUB before upload, reducing sync low-memory failures with many SD fonts installed.
 - Web file manager actions now handle filenames with special characters safely and reject unsafe rename characters before saving.
 - Auto Turn interval settings and related action prompts opened from long-press shortcuts now stay open after releasing the shortcut button.

@@ -1452,6 +1452,34 @@ void EpubReaderActivity::refreshCachedTimeLeftEstimate() {
   stats.estimatedTimeLeftSeconds = (!stats.isCompleted && estimateTimeLeftSeconds(true, seconds)) ? seconds : 0;
 }
 
+// The stats screen can edit dates/completion using a preview copy that includes
+// current-session time, so keep live counters in memory and import only edits.
+void EpubReaderActivity::applyBookStatsEditsFromDisk() {
+  if (epub) {
+    const BookReadingStats diskStats = BookReadingStats::load(epub->getCachePath());
+    stats.isCompleted = diskStats.isCompleted;
+    stats.startDateManual = diskStats.startDateManual;
+    stats.finishedDateManual = diskStats.finishedDateManual;
+    stats.startDate = diskStats.startDate;
+    stats.finishedDate = diskStats.finishedDate;
+  }
+
+  const GlobalReadingStats diskGlobalStats = GlobalReadingStats::load();
+  globalStats.completedBooks = diskGlobalStats.completedBooks;
+}
+
+void EpubReaderActivity::handleBookStatsReturn() {
+  applyBookStatsEditsFromDisk();
+  completionPromptShown = stats.isCompleted;
+  if (stats.isCompleted && SETTINGS.moveFinishedToReadFolder && epub && !isInReadFolder(epub->getPath())) {
+    pendingReadFolderMove = true;
+  } else if (!stats.isCompleted) {
+    pendingReadFolderMove = false;
+  }
+  resumeReadingPaceTimer("book_stats_return");
+  requestUpdate();
+}
+
 void EpubReaderActivity::initializeCompletionPromptTrigger() {
   completionTriggerSpineIndex = -1;
   completionTriggerSpineProgress = 1.0f;
@@ -2639,39 +2667,13 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
             std::make_unique<BookStatsActivity>(renderer, mappedInput, epub->getTitle(), epub->getCachePath(),
                                                 displayStats, getCurrentBookProgressPercent(), hasEstimatedTimeLeft,
                                                 estimatedTimeLeftSeconds, globalStats, displayAllDevicesStats),
-            [this](const ActivityResult&) {
-              if (epub) {
-                stats = BookReadingStats::load(epub->getCachePath());
-              }
-              globalStats = GlobalReadingStats::load();
-              completionPromptShown = stats.isCompleted;
-              if (stats.isCompleted && SETTINGS.moveFinishedToReadFolder && epub && !isInReadFolder(epub->getPath())) {
-                pendingReadFolderMove = true;
-              } else if (!stats.isCompleted) {
-                pendingReadFolderMove = false;
-              }
-              resumeReadingPaceTimer("book_stats_return");
-              requestUpdate();
-            });
+            [this](const ActivityResult&) { handleBookStatsReturn(); });
       } else {
         startActivityForResult(
             std::make_unique<BookStatsActivity>(renderer, mappedInput, epub->getTitle(), epub->getCachePath(),
                                                 displayStats, getCurrentBookProgressPercent(), hasEstimatedTimeLeft,
                                                 estimatedTimeLeftSeconds, globalStats),
-            [this](const ActivityResult&) {
-              if (epub) {
-                stats = BookReadingStats::load(epub->getCachePath());
-              }
-              globalStats = GlobalReadingStats::load();
-              completionPromptShown = stats.isCompleted;
-              if (stats.isCompleted && SETTINGS.moveFinishedToReadFolder && epub && !isInReadFolder(epub->getPath())) {
-                pendingReadFolderMove = true;
-              } else if (!stats.isCompleted) {
-                pendingReadFolderMove = false;
-              }
-              resumeReadingPaceTimer("book_stats_return");
-              requestUpdate();
-            });
+            [this](const ActivityResult&) { handleBookStatsReturn(); });
       }
       break;
     }
