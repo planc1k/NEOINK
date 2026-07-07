@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- Dashboard Home now releases its temporary cover redraw cache before generating missing EPUB thumbnails, reducing cover-load failures after returning from the reader with fragmented heap.
 - EPUB clipping selection now works from footnote previews.
 - Web EPUB optimizer now keeps image references in malformed or XML-declared chapters aligned with renamed JPEG files.
 - Manage Fonts no longer crashes (abort) while loading the font list on devices with many SD-card font families installed. The font registry is now released before the network request, and the manifest is parsed without keeping the parsed JSON and the font registry in memory at the same time.

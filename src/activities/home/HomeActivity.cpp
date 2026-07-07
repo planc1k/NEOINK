@@ -628,6 +628,13 @@ void HomeActivity::loadAllBookStats() {
 }
 
 void HomeActivity::loadRecentCovers(int coverHeight) {
+  // Thumbnail generation may need a 32 KB contiguous inflate buffer. The Home
+  // cover snapshot is only a redraw cache, so release it before ZIP work.
+  if (coverBuffer) {
+    freeCoverBuffer();
+    coverRendered = false;
+  }
+
   recentsLoading = true;
   bool showingLoading = false;
   Rect popupRect;
