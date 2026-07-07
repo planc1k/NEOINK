@@ -228,8 +228,9 @@ bool FontDownloadActivity::fetchAndParseManifest() {
     baseUrl_ = doc["baseUrl"] | "";
     families_.clear();
 
+    std::vector<ManifestFamily> parsedFamilies;
     JsonArray familiesArr = doc["families"].as<JsonArray>();
-    families_.reserve(familiesArr.size());
+    parsedFamilies.reserve(familiesArr.size());
 
     for (JsonObject fObj : familiesArr) {
       ManifestFamily family;
@@ -237,12 +238,16 @@ bool FontDownloadActivity::fetchAndParseManifest() {
       family.description = fObj["description"] | "";
       family.languages = fObj["languages"] | "";
 
-      for (JsonVariant s : fObj["styles"].as<JsonArray>()) {
+      JsonArray stylesArr = fObj["styles"].as<JsonArray>();
+      family.styles.reserve(stylesArr.size());
+      for (JsonVariant s : stylesArr) {
         family.styles.push_back(s.as<std::string>());
       }
 
       family.totalSize = 0;
-      for (JsonObject fileObj : fObj["files"].as<JsonArray>()) {
+      JsonArray filesArr = fObj["files"].as<JsonArray>();
+      family.files.reserve(filesArr.size());
+      for (JsonObject fileObj : filesArr) {
         ManifestFile file;
         file.name = fileObj["name"] | "";
         file.size = fileObj["size"] | 0;
@@ -271,8 +276,10 @@ bool FontDownloadActivity::fetchAndParseManifest() {
         continue;
       }
 
-      families_.push_back(std::move(family));
+      parsedFamilies.push_back(std::move(family));
     }
+
+    families_.swap(parsedFamilies);
   }  // JsonDocument freed here, before the registry is loaded below.
 
   // Second pass: load the installed-font registry and resolve installed/update
