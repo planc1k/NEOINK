@@ -2953,7 +2953,7 @@ void EpubReaderActivity::openAutoPageTurnIntervalPicker(const bool ignoreInitial
 }
 
 void EpubReaderActivity::startClipSelection() {
-  if (activeFootnotePreview || !section || !epub) {
+  if (!section || !epub) {
     requestUpdate();
     return;
   }
