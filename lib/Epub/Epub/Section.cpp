@@ -27,6 +27,8 @@ constexpr uint32_t HEADER_SIZE = sizeof(SECTION_CACHE_MAGIC) + sizeof(uint8_t) +
                                  sizeof(uint16_t) + sizeof(bool) + sizeof(bool) + sizeof(uint8_t) + sizeof(bool) +
                                  sizeof(bool) + sizeof(uint8_t) + sizeof(uint32_t) + sizeof(uint32_t) +
                                  sizeof(uint32_t) + sizeof(uint32_t);
+constexpr size_t SECTION_HTML_STREAM_CHUNK_SIZE = 8192;
+constexpr size_t LOW_MEMORY_SECTION_HTML_STREAM_CHUNK_SIZE = 1024;
 
 struct PageLutEntry {
   uint32_t fileOffset;
@@ -67,6 +69,20 @@ ScratchWorkspace::Lease acquireSectionZipInflateScratch(GfxRenderer& renderer, c
 
   renderer.releaseSdCardFontForLowMemory(fontId);
   return ScratchWorkspace::acquire(InflateReader::STREAMING_DICT_SIZE, reason);
+}
+
+size_t sectionHtmlStreamChunkSize(const bool preview) {
+  if (preview) {
+    return LOW_MEMORY_SECTION_HTML_STREAM_CHUNK_SIZE;
+  }
+
+  const uint32_t maxAlloc = ESP.getMaxAllocHeap();
+  const size_t largeStreamBudget = InflateReader::STREAMING_DICT_SIZE + (2U * SECTION_HTML_STREAM_CHUNK_SIZE);
+  if (maxAlloc < largeStreamBudget) {
+    LOG_DBG("SCT", "Using low-memory HTML stream chunk (maxAlloc=%u)", maxAlloc);
+    return LOW_MEMORY_SECTION_HTML_STREAM_CHUNK_SIZE;
+  }
+  return SECTION_HTML_STREAM_CHUNK_SIZE;
 }
 }  // namespace
 
@@ -372,9 +388,7 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
       if (!Storage.openFileForWrite("SCT", tmpHtmlPath, tmpHtml)) {
         continue;
       }
-      // Larger chunks mean far fewer SD writes inflating full chapters. Footnote previews are short-lived
-      // and memory-sensitive, so use a smaller chunk there to keep transient ZIP buffers tiny.
-      const size_t htmlStreamChunkSize = buildOptions.isPreview() ? 1024 : 8192;
+      const size_t htmlStreamChunkSize = sectionHtmlStreamChunkSize(buildOptions.isPreview());
       {
         auto zipInflateScratch = acquireSectionZipInflateScratch(renderer, fontId, "section one-shot HTML inflate");
         streamed = epub->readItemContentsToStream(localPath, tmpHtml, htmlStreamChunkSize);
@@ -703,7 +717,7 @@ bool Section::startBuild(const int fontId, const float lineCompression, const bo
       if (!Storage.openFileForWrite("SCT", tmpHtmlPath, tmpHtml)) {
         continue;
       }
-      const size_t htmlStreamChunkSize = buildOptions.isPreview() ? 1024 : 8192;
+      const size_t htmlStreamChunkSize = sectionHtmlStreamChunkSize(buildOptions.isPreview());
       {
         auto zipInflateScratch = acquireSectionZipInflateScratch(renderer, fontId, "section incremental HTML inflate");
         streamed = epub->readItemContentsToStream(localPath, tmpHtml, htmlStreamChunkSize);
