@@ -2679,6 +2679,12 @@ bool ChapterHtmlSlimParser::beginParse() {
   paragraphAlignmentBlockStyle.alignment = align;
   if (!isPreviewBuild()) {
     startNewTextBlock(paragraphAlignmentBlockStyle);
+    if (lowMemoryAbort) {
+      parseArena_.release();
+      inlineStyleBuf_ = nullptr;
+      blockStyleBuf_ = nullptr;
+      return false;
+    }
   }
 
   if (!usesSimpleCssLookup()) {
