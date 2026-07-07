@@ -1,10 +1,13 @@
 #include "Section.h"
 
 #include <Arduino.h>
+#include <GfxRenderer.h>
 #include <HalStorage.h>
+#include <InflateReader.h>
 #include <Logging.h>
 #include <Memory.h>
 #include <MemoryBudget.h>
+#include <ScratchWorkspace.h>
 #include <Serialization.h>
 
 #include "Epub/css/CssParser.h"
@@ -50,6 +53,20 @@ bool ensurePageLutCapacity(std::unique_ptr<Entry[]>& lut, uint16_t& lutCapacity,
   lut = std::move(grown);
   lutCapacity = static_cast<uint16_t>(nextCapacity);
   return true;
+}
+
+ScratchWorkspace::Lease acquireSectionZipInflateScratch(GfxRenderer& renderer, const int fontId, const char* reason) {
+  if (ESP.getMaxAllocHeap() < InflateReader::STREAMING_DICT_SIZE && renderer.isSdCardFont(fontId)) {
+    renderer.releaseSdCardFontForLowMemory(fontId);
+  }
+
+  auto scratch = ScratchWorkspace::acquire(InflateReader::STREAMING_DICT_SIZE, reason);
+  if (scratch || !renderer.isSdCardFont(fontId)) {
+    return scratch;
+  }
+
+  renderer.releaseSdCardFontForLowMemory(fontId);
+  return ScratchWorkspace::acquire(InflateReader::STREAMING_DICT_SIZE, reason);
 }
 }  // namespace
 
@@ -358,7 +375,10 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
       // Larger chunks mean far fewer SD writes inflating full chapters. Footnote previews are short-lived
       // and memory-sensitive, so use a smaller chunk there to keep transient ZIP buffers tiny.
       const size_t htmlStreamChunkSize = buildOptions.isPreview() ? 1024 : 8192;
-      streamed = epub->readItemContentsToStream(localPath, tmpHtml, htmlStreamChunkSize);
+      {
+        auto zipInflateScratch = acquireSectionZipInflateScratch(renderer, fontId, "section one-shot HTML inflate");
+        streamed = epub->readItemContentsToStream(localPath, tmpHtml, htmlStreamChunkSize);
+      }
       fileSize = tmpHtml.size();
       // Explicitly close() file before calling Storage.remove()
       tmpHtml.close();
@@ -684,7 +704,10 @@ bool Section::startBuild(const int fontId, const float lineCompression, const bo
         continue;
       }
       const size_t htmlStreamChunkSize = buildOptions.isPreview() ? 1024 : 8192;
-      streamed = epub->readItemContentsToStream(localPath, tmpHtml, htmlStreamChunkSize);
+      {
+        auto zipInflateScratch = acquireSectionZipInflateScratch(renderer, fontId, "section incremental HTML inflate");
+        streamed = epub->readItemContentsToStream(localPath, tmpHtml, htmlStreamChunkSize);
+      }
       fileSize = tmpHtml.size();
       tmpHtml.close();
       if (!streamed && Storage.exists(tmpHtmlPath.c_str())) {
