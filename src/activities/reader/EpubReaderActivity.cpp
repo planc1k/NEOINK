@@ -83,6 +83,13 @@ constexpr uint16_t FOOTNOTE_PREVIEW_MAX_PAGES = 3;
 constexpr uint8_t PUBLISHER_PAGE_NUMBER_LEFT_MARGIN_MIN = 15;
 constexpr int PUBLISHER_PAGE_NUMBER_X = 5;
 
+struct ToastRect {
+  int x = 0;
+  int y = 0;
+  int w = 0;
+  int h = 0;
+};
+
 uint32_t pagesCentipages(const float pages) {
   if (pages <= 0.0f) {
     return 0;
@@ -612,19 +619,26 @@ bool runTiledGrayscalePass(GfxRenderer& renderer, const Page& page, const int fo
   return true;
 }
 
-void drawToastBuffer(const GfxRenderer& renderer, const char* msg) {
+ToastRect computeToastRect(const GfxRenderer& renderer, const char* msg) {
   constexpr int toastPadX = 20;
   constexpr int toastPadY = 12;
-  const bool toastBackgroundBlack = ReaderUtils::readerForegroundBlack();
   const int msgW = renderer.getTextWidth(UI_10_FONT_ID, msg);
   const int msgH = renderer.getLineHeight(UI_10_FONT_ID);
   const int toastW = msgW + toastPadX * 2;
   const int toastH = msgH + toastPadY * 2;
   const int toastX = (renderer.getScreenWidth() - toastW) / 2;
   const int toastY = (renderer.getScreenHeight() - toastH) / 2;
-  renderer.fillRect(toastX, toastY, toastW, toastH, toastBackgroundBlack);
-  renderer.drawRect(toastX, toastY, toastW, toastH, !toastBackgroundBlack);
-  renderer.drawText(UI_10_FONT_ID, toastX + toastPadX, toastY + toastPadY, msg, !toastBackgroundBlack);
+  return {toastX, toastY, toastW, toastH};
+}
+
+void drawToastBuffer(const GfxRenderer& renderer, const char* msg) {
+  constexpr int toastPadX = 20;
+  constexpr int toastPadY = 12;
+  const bool toastBackgroundBlack = ReaderUtils::readerForegroundBlack();
+  const ToastRect toast = computeToastRect(renderer, msg);
+  renderer.fillRect(toast.x, toast.y, toast.w, toast.h, toastBackgroundBlack);
+  renderer.drawRect(toast.x, toast.y, toast.w, toast.h, !toastBackgroundBlack);
+  renderer.drawText(UI_10_FONT_ID, toast.x + toastPadX, toast.y + toastPadY, msg, !toastBackgroundBlack);
 }
 
 void drawToast(const GfxRenderer& renderer, const char* msg) {
@@ -2013,9 +2027,15 @@ void EpubReaderActivity::loop() {
   }
   if ((pendingRenderModeToast || pendingSafeModeToast) &&
       (millis() - renderModeToastShowTime) >= RENDER_MODE_TOAST_MS) {
+    if (renderModeToastRegionSaved) {
+      if (RenderLock::peek()) {
+        return;
+      }
+      RenderLock lock(*this);
+      restoreRenderModeToastRegion();
+    }
     pendingRenderModeToast = false;
     pendingSafeModeToast = false;
-    requestUpdate();
     return;
   }
 
@@ -3542,6 +3562,56 @@ void EpubReaderActivity::showSafeModeToast() {
   renderModeToastShowTime = millis();
 }
 
+bool EpubReaderActivity::storeRenderModeToastRegion(const char* msg) {
+  renderModeToastRegionSaved = false;
+  const ToastRect toast = computeToastRect(renderer, msg);
+  const size_t needed = renderer.getRegionByteSize(toast.x, toast.y, toast.w, toast.h);
+  if (needed == 0) {
+    return false;
+  }
+  if (!renderModeToastRegionBuffer || renderModeToastRegionBufferSize < needed) {
+    renderModeToastRegionBuffer = makeUniqueNoThrow<uint8_t[]>(needed);
+    if (!renderModeToastRegionBuffer) {
+      renderModeToastRegionBufferSize = 0;
+      LOG_ERR("ERS", "OOM: render-mode toast region backup (%u bytes)", static_cast<unsigned>(needed));
+      return false;
+    }
+    renderModeToastRegionBufferSize = needed;
+  }
+  if (!renderer.copyRegionToBuffer(toast.x, toast.y, toast.w, toast.h, renderModeToastRegionBuffer.get(),
+                                   renderModeToastRegionBufferSize)) {
+    return false;
+  }
+  renderModeToastRegionX = toast.x;
+  renderModeToastRegionY = toast.y;
+  renderModeToastRegionW = toast.w;
+  renderModeToastRegionH = toast.h;
+  renderModeToastRegionSaved = true;
+  return true;
+}
+
+void EpubReaderActivity::drawRenderModeToastBuffer(const char* msg) {
+  storeRenderModeToastRegion(msg);
+  drawToastBuffer(renderer, msg);
+}
+
+bool EpubReaderActivity::restoreRenderModeToastRegion() {
+  if (!renderModeToastRegionSaved || !renderModeToastRegionBuffer) {
+    return false;
+  }
+  const bool restored = renderer.copyBufferToRegion(renderModeToastRegionX, renderModeToastRegionY,
+                                                    renderModeToastRegionW, renderModeToastRegionH,
+                                                    renderModeToastRegionBuffer.get(), renderModeToastRegionBufferSize);
+  renderModeToastRegionSaved = false;
+  renderModeToastRegionBuffer.reset();
+  renderModeToastRegionBufferSize = 0;
+  if (!restored) {
+    return false;
+  }
+  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+  return true;
+}
+
 void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
   const auto targetOrientation = ReaderUtils::toRendererOrientation(orientation);
   const bool settingsChanged = SETTINGS.orientation != orientation;
@@ -3958,9 +4028,11 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       bookHasRenderModeOverride = true;
       saveBookRenderModeForCache(epub->getCachePath(), SETTINGS.epubRenderMode);
     }
+    const bool renderModeChangedDuringLoad = usedRenderMode != selectedRenderMode;
     if (!buildingFootnotePreview && safeModeBuildSucceeded && !safeModeToastShown) {
       showSafeModeToast();
-    } else if (!buildingFootnotePreview && usedRenderMode != EpubRenderMode::CrossInkDefault && !renderModeToastShown) {
+    } else if (!buildingFootnotePreview && renderModeChangedDuringLoad &&
+               usedRenderMode != EpubRenderMode::CrossInkDefault && !renderModeToastShown) {
       showRenderModeToast(static_cast<uint8_t>(usedRenderMode));
     }
 
@@ -4361,9 +4433,9 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int fo
     drawToastBuffer(renderer, msg);
   }
   if (pendingSafeModeToast) {
-    drawToastBuffer(renderer, tr(STR_SAFE_MODE));
+    drawRenderModeToastBuffer(tr(STR_SAFE_MODE));
   } else if (pendingRenderModeToast) {
-    drawToastBuffer(renderer, labelForRenderModeToast(normalizeRenderMode(renderModeToastMode)));
+    drawRenderModeToastBuffer(labelForRenderModeToast(normalizeRenderMode(renderModeToastMode)));
   }
   fcm->logStats("bw_render");
   const auto tBwRender = millis();

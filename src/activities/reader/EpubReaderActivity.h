@@ -5,6 +5,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+#include <memory>
 #include <optional>
 #include <string>
 
@@ -114,6 +115,13 @@ class EpubReaderActivity final : public Activity {
   bool safeModeToastShown = false;
   uint8_t renderModeToastMode = 0;
   unsigned long renderModeToastShowTime = 0UL;
+  std::unique_ptr<uint8_t[]> renderModeToastRegionBuffer;
+  size_t renderModeToastRegionBufferSize = 0;
+  int renderModeToastRegionX = 0;
+  int renderModeToastRegionY = 0;
+  int renderModeToastRegionW = 0;
+  int renderModeToastRegionH = 0;
+  bool renderModeToastRegionSaved = false;
   int completionTriggerSpineIndex = -1;
   float completionTriggerSpineProgress = 1.0f;
   bool completionPromptQueued = false;
@@ -237,6 +245,9 @@ class EpubReaderActivity final : public Activity {
   void showTiltPageTurnFeedback(bool enabled);
   void showRenderModeToast(uint8_t renderMode);
   void showSafeModeToast();
+  bool storeRenderModeToastRegion(const char* msg);
+  void drawRenderModeToastBuffer(const char* msg);
+  bool restoreRenderModeToastRegion();
 
   // Footnote navigation
   void navigateToHref(const std::string& href, bool savePosition = false);
