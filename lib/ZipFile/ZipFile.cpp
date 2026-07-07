@@ -4,6 +4,7 @@
 #include <HalStorage.h>
 #include <InflateReader.h>
 #include <Logging.h>
+#include <ScratchWorkspace.h>
 
 #include <algorithm>
 
@@ -18,6 +19,7 @@ struct ZipInflateCtx {
 namespace {
 constexpr uint16_t ZIP_METHOD_STORED = 0;
 constexpr uint16_t ZIP_METHOD_DEFLATED = 8;
+constexpr size_t ONE_SHOT_DEFLATE_MAX_COMPRESSED_BYTES = 32768;
 
 // RAII zip: opens the zip if not already open, closes on destruction only if
 // it performed the open.  Removes the wasOpen/close boilerplate from every method.
@@ -400,34 +402,79 @@ uint8_t* ZipFile::readFileToMemory(const char* filename, size_t* size, const boo
 
     // Continue out of block with data set
   } else if (fileStat.method == ZIP_METHOD_DEFLATED) {
-    auto* fileReadBuffer = static_cast<uint8_t*>(malloc(1024));
-    if (!fileReadBuffer) {
-      LOG_ERR("ZIP", "Failed to allocate memory for zip file read buffer");
-      free(data);
-      return nullptr;
+    bool inflated = false;
+    if (deflatedDataSize <= ONE_SHOT_DEFLATE_MAX_COMPRESSED_BYTES) {
+      auto* compressedData = static_cast<uint8_t*>(malloc(deflatedDataSize));
+      if (compressedData) {
+        const size_t compressedRead = file.read(compressedData, deflatedDataSize);
+        if (compressedRead != deflatedDataSize) {
+          LOG_ERR("ZIP", "Failed to read compressed data");
+          free(compressedData);
+          free(data);
+          return nullptr;
+        }
+
+        InflateReader reader;
+        if (!reader.init(false)) {
+          LOG_ERR("ZIP", "Failed to init one-shot inflate reader");
+          free(compressedData);
+          free(data);
+          return nullptr;
+        }
+        reader.setSource(compressedData, deflatedDataSize);
+        if (!reader.read(data, inflatedDataSize)) {
+          LOG_ERR("ZIP", "Failed to inflate file");
+          free(compressedData);
+          free(data);
+          return nullptr;
+        }
+        free(compressedData);
+        inflated = true;
+      } else {
+        LOG_DBG("ZIP", "Falling back to streaming inflate; compressed buffer alloc failed (%zu bytes)",
+                static_cast<size_t>(deflatedDataSize));
+      }
     }
 
-    ZipInflateCtx ctx;
-    ctx.file = &file;
-    ctx.fileRemaining = deflatedDataSize;
-    ctx.readBuf = fileReadBuffer;
-    ctx.readBufSize = 1024;
+    if (!inflated) {
+      file.seek(fileOffset);
+      auto* fileReadBuffer = static_cast<uint8_t*>(malloc(1024));
+      if (!fileReadBuffer) {
+        LOG_ERR("ZIP", "Failed to allocate memory for zip file read buffer");
+        free(data);
+        return nullptr;
+      }
 
-    if (!ctx.reader.init(true)) {
-      LOG_ERR("ZIP", "Failed to init inflate reader");
+      auto inflateScratch = ScratchWorkspace::borrow(InflateReader::STREAMING_DICT_SIZE, "ZIP inflate");
+      ZipInflateCtx ctx;
+      ctx.file = &file;
+      ctx.fileRemaining = deflatedDataSize;
+      ctx.readBuf = fileReadBuffer;
+      ctx.readBufSize = 1024;
+
+      bool readerInitialized = false;
+      if (inflateScratch) {
+        readerInitialized = ctx.reader.initWithExternalDictionary(inflateScratch.data(), inflateScratch.size());
+      }
+      if (!readerInitialized) {
+        readerInitialized = ctx.reader.init(true);
+      }
+      if (!readerInitialized) {
+        LOG_ERR("ZIP", "Failed to init inflate reader");
+        free(fileReadBuffer);
+        free(data);
+        return nullptr;
+      }
+      ctx.reader.setReadCallback(zipReadCallback);
+
+      if (!ctx.reader.read(data, inflatedDataSize)) {
+        LOG_ERR("ZIP", "Failed to inflate file");
+        free(fileReadBuffer);
+        free(data);
+        return nullptr;
+      }
       free(fileReadBuffer);
-      free(data);
-      return nullptr;
     }
-    ctx.reader.setReadCallback(zipReadCallback);
-
-    if (!ctx.reader.read(data, inflatedDataSize)) {
-      LOG_ERR("ZIP", "Failed to inflate file");
-      free(fileReadBuffer);
-      free(data);
-      return nullptr;
-    }
-    free(fileReadBuffer);
 
     // Continue out of block with data set
   } else {
@@ -485,11 +532,19 @@ bool ZipFile::readFileToStream(const char* filename, Print& out, const size_t ch
   }
 
   if (fileStat.method == ZIP_METHOD_DEFLATED) {
+    auto inflateScratch = ScratchWorkspace::borrow(InflateReader::STREAMING_DICT_SIZE, "ZIP stream inflate");
     ZipInflateCtx ctx;
     ctx.file = &file;
     ctx.fileRemaining = deflatedDataSize;
 
-    if (!ctx.reader.init(true)) {
+    bool readerInitialized = false;
+    if (inflateScratch) {
+      readerInitialized = ctx.reader.initWithExternalDictionary(inflateScratch.data(), inflateScratch.size());
+    }
+    if (!readerInitialized) {
+      readerInitialized = ctx.reader.init(true);
+    }
+    if (!readerInitialized) {
       LOG_ERR("ZIP", "Failed to init inflate reader (free=%u, maxAlloc=%u, chunk=%zu)", ESP.getFreeHeap(),
               ESP.getMaxAllocHeap(), chunkSize);
       return false;

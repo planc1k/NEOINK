@@ -6,6 +6,8 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <InflateReader.h>
+#include <ScratchWorkspace.h>
 #include <Serialization.h>
 #include <Utf8.h>
 #include <Xtc.h>
@@ -636,6 +638,11 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
   }
 
   recentsLoading = true;
+  // EPUB cover extraction needs the ZIP inflater's 32KB history buffer. Drop
+  // the saved cover tile while generating thumbnails so Home has a larger
+  // contiguous heap block available.
+  freeCoverBuffer();
+  auto zipInflateScratch = ScratchWorkspace::acquire(InflateReader::STREAMING_DICT_SIZE, "Home EPUB thumbnails");
   bool showingLoading = false;
   Rect popupRect;
 
