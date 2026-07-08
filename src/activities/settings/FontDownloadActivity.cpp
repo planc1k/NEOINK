@@ -149,6 +149,10 @@ void FontDownloadActivity::onWifiSelectionComplete(const bool success) {
   requestUpdateAndWait();
 
   if (!fetchAndParseManifest()) {
+    if (cancelRequested_) {
+      finishAfterBackPress();
+      return;
+    }
     {
       RenderLock lock(*this);
       state_ = ERROR;
@@ -172,6 +176,25 @@ bool FontDownloadActivity::fetchAndParseManifest() {
 
   baseUrl_.clear();
   clearManifestFamilies();
+  cancelRequested_ = false;
+
+  // Poll the Cancel (Back) button while the manifest downloads so a slow or
+  // failing network can be backed out of. HttpDownloader checks shouldCancel on
+  // every read-loop iteration, and we re-check it between retry attempts so the
+  // retry delays do not swallow the press.
+  HttpDownloader::DownloadOptions manifestOptions;
+  manifestOptions.shouldCancel = [this]() {
+    if (cancelRequested_) {
+      return true;
+    }
+    mappedInput.update();
+    if (mappedInput.isPressed(MappedInputManager::Button::Back) ||
+        mappedInput.wasPressed(MappedInputManager::Button::Back) ||
+        mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      cancelRequested_ = true;
+    }
+    return cancelRequested_;
+  };
 
   Storage.remove(MANIFEST_TMP);
   HttpDownloader::DownloadError result = HttpDownloader::HTTP_ERROR;
@@ -180,15 +203,24 @@ bool FontDownloadActivity::fetchAndParseManifest() {
       LOG_DBG("FONT", "Retrying font manifest download (%d/%d)", attempt, FONT_MANIFEST_MAX_ATTEMPTS);
       delay(FONT_DOWNLOAD_RETRY_DELAY_MS);
     }
-    result = HttpDownloader::downloadToFile(FONT_MANIFEST_URL, MANIFEST_TMP);
-    if (result == HttpDownloader::OK) break;
+    result = HttpDownloader::downloadToFile(FONT_MANIFEST_URL, MANIFEST_TMP, nullptr, &cancelRequested_, "", "",
+                                            manifestOptions);
+    if (result == HttpDownloader::OK || result == HttpDownloader::ABORTED) break;
+    if (manifestOptions.shouldCancel()) {
+      result = HttpDownloader::ABORTED;
+      break;
+    }
     LOG_ERR("FONT", "Font manifest download attempt failed (%d/%d, error=%d)", attempt, FONT_MANIFEST_MAX_ATTEMPTS,
             result);
   }
   if (result != HttpDownloader::OK) {
+    Storage.remove(MANIFEST_TMP);
+    if (result == HttpDownloader::ABORTED) {
+      LOG_INF("FONT", "Font list loading cancelled");
+      return false;
+    }
     LOG_ERR("FONT", "Failed to fetch manifest from %s", FONT_MANIFEST_URL);
     errorMessage_ = "Failed to fetch font list";
-    Storage.remove(MANIFEST_TMP);
     return false;
   }
 
@@ -410,6 +442,10 @@ void FontDownloadActivity::downloadBatch(bool updatesOnly) {
     requestUpdateAndWait();
 
     if (!fetchAndParseManifest()) {
+      if (cancelRequested_) {
+        finishAfterBackPress();
+        return;
+      }
       RenderLock lock(*this);
       state_ = ERROR;
       return;
@@ -520,6 +556,10 @@ void FontDownloadActivity::returnToFamilyList() {
     requestUpdateAndWait();
 
     if (!fetchAndParseManifest()) {
+      if (cancelRequested_) {
+        finishAfterBackPress();
+        return;
+      }
       RenderLock lock(*this);
       state_ = ERROR;
       return;
@@ -623,6 +663,22 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
     HttpDownloader::DownloadOptions downloadOptions;
     downloadOptions.preservePartial = true;
     downloadOptions.resumePartial = true;
+    // Poll the Cancel (Back) button from shouldCancel, which HttpDownloader
+    // checks at the top of every read-loop iteration. The progress callback is
+    // throttled to every 64KB / 250ms, so polling input there dropped quick
+    // taps and forced the user to press Cancel repeatedly.
+    downloadOptions.shouldCancel = [this]() {
+      if (cancelRequested_) {
+        return true;
+      }
+      mappedInput.update();
+      if (mappedInput.isPressed(MappedInputManager::Button::Back) ||
+          mappedInput.wasPressed(MappedInputManager::Button::Back) ||
+          mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+        cancelRequested_ = true;
+      }
+      return cancelRequested_;
+    };
     HttpDownloader::DownloadError result = HttpDownloader::HTTP_ERROR;
     for (int attempt = 1; attempt <= FONT_DOWNLOAD_MAX_ATTEMPTS; ++attempt) {
       {
@@ -643,17 +699,15 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
           [this](size_t downloaded, size_t total) {
             fileProgress_ = downloaded;
             fileTotal_ = total;
-            mappedInput.update();
-            if (mappedInput.isPressed(MappedInputManager::Button::Back) ||
-                mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-              cancelRequested_ = true;
-            }
             requestUpdate(true);
           },
           &cancelRequested_, "", "", downloadOptions);
       if (result == HttpDownloader::ABORTED) {
         LOG_INF("FONT", "Download cancelled: %s", file.name.c_str());
         Storage.remove(tempPath);
+        // The Back release that confirmed the cancel would otherwise be seen by
+        // the family list and treated as a request to leave the screen.
+        mappedInput.suppressNextBackRelease();
         {
           RenderLock lock(*this);
           state_ = FAMILY_LIST;
@@ -1049,6 +1103,8 @@ void FontDownloadActivity::render(RenderLock&&) {
 
   if (state_ == LOADING_MANIFEST) {
     renderer.drawCenteredText(UI_10_FONT_ID, centerY, tr(STR_LOADING_FONT_LIST));
+    const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), "", "", "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (state_ == FAMILY_LIST) {
     if (families_.empty()) {
       renderer.drawCenteredText(UI_10_FONT_ID, centerY, tr(STR_NO_FONTS_AVAILABLE));
