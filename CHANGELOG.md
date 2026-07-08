@@ -1,4 +1,14 @@
-## [v1.4.0] - 2026-07-04
+## [Unreleased]
+
+### Added
+
+### Changed
+
+### Fixed
+
+- Cancelling a font download now stops on the first Cancel button press instead of needing several presses.
+
+## [v1.4.0] - 2026-07-08
 
 ### Added
 
