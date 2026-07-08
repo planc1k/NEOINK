@@ -1406,9 +1406,10 @@ void HomeActivity::loop() {
         minimalSuppressInitialFrontRelease = false;
         return;
       }
-      if (!isAnyFrontButtonPressed(mappedInput)) {
-        minimalSuppressInitialFrontRelease = false;
+      if (isAnyFrontButtonPressed(mappedInput)) {
+        return;
       }
+      minimalSuppressInitialFrontRelease = false;
     }
 
     if (homeBookSwapLongPressHandled) {
