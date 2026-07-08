@@ -7,6 +7,7 @@
 ### Fixed
 
 - Cancelling a font download now stops on the first Cancel button press instead of needing several presses.
+- Unsupported EPUB chapter image formats no longer trigger the low-memory image warning.
 
 ## [v1.4.0] - 2026-07-08
 

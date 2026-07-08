@@ -1536,15 +1536,20 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
           const auto heapBeforeImage = MemoryBudget::snapshot();
           LOG_DBG("EHP", "Heap before image extraction: free=%u maxAlloc=%u src=%s", heapBeforeImage.freeHeap,
                   heapBeforeImage.maxAllocHeap, src.c_str());
-          if (!self->lowMemoryImageFallback && !MemoryBudget::hasHeapForEpubInlineImage("EHP", src.c_str())) {
-            self->lowMemoryImageFallback = true;
-          }
 
           if (self->lowMemoryImageFallback) {
             self->skipCurrentElement();
             return;
           } else {
             if (ImageDecoderFactory::isFormatSupported(resolvedPath)) {
+              // Unsupported formats are skipped regardless of heap, so only
+              // formats we can render should trip the low-memory image fallback.
+              if (!MemoryBudget::hasHeapForEpubInlineImage("EHP", src.c_str())) {
+                self->lowMemoryImageFallback = true;
+                self->skipCurrentElement();
+                return;
+              }
+
               // Create a unique filename for the cached image
               std::string ext;
               size_t extPos = resolvedPath.rfind('.');
