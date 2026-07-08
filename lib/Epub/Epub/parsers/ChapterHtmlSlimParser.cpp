@@ -2548,9 +2548,6 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
       self->blockStyleCount_--;
     }
   }
-  if (self->headingDepth == self->depth) {
-    self->headingDepth = -1;
-  }
 }
 
 void ChapterHtmlSlimParser::prewarmSectionAdvanceTable(FsFile& file) const {

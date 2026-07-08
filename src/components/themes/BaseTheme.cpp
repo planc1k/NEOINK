@@ -753,7 +753,7 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
                               const int pageCount, std::string title, const int paddingBottom, const int textYOffset,
                               const bool isPageBookmarked, const char* timeLeftLabel, const bool darkMode,
                               const float chapterProgressPercent, const int stableCurrentPage,
-                              const int stablePageCount, const bool showProgress, const bool pageCountEstimated) const {
+                              const int stablePageCount, const bool showProgress) const {
   const bool foregroundBlack = !darkMode;
   auto metrics = UITheme::getInstance().getMetrics();
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
@@ -770,18 +770,15 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
       (SETTINGS.statusBarBookProgressPercentage || SETTINGS.statusBarChapterPageCount || showStablePageNumbers)) {
     // Right aligned text for progress counter
     char progressStr[48];
-    // Prefix the section page count with "~" while a still-building spine only yields an estimated total.
-    const char* estimatePrefix = pageCountEstimated ? "~" : "";
 
     if (SETTINGS.statusBarChapterPageCount && showStablePageNumbers && SETTINGS.statusBarBookProgressPercentage) {
-      snprintf(progressStr, sizeof(progressStr), "%s%d/%d  %d/%d  %.0f%%", estimatePrefix, currentPage, pageCount,
-               stableCurrentPage, stablePageCount, bookProgress);
+      snprintf(progressStr, sizeof(progressStr), "%d/%d  %d/%d  %.0f%%", currentPage, pageCount, stableCurrentPage,
+               stablePageCount, bookProgress);
     } else if (SETTINGS.statusBarChapterPageCount && showStablePageNumbers) {
-      snprintf(progressStr, sizeof(progressStr), "%s%d/%d  %d/%d", estimatePrefix, currentPage, pageCount,
-               stableCurrentPage, stablePageCount);
+      snprintf(progressStr, sizeof(progressStr), "%d/%d  %d/%d", currentPage, pageCount, stableCurrentPage,
+               stablePageCount);
     } else if (SETTINGS.statusBarChapterPageCount && SETTINGS.statusBarBookProgressPercentage) {
-      snprintf(progressStr, sizeof(progressStr), "%s%d/%d  %.0f%%", estimatePrefix, currentPage, pageCount,
-               bookProgress);
+      snprintf(progressStr, sizeof(progressStr), "%d/%d  %.0f%%", currentPage, pageCount, bookProgress);
     } else if (showStablePageNumbers && SETTINGS.statusBarBookProgressPercentage) {
       snprintf(progressStr, sizeof(progressStr), "%d/%d  %.0f%%", stableCurrentPage, stablePageCount, bookProgress);
     } else if (SETTINGS.statusBarBookProgressPercentage) {
@@ -789,7 +786,7 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
     } else if (showStablePageNumbers) {
       snprintf(progressStr, sizeof(progressStr), "%d/%d", stableCurrentPage, stablePageCount);
     } else {
-      snprintf(progressStr, sizeof(progressStr), "%s%d/%d", estimatePrefix, currentPage, pageCount);
+      snprintf(progressStr, sizeof(progressStr), "%d/%d", currentPage, pageCount);
     }
 
     progressTextWidth = renderer.getTextWidth(SMALL_FONT_ID, progressStr);
