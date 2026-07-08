@@ -8,6 +8,7 @@
 
 - Cancelling a font download now stops on the first Cancel button press instead of needing several presses.
 - Unsupported EPUB chapter image formats no longer trigger the low-memory image warning.
+- Minimal Home no longer swaps to another recent book when returning from Settings with the Back button.
 
 ## [v1.4.0] - 2026-07-08
 
