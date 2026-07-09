@@ -565,14 +565,14 @@ void DashboardTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const
 
 void DashboardTheme::drawSleepScreen(const GfxRenderer& renderer, const RecentBook& book, const BookReadingStats* stats,
                                      const GlobalReadingStats* globalStats, const float progressPercent,
-                                     const char* currentChapterTitle) const {
-  renderer.clearScreen(0x00);
+                                     const char* currentChapterTitle, const bool inverted) const {
+  renderer.clearScreen(inverted ? 0xFF : 0x00);
 
   const Rect contentRect{0, DashboardMetrics::values.homeTopPadding, renderer.getScreenWidth(),
                          DashboardMetrics::values.homeCoverTileHeight};
   const Rect coverRect = coverRectForScreen(renderer, contentRect);
-  drawBookCover(renderer, coverRect, book, Color::Black);
-  drawDashboardStats(renderer, coverRect, stats, progressPercent, false);
-  drawBookText(renderer, coverRect, book, currentChapterTitle, false);
-  drawFooterStats(renderer, coverRect, globalStats, true);
+  drawBookCover(renderer, coverRect, book, inverted ? Color::White : Color::Black);
+  drawDashboardStats(renderer, coverRect, stats, progressPercent, inverted);
+  drawBookText(renderer, coverRect, book, currentChapterTitle, inverted);
+  drawFooterStats(renderer, coverRect, globalStats, !inverted);
 }
