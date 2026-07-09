@@ -6,11 +6,9 @@
 
 ### Fixed
 
-- Cancelling a font download now stops on the first Cancel button press instead of needing several presses.
 - Unsupported EPUB chapter image formats no longer trigger the low-memory image warning.
-- Minimal Home no longer swaps to another recent book when returning from Settings with the Back button.
 
-## [v1.4.0] - 2026-07-08
+## [v1.4.0] - 2026-07-09
 
 ### Added
 
@@ -56,6 +54,8 @@
 - EPUB clipping selection now works from footnote previews.
 - Web EPUB optimizer now keeps image references in malformed or XML-declared chapters aligned with renamed JPEG files.
 - Manage Fonts no longer crashes while loading the font list on devices with many SD-card font families installed.
+- Minimal Home no longer swaps to another recent book when returning from Settings when Back button is mapped to the first button.
+- Cancelling a font download now stops on the first Cancel button press instead of needing several presses.
 
 ## [v1.3.4] - 2026-06-24
 

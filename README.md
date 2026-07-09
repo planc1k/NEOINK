@@ -66,7 +66,7 @@ The UI now uses [Inter](https://fonts.google.com/specimen/Inter) as the display 
 
 ### Font Sizes
 
-There are 3 available build variants to choose from due to build size constraints: `teensy`, `tiny`, and `xlarge`.
+There are 2 available build variants to choose from due to build size constraints: `tiny`, and `xlarge`.
 
 See [Font Build Variants](./docs/font-build-variants.md) for the full point-size and emoji-support matrix.
 
@@ -88,7 +88,7 @@ See [Controls](./docs/controls.md) for the full action list and defaults.
 
 CrossInk runs on an ESP32-C3 with limited RAM, so very large folders or complex EPUBs can be slower than they would be on a phone, tablet, or desktop app.
 
-- Keep folders under about 200  files. For the smoothest browsing, aim for 50-100 files per folder.
+- Keep folders under about 200 files. For the smoothest browsing, aim for 50-100 files per folder.
 - Having 1000+ books on the SD card is fine if they are split into smaller folders, such as by author, series, genre, or read/unread status.
 - Avoid putting every book in the SD card root. The file browser has to scan and sort the current folder before it can show it.
 - Text-first EPUBs are the best fit. Large image-heavy EPUBs, scanned books, comics, and omnibus files with thousands of sections may load slowly or fail under memory pressure.
@@ -103,6 +103,7 @@ The [device simulator](https://github.com/uxjulia/crosspoint-simulator) renders 
 See [Simulator](./docs/simulator.md) for setup, platform notes, keyboard controls, and cache tips.
 
 ---
+
 ## Installation
 
 Download a `firmware-*.bin` from the [releases page](https://github.com/uxjulia/CrossInk/releases), then flash it with the web installer or command line.
