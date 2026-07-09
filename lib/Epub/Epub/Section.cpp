@@ -606,19 +606,26 @@ std::unique_ptr<Page> Section::loadPageFromSectionFile() {
     }
   }
 
-  if (!file.seek(HEADER_SIZE - sizeof(uint32_t) * 4)) {
+  auto closeAndReturnNull = [this]() -> std::unique_ptr<Page> {
+    file.close();
     return nullptr;
+  };
+
+  if (!file.seek(HEADER_SIZE - sizeof(uint32_t) * 4)) {
+    return closeAndReturnNull();
   }
   uint32_t lutOffset;
   if (!serialization::tryReadPod(file, lutOffset) || !file.seek(lutOffset + sizeof(uint32_t) * currentPage)) {
-    return nullptr;
+    return closeAndReturnNull();
   }
   uint32_t pagePos;
   if (!serialization::tryReadPod(file, pagePos) || !file.seek(pagePos)) {
-    return nullptr;
+    return closeAndReturnNull();
   }
 
-  return Page::deserialize(file);
+  auto page = Page::deserialize(file);
+  file.close();
+  return page;
 }
 
 std::string Section::getTextFromSectionFile() {

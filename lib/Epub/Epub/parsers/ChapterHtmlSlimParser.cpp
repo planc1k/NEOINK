@@ -337,7 +337,23 @@ bool ChapterHtmlSlimParser::startNewPage(const char* reason) {
     currentPage->elements.reserve(INITIAL_PAGE_ELEMENT_RESERVE);
   }
   currentPageNextY = 0;
+  currentPageParagraphIndex = 0;
+  currentPageListItemIndex = 0;
   return true;
+}
+
+void ChapterHtmlSlimParser::markCurrentPageFromCurrentTextBlock() {
+  currentPageParagraphIndex = currentTextBlockParagraphIndex;
+  currentPageListItemIndex = currentTextBlockListItemIndex;
+}
+
+void ChapterHtmlSlimParser::markCurrentPageFromCurrentElement() {
+  currentPageParagraphIndex = xpathParagraphIndex;
+  currentPageListItemIndex = xpathListItemIndex;
+}
+
+void ChapterHtmlSlimParser::completeCurrentPage() {
+  completePageFn(std::move(currentPage), currentPageParagraphIndex, currentPageListItemIndex);
 }
 
 void ChapterHtmlSlimParser::flushPendingAnchor() {
@@ -347,7 +363,7 @@ void ChapterHtmlSlimParser::flushPendingAnchor() {
   // block is flushed so the chapter starts on a fresh page.
   if (std::find(tocAnchors.begin(), tocAnchors.end(), pendingAnchorId) != tocAnchors.end()) {
     if (currentPage && !currentPage->elements.empty()) {
-      completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
+      completeCurrentPage();
       completedPageCount++;
       stopPreviewIfPageLimitReached();
       if (previewStopRequested) {
@@ -557,6 +573,8 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
       auto combinedStyle = style.getCombinedBlockStyle(incoming, BlockStyle::CombineAxis::Vertical);
       combinedStyle.fromBrElement = incoming.fromBrElement;
       currentTextBlock->setBlockStyle(combinedStyle);
+      currentTextBlockParagraphIndex = xpathParagraphIndex;
+      currentTextBlockListItemIndex = xpathListItemIndex;
 
       flushPendingAnchor();
       return;
@@ -576,6 +594,8 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
     lowMemoryAbort = true;
     return;
   }
+  currentTextBlockParagraphIndex = xpathParagraphIndex;
+  currentTextBlockListItemIndex = xpathListItemIndex;
   wordsExtractedInBlock = 0;
 }
 
@@ -673,7 +693,7 @@ void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
   const int16_t totalHeight = static_cast<int16_t>(topSpacing + ruleThickness + bottomSpacing);
 
   if (!headingOpenerActive && !currentPage->elements.empty() && currentPageNextY + totalHeight > viewportHeight) {
-    completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
+    completeCurrentPage();
     completedPageCount++;
     stopPreviewIfPageLimitReached();
     if (previewStopRequested) {
@@ -694,6 +714,7 @@ void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
     return;
   }
   currentPage->elements.push_back(pageRule);
+  markCurrentPageFromCurrentElement();
   currentPageNextY = static_cast<int16_t>(currentPageNextY + ruleThickness + bottomSpacing);
   headingOpenerActive = false;
 
@@ -907,7 +928,7 @@ void ChapterHtmlSlimParser::emitBufferedTableAsFragments(BufferedTable& table) {
           break;
         }
         if (fragmentRows.empty() && currentPageNextY + nextHeight > viewportHeight && !currentPage->elements.empty()) {
-          completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
+          completeCurrentPage();
           completedPageCount++;
           stopPreviewIfPageLimitReached();
           if (previewStopRequested) {
@@ -937,13 +958,14 @@ void ChapterHtmlSlimParser::emitBufferedTableAsFragments(BufferedTable& table) {
       currentPage->elements.push_back(
           std::make_shared<PageTableFragment>(tableWidth, segment.columnCount, TABLE_CELL_PADDING, lineHeight,
                                               std::move(fragmentRows), table.blockStyle.leftInset(), currentPageNextY));
+      markCurrentPageFromCurrentElement();
       for (const auto& footnote : fragmentFootnotes) {
         currentPage->addFootnote(footnote.number, footnote.href);
       }
       currentPageNextY += fragmentHeight;
 
       if (nextRowIndex < segment.rows.size()) {
-        completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
+        completeCurrentPage();
         completedPageCount++;
         stopPreviewIfPageLimitReached();
         if (previewStopRequested) {
@@ -1056,7 +1078,7 @@ void ChapterHtmlSlimParser::flushMalformedPartialContent() {
 
 bool ChapterHtmlSlimParser::appendMalformedMarkupWarningPage() {
   if (currentPage && !currentPage->elements.empty()) {
-    completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
+    completeCurrentPage();
     completedPageCount++;
   }
   currentPage.reset();
@@ -1118,7 +1140,7 @@ bool ChapterHtmlSlimParser::appendMalformedMarkupWarningPage() {
     return false;
   }
 
-  completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
+  completeCurrentPage();
   completedPageCount++;
   currentPage.reset();
   return true;
@@ -1703,8 +1725,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                   if (!self->headingOpenerActive && self->currentPage && !self->currentPage->elements.empty() &&
                       (self->currentPageNextY + imageMarginTop + displayHeight + imageMarginBottom >
                        self->viewportHeight)) {
-                    self->completePageFn(std::move(self->currentPage), self->xpathParagraphIndex,
-                                         self->xpathListItemIndex);
+                    self->completeCurrentPage();
                     self->completedPageCount++;
                     self->stopPreviewIfPageLimitReached();
                     if (self->previewStopRequested) {
@@ -1737,6 +1758,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                     return;
                   }
                   self->currentPage->elements.push_back(pageImage);
+                  self->markCurrentPageFromCurrentElement();
                   self->currentPageNextY += displayHeight + imageMarginBottom;
 
                   if (self->currentTextBlock && self->currentTextBlock->isEmpty()) {
@@ -1903,7 +1925,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       self->makePages();
     }
     if (self->currentPage && !self->currentPage->elements.empty()) {
-      self->completePageFn(std::move(self->currentPage), self->xpathParagraphIndex, self->xpathListItemIndex);
+      self->completeCurrentPage();
       self->completedPageCount++;
       self->stopPreviewIfPageLimitReached();
       if (self->previewStopRequested) {
@@ -2826,7 +2848,7 @@ bool ChapterHtmlSlimParser::finishParse() {
     currentTextBlock.reset();
   }
   if (!previewStopRequested && currentPage && !currentPage->elements.empty()) {
-    completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
+    completeCurrentPage();
     completedPageCount++;
     stopPreviewIfPageLimitReached();
   }
@@ -2879,7 +2901,7 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
   }
 
   if (currentPageNextY + lineHeight > viewportHeight) {
-    completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
+    completeCurrentPage();
     completedPageCount++;
     stopPreviewIfPageLimitReached();
     if (previewStopRequested) {
@@ -2903,6 +2925,7 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
   // Apply horizontal left inset (margin + padding) as x position offset
   const int16_t xOffset = line->getBlockStyle().leftInset();
   currentPage->elements.push_back(std::make_shared<PageLine>(line, xOffset, currentPageNextY));
+  markCurrentPageFromCurrentTextBlock();
   currentPageNextY += lineHeight;
 }
 
@@ -2977,7 +3000,7 @@ void ChapterHtmlSlimParser::makePages() {
   }
 
   if (blockStyle.pageBreakAfter && currentPage && !currentPage->elements.empty()) {
-    completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
+    completeCurrentPage();
     completedPageCount++;
     stopPreviewIfPageLimitReached();
     if (previewStopRequested) {
