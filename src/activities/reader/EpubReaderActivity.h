@@ -16,6 +16,13 @@
 #include "GlobalReadingStats.h"
 #include "activities/Activity.h"
 
+struct ToastRect {
+  int x = 0;
+  int y = 0;
+  int w = 0;
+  int h = 0;
+};
+
 class EpubReaderActivity final : public Activity {
  public:
   struct ReaderSettingsSnapshot {
@@ -117,10 +124,7 @@ class EpubReaderActivity final : public Activity {
   unsigned long renderModeToastShowTime = 0UL;
   std::unique_ptr<uint8_t[]> renderModeToastRegionBuffer;
   size_t renderModeToastRegionBufferSize = 0;
-  int renderModeToastRegionX = 0;
-  int renderModeToastRegionY = 0;
-  int renderModeToastRegionW = 0;
-  int renderModeToastRegionH = 0;
+  ToastRect renderModeToastRegion;
   bool renderModeToastRegionSaved = false;
   int completionTriggerSpineIndex = -1;
   float completionTriggerSpineProgress = 1.0f;
