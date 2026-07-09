@@ -14,6 +14,7 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <SPI.h>
+#include <ScratchWorkspace.h>
 #include <builtinFonts/all.h>
 
 #ifdef SIMULATOR
@@ -609,6 +610,9 @@ void setupDisplayAndFonts(bool seamless = false) {
   display.begin(seamless);
 #endif
   renderer.begin();
+  if (!ScratchWorkspace::initialize()) {
+    LOG_ERR("MAIN", "Scratch workspace init failed");
+  }
   activityManager.begin();
   LOG_DBG("MAIN", "Display initialized");
 

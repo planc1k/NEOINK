@@ -47,6 +47,7 @@ class Borrow final {
 
 Lease acquire(size_t bytes, const char* owner);
 Borrow borrow(size_t minBytes, const char* owner);
+bool initialize();
 void releaseLease(Lease& lease);
 void releaseBorrow(Borrow& borrow);
 
