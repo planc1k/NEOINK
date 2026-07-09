@@ -172,6 +172,9 @@ bool FontDownloadActivity::fetchAndParseManifest() {
 
   baseUrl_.clear();
   clearManifestFamilies();
+  // The font list is fetched again after individual updates. Release registry
+  // memory on every manifest load, not only when entering Manage Fonts.
+  sdFontSystem.releaseForNetwork(renderer);
 
   Storage.remove(MANIFEST_TMP);
   HttpDownloader::DownloadError result = HttpDownloader::HTTP_ERROR;

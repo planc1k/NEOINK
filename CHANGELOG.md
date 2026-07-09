@@ -44,6 +44,7 @@
 - EPUB clipping selection now works from footnote previews.
 - Web EPUB optimizer now keeps image references in malformed or XML-declared chapters aligned with renamed JPEG files.
 - Manage Fonts no longer crashes while loading the font list on devices with many SD-card font families installed.
+- Manage Fonts no longer crashes while reloading the font list after updating an individual SD-card font.
 
 ## [v1.3.4] - 2026-06-24
 
