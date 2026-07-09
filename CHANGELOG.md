@@ -5,15 +5,13 @@
 - Dashboard UI theme for the Home screen, showing the current book cover and reading stats.
 - Nearby Position Sync for sending or applying the current EPUB position between two CrossInk devices over ESP-NOW.
 - Web EPUB optimizer support for CrossInk location metadata, so optimized EPUBs can keep better progress and stable page numbers.
-- Reading Stats support for XTC and XTCH books, including the XTC reader menu, Home and sleep screen stats, mark finished, delete stats, and cache-clearing preservation.
+- Reading Stats support for XTC and XTCH books, including reader menus, Home and sleep screen stats, mark finished, delete stats, and preserving stats when clearing book caches.
 
 ### Changed
 
-- Large EPUBs and SD-card font-heavy books now build pages with less temporary memory churn, reducing slow first opens and low-memory failures.
-- EPUB indexing now avoids more small temporary allocations while processing text and HTML attributes.
-- Home and sleep screens now do more EPUB cover and thumbnail work on demand, reducing reader startup work and reusing cached cover data where possible.
+- Large EPUBs, SD-card font-heavy books, and cover thumbnails now open, index, and generate more reliably under low-memory conditions.
+- Home and sleep screens now load more cover and thumbnail data only when needed, reducing reader startup work and reusing cached cover data where possible.
 - Built-in reader font choices have been reduced to Lexend Deca and Bitter, reducing firmware size while keeping fallback glyph coverage.
-- Home now frees more temporary cover UI memory before generating EPUB thumbnails, improving cover creation for optimized books under low-memory conditions.
 
 ### Removed
 
@@ -21,34 +19,30 @@
 
 ### Fixed
 
+- EPUB render-mode and Safe Mode toast messages now clear reliably, even when the reader is low on memory.
 - EPUB Reading Stats no longer drops unsaved page-turn counts after viewing the stats screen mid-session.
-- KOSync now frees SD-card font registry memory before TLS requests and releases the EPUB before upload, reducing sync low-memory failures with many SD fonts installed.
+- KOSync is more reliable with many SD-card fonts installed, reducing low-memory failures during secure sync requests and uploads.
 - Web file manager actions now handle filenames with special characters safely and reject unsafe rename characters before saving.
 - Auto Turn interval settings and related action prompts opened from long-press shortcuts now stay open after releasing the shortcut button.
-- EPUB footnote previews no longer show clipped status-bar labels or misleading reader progress indicators.
+- EPUB footnote previews no longer show clipped status-bar labels or misleading reader progress indicators, and clipping selection now works from footnote previews.
 - Font selection no longer reopens the font preview after choosing a font.
-- EPUB chapters now rebuild stale publisher CSS caches instead of opening without the book's styling.
+- EPUB chapters with stale publisher style data now rebuild it instead of opening without the book's styling.
 - Large SD-card font EPUBs no longer overlap characters after font or line-spacing changes, and clipping selection can fall back to a built-in UI font when needed.
-- EPUB cover and thumbnail generation is more reliable with custom SD-card fonts selected.
-- Web EPUB optimizer no longer leaves transparent PNG artwork blank or replaced by alt text.
-- Web EPUB optimizer now rasterizes SVG images to JPEG so optimized EPUBs preserve more dividers and artwork on-device.
+- EPUB cover and thumbnail generation is more reliable with custom SD-card fonts selected and optimized books under low-memory conditions.
+- Web EPUB optimizer now preserves more PNG and SVG artwork on-device, including transparent PNGs, dividers, and images in malformed or XML-declared chapters.
 - Unsupported SVG images in EPUB chapters are now skipped silently instead of triggering low-memory image warnings.
 - Nearby Position Sync now silently restarts back into the reader after using ESP-NOW, matching other WiFi sync flows and reducing post-sync memory fragmentation.
 - EPUB grayscale page turns on X3 now use the grayscale-aware display base, reducing the moment where new text appears too dark before the anti-aliased overlay finishes.
-- EPUB chapters with many inline anchors, footnote links, or malformed XHTML are less likely to fail or get stuck on the indexing screen.
-- EPUB chapters with large publisher style caches and SD-card fonts now keep more heap available during indexing and retry lighter render modes after low-memory layout failures.
-- EPUB opening and image rendering now handle more low-memory allocation failures without rebooting, and landscape image pages read less cached image data during tiled grayscale rendering.
+- EPUB chapters with many inline anchors, footnote links, malformed XHTML, large publisher styles, or SD-card fonts are less likely to fail or get stuck on the indexing screen.
+- EPUB opening and image rendering now recover from more low-memory conditions instead of rebooting, including landscape image pages and books that need lighter render modes.
 - EPUB clipping selection now follows right-to-left line order when selecting Hebrew and other RTL text.
 - Lyra Carousel no longer shows a blank carousel after returning from WiFi-related File Transfer screens and moving between the menu row and book row.
 - Generated SD-card font packages now include the same core glyph coverage as built-in reader fonts.
-- EPUB clipping selection now works from footnote previews.
-- Web EPUB optimizer now keeps image references in malformed or XML-declared chapters aligned with renamed JPEG files.
-- Manage Fonts no longer crashes while loading the font list on devices with many SD-card font families installed.
+- Manage Fonts no longer crashes while loading or reloading large SD-card font lists.
 - Minimal Home no longer swaps to another recent book when returning from Settings when Back button is mapped to the first button.
 - Cancelling a font download now stops on the first Cancel button press instead of needing several presses.
-- Manage Fonts no longer crashes while reloading the font list after updating an individual SD-card font.
 - The `Inverted` sleep cover filter now keeps book covers unchanged on Minimal and Dashboard sleep screens while switching the background to white.
-- ZIP inflate scratch memory is no longer released while still in use, avoiding a rare EPUB open or thumbnail crash.
+- Rare EPUB open or thumbnail crashes during ZIP decompression are fixed.
 
 ## [v1.3.4] - 2026-06-24
 
