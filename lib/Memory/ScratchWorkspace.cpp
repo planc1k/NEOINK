@@ -5,6 +5,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 
+#include <atomic>
 #include <cstdlib>
 
 namespace {
@@ -12,30 +13,44 @@ uint8_t* gBuffer = nullptr;
 size_t gCapacity = 0;
 bool gLeased = false;
 bool gBorrowed = false;
+bool gReleasePending = false;
 const char* gLeaseOwner = nullptr;
 const char* gBorrowOwner = nullptr;
-SemaphoreHandle_t gMutex = nullptr;
+std::atomic<SemaphoreHandle_t> gMutex{nullptr};
 
 bool ensureMutex() {
-  if (gMutex) return true;
-  gMutex = xSemaphoreCreateMutex();
-  if (!gMutex) {
+  SemaphoreHandle_t mutex = gMutex.load(std::memory_order_acquire);
+  if (mutex) return true;
+
+  SemaphoreHandle_t created = xSemaphoreCreateMutex();
+  if (!created) {
     LOG_ERR("SCR", "Failed to create scratch workspace mutex");
     return false;
+  }
+
+  mutex = nullptr;
+  if (!gMutex.compare_exchange_strong(mutex, created, std::memory_order_release, std::memory_order_acquire)) {
+    vSemaphoreDelete(created);
   }
   return true;
 }
 
 bool lock() {
   if (!ensureMutex()) return false;
-  return xSemaphoreTake(gMutex, portMAX_DELAY) == pdTRUE;
+  SemaphoreHandle_t mutex = gMutex.load(std::memory_order_acquire);
+  return mutex && xSemaphoreTake(mutex, portMAX_DELAY) == pdTRUE;
 }
 
-void unlock() { xSemaphoreGive(gMutex); }
+void unlock() {
+  SemaphoreHandle_t mutex = gMutex.load(std::memory_order_acquire);
+  if (mutex) xSemaphoreGive(mutex);
+}
 
 }  // namespace
 
 namespace ScratchWorkspace {
+
+bool initialize() { return ensureMutex(); }
 
 void releaseLease(Lease& lease) {
   if (!lease.valid) return;
@@ -46,14 +61,18 @@ void releaseLease(Lease& lease) {
   }
 
   if (gBorrowed) {
-    LOG_ERR("SCR", "Releasing scratch workspace while borrowed by %s", gBorrowOwner ? gBorrowOwner : "unknown");
-    gBorrowed = false;
-    gBorrowOwner = nullptr;
+    LOG_ERR("SCR", "Deferring scratch workspace release while borrowed by %s", gBorrowOwner ? gBorrowOwner : "unknown");
+    gReleasePending = true;
+    lease.valid = false;
+    lease.capacity = 0;
+    unlock();
+    return;
   }
   free(gBuffer);
   gBuffer = nullptr;
   gCapacity = 0;
   gLeased = false;
+  gReleasePending = false;
   gLeaseOwner = nullptr;
   lease.valid = false;
   lease.capacity = 0;
@@ -65,6 +84,14 @@ void releaseBorrow(Borrow& borrow) {
   if (lock()) {
     gBorrowed = false;
     gBorrowOwner = nullptr;
+    if (gReleasePending) {
+      free(gBuffer);
+      gBuffer = nullptr;
+      gCapacity = 0;
+      gLeased = false;
+      gReleasePending = false;
+      gLeaseOwner = nullptr;
+    }
     unlock();
   }
   borrow.buffer = nullptr;
@@ -127,6 +154,7 @@ Lease acquire(const size_t bytes, const char* owner) {
   gCapacity = bytes;
   gLeased = true;
   gBorrowed = false;
+  gReleasePending = false;
   gLeaseOwner = owner;
   lease.valid = true;
   lease.capacity = bytes;

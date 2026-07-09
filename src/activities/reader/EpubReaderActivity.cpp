@@ -82,13 +82,6 @@ constexpr uint16_t FOOTNOTE_PREVIEW_MAX_PAGES = 3;
 constexpr uint8_t PUBLISHER_PAGE_NUMBER_LEFT_MARGIN_MIN = 15;
 constexpr int PUBLISHER_PAGE_NUMBER_X = 5;
 
-struct ToastRect {
-  int x = 0;
-  int y = 0;
-  int w = 0;
-  int h = 0;
-};
-
 uint32_t pagesCentipages(const float pages) {
   if (pages <= 0.0f) {
     return 0;
@@ -2001,15 +1994,19 @@ void EpubReaderActivity::loop() {
   }
   if ((pendingRenderModeToast || pendingSafeModeToast) &&
       (millis() - renderModeToastShowTime) >= RENDER_MODE_TOAST_MS) {
+    bool toastRegionRestored = false;
     if (renderModeToastRegionSaved) {
       if (RenderLock::peek()) {
         return;
       }
       RenderLock lock(*this);
-      restoreRenderModeToastRegion();
+      toastRegionRestored = restoreRenderModeToastRegion();
     }
     pendingRenderModeToast = false;
     pendingSafeModeToast = false;
+    if (!toastRegionRestored) {
+      requestUpdate();
+    }
     return;
   }
 
@@ -3556,10 +3553,7 @@ bool EpubReaderActivity::storeRenderModeToastRegion(const char* msg) {
                                    renderModeToastRegionBufferSize)) {
     return false;
   }
-  renderModeToastRegionX = toast.x;
-  renderModeToastRegionY = toast.y;
-  renderModeToastRegionW = toast.w;
-  renderModeToastRegionH = toast.h;
+  renderModeToastRegion = toast;
   renderModeToastRegionSaved = true;
   return true;
 }
@@ -3573,8 +3567,8 @@ bool EpubReaderActivity::restoreRenderModeToastRegion() {
   if (!renderModeToastRegionSaved || !renderModeToastRegionBuffer) {
     return false;
   }
-  const bool restored = renderer.copyBufferToRegion(renderModeToastRegionX, renderModeToastRegionY,
-                                                    renderModeToastRegionW, renderModeToastRegionH,
+  const bool restored = renderer.copyBufferToRegion(renderModeToastRegion.x, renderModeToastRegion.y,
+                                                    renderModeToastRegion.w, renderModeToastRegion.h,
                                                     renderModeToastRegionBuffer.get(), renderModeToastRegionBufferSize);
   renderModeToastRegionSaved = false;
   renderModeToastRegionBuffer.reset();

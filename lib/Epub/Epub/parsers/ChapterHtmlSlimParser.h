@@ -156,6 +156,10 @@ class ChapterHtmlSlimParser {
   std::vector<std::string> tocAnchors;  // the list of anchors that are TOC chapter boundaries
   uint16_t xpathParagraphIndex = 0;
   uint16_t xpathListItemIndex = 0;
+  uint16_t currentTextBlockParagraphIndex = 0;
+  uint16_t currentTextBlockListItemIndex = 0;
+  uint16_t currentPageParagraphIndex = 0;
+  uint16_t currentPageListItemIndex = 0;
 
   // Footnote link tracking
   bool insideFootnoteLink = false;
@@ -184,6 +188,9 @@ class ChapterHtmlSlimParser {
   void flushLongTextRunIfNeeded(bool force = false);
   size_t bufferedWordsBeforeLayoutLimit() const;
   uint16_t textRunBytesBeforeLayoutLimit() const;
+  void markCurrentPageFromCurrentTextBlock();
+  void markCurrentPageFromCurrentElement();
+  void completeCurrentPage();
   void makePages();
   int effectiveLineHeight() const;
   bool isPreviewBuild() const { return !previewAnchor.empty() && previewMaxPages > 0; }
