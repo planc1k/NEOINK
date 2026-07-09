@@ -30,5 +30,5 @@ class DashboardTheme : public MinimalTheme {
                            const char* currentChapterTitle = nullptr) const override;
   void drawSleepScreen(const GfxRenderer& renderer, const RecentBook& book, const BookReadingStats* stats,
                        const GlobalReadingStats* globalStats, float progressPercent = -1.0f,
-                       const char* currentChapterTitle = nullptr) const;
+                       const char* currentChapterTitle = nullptr, bool inverted = false) const;
 };

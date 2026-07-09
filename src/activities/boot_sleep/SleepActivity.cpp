@@ -698,10 +698,7 @@ void SleepActivity::renderMinimalSleepScreen() const {
   const BookReadingStats bookStats = loadBookStatsForPath(path);
   const float progressPercent = RecentBookProgress::loadPercent(book);
   MinimalTheme theme;
-  theme.drawSleepScreen(renderer, book, &bookStats, progressPercent);
-  if (sleepCoverFilterInvertsGeneratedScreen()) {
-    renderer.invertScreen();
-  }
+  theme.drawSleepScreen(renderer, book, &bookStats, progressPercent, sleepCoverFilterInvertsGeneratedScreen());
   renderer.displayBuffer(HalDisplay::FULL_REFRESH, TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
 }
 
@@ -721,10 +718,8 @@ void SleepActivity::renderMinimalStatsSleepScreen() const {
   const GlobalReadingStats globalStats = GlobalReadingStats::load();
   const float progressPercent = RecentBookProgress::loadPercent(book);
   MinimalTheme theme;
-  theme.drawStatsSleepScreen(renderer, book, &bookStats, &globalStats, progressPercent);
-  if (sleepCoverFilterInvertsGeneratedScreen()) {
-    renderer.invertScreen();
-  }
+  theme.drawStatsSleepScreen(renderer, book, &bookStats, &globalStats, progressPercent,
+                             sleepCoverFilterInvertsGeneratedScreen());
   renderer.displayBuffer(HalDisplay::FULL_REFRESH, TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
 }
 
@@ -749,10 +744,8 @@ void SleepActivity::renderDashboardSleepScreen() const {
   const float progressPercent = RecentBookProgress::loadPercent(book);
   const std::string chapterTitle = loadChapterTitleForPath(path);
   DashboardTheme theme;
-  theme.drawSleepScreen(renderer, book, &bookStats, &globalStats, progressPercent, chapterTitle.c_str());
-  if (sleepCoverFilterInvertsGeneratedScreen()) {
-    renderer.invertScreen();
-  }
+  theme.drawSleepScreen(renderer, book, &bookStats, &globalStats, progressPercent, chapterTitle.c_str(),
+                        sleepCoverFilterInvertsGeneratedScreen());
   renderer.displayBuffer(HalDisplay::FULL_REFRESH, TURN_OFF_SCREEN_AFTER_SLEEP_REFRESH);
 }
 
