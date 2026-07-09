@@ -48,6 +48,7 @@
 - Cancelling a font download now stops on the first Cancel button press instead of needing several presses.
 - Manage Fonts no longer crashes while reloading the font list after updating an individual SD-card font.
 - The `Inverted` sleep cover filter now keeps book covers unchanged on Minimal and Dashboard sleep screens while switching the background to white.
+- ZIP inflate scratch memory is no longer released while still in use, avoiding a rare EPUB open or thumbnail crash.
 
 ## [v1.3.4] - 2026-06-24
 

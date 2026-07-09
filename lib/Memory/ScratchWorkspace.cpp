@@ -13,6 +13,7 @@ uint8_t* gBuffer = nullptr;
 size_t gCapacity = 0;
 bool gLeased = false;
 bool gBorrowed = false;
+bool gReleasePending = false;
 const char* gLeaseOwner = nullptr;
 const char* gBorrowOwner = nullptr;
 std::atomic<SemaphoreHandle_t> gMutex{nullptr};
@@ -60,14 +61,18 @@ void releaseLease(Lease& lease) {
   }
 
   if (gBorrowed) {
-    LOG_ERR("SCR", "Releasing scratch workspace while borrowed by %s", gBorrowOwner ? gBorrowOwner : "unknown");
-    gBorrowed = false;
-    gBorrowOwner = nullptr;
+    LOG_ERR("SCR", "Deferring scratch workspace release while borrowed by %s", gBorrowOwner ? gBorrowOwner : "unknown");
+    gReleasePending = true;
+    lease.valid = false;
+    lease.capacity = 0;
+    unlock();
+    return;
   }
   free(gBuffer);
   gBuffer = nullptr;
   gCapacity = 0;
   gLeased = false;
+  gReleasePending = false;
   gLeaseOwner = nullptr;
   lease.valid = false;
   lease.capacity = 0;
@@ -79,6 +84,14 @@ void releaseBorrow(Borrow& borrow) {
   if (lock()) {
     gBorrowed = false;
     gBorrowOwner = nullptr;
+    if (gReleasePending) {
+      free(gBuffer);
+      gBuffer = nullptr;
+      gCapacity = 0;
+      gLeased = false;
+      gReleasePending = false;
+      gLeaseOwner = nullptr;
+    }
     unlock();
   }
   borrow.buffer = nullptr;
@@ -141,6 +154,7 @@ Lease acquire(const size_t bytes, const char* owner) {
   gCapacity = bytes;
   gLeased = true;
   gBorrowed = false;
+  gReleasePending = false;
   gLeaseOwner = owner;
   lease.valid = true;
   lease.capacity = bytes;
