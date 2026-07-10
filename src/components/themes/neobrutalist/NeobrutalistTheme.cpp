@@ -163,7 +163,7 @@ void NeobrutalistTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const
   }
 
   const auto& metrics = NeobrutalistMetrics::values;
-  const int side = metrics.contentSidePadding;
+  const int side = metrics.contentSidePadding / 2;
   Rect panel{rect.x + side, rect.y + 8, rect.width - side * 2, rect.height - 16};
   if (panel.height < 34) panel.height = rect.height - 8;
   drawPanel(renderer, panel, false, false, true);
@@ -192,8 +192,8 @@ void NeobrutalistTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const
 
 void NeobrutalistTheme::drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label,
                                       const char* rightLabel) const {
-  Rect panel{rect.x + NeobrutalistMetrics::values.contentSidePadding, rect.y + 2,
-             rect.width - NeobrutalistMetrics::values.contentSidePadding * 2, rect.height - 4};
+  const int side = NeobrutalistMetrics::values.contentSidePadding / 2;
+  Rect panel{rect.x + side, rect.y + 2, rect.width - side * 2, rect.height - 4};
   drawPanel(renderer, panel, false, true, false);
   const std::string left = upperCopy(label ? label : "");
   renderer.drawText(kMetaFont, panel.x + 8, centeredY(renderer, kMetaFont, panel), left.c_str(), true,
