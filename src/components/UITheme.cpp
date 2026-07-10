@@ -16,6 +16,7 @@
 #include "components/themes/lyra/LyraCarouselTheme.h"
 #include "components/themes/lyra/LyraTheme.h"
 #include "components/themes/minimal/MinimalTheme.h"
+#include "components/themes/neobrutalist/NeobrutalistTheme.h"
 #include "components/themes/roundedraff/RoundedRaffTheme.h"
 
 namespace {
@@ -78,6 +79,11 @@ void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
       LOG_DBG("UI", "Using Minimal theme");
       currentTheme = std::make_unique<MinimalTheme>();
       currentMetrics = &MinimalMetrics::values;
+      break;
+    case CrossPointSettings::UI_THEME::NEOBRUTALIST:
+      LOG_DBG("UI", "Using Neobrutalist theme");
+      currentTheme = std::make_unique<NeobrutalistTheme>();
+      currentMetrics = &NeobrutalistMetrics::values;
       break;
     default:
       LOG_ERR("UI", "Unknown theme %d, falling back to Classic", static_cast<int>(type));

@@ -52,6 +52,14 @@ See [Web Server Guide](./docs/webserver.md) and
 
 See [File Formats](./docs/file-formats.md#text-and-markdown-books).
 
+### Neobrutalist Theme
+
+- Select **Neobrutalist** from **Settings > Display > UI Theme**.
+- Uses square high-contrast panels, thick borders, offset shadows, inverted
+  selected states, and dither accents tuned for monochrome e-ink.
+- Covers headers, tab bars, lists, menus, button hints, side hints, recent-book
+  home cards, popups, text fields, and the on-screen keyboard.
+
 ### CrossInk Base Features
 
 This fork keeps CrossInk's existing reader improvements:
@@ -62,7 +70,7 @@ This fork keeps CrossInk's existing reader improvements:
   Paragraph Indents.
 - Reading stats, finished-book tracking, Read-folder movement, and reading
   stats sync.
-- Custom sleep images, favorite sleep image support, and Minimal theme.
+- Custom sleep images, favorite sleep image support, and Minimal/Neobrutalist themes.
 - EPUB optimization in the browser before upload.
 - Web file transfer, WebDAV, Calibre wireless upload, OPDS, and SD-card fonts.
 
