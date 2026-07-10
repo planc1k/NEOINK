@@ -5,6 +5,13 @@
   </div>
 
   <div class="action-buttons">
+    <a class="action-btn flashcards-action-btn" href="/files?path=%2F.crosspoint%2Fflashcards%2Fdecks">Cards</a>
+    <button class="action-btn folder-action-btn" onclick="scanLibrary()">Scan Library</button>
+    <button class="action-btn folder-action-btn" onclick="openMoveSelectedModal()">Move Selected</button>
+    <button class="action-btn folder-action-btn" onclick="openBulkRenameModal()">Bulk Rename</button>
+    <button class="action-btn folder-action-btn" onclick="moveSelectedTo('/Read')">Read</button>
+    <button class="action-btn folder-action-btn" onclick="moveSelectedTo('/Unread')">Unread</button>
+    <button class="action-btn folder-action-btn" onclick="openShelfModal()">Shelve</button>
     <button class="action-btn upload-action-btn" onclick="openUploadModal()">📤 Upload</button>
     <button class="action-btn folder-action-btn" onclick="openFolderModal()">📁 New Folder</button>
     <button class="action-btn delete-action-btn" onclick="openDeleteSelectedModal()">🗑️ Delete Selected</button>
@@ -19,6 +26,14 @@
   </div>
   <div id="failedFilesList"></div>
   <button class="retry-all-btn" onclick="retryAllFailedUploads()">Retry All Failed Uploads</button>
+</div>
+
+<div class="card library-panel" id="libraryPanel" style="display:none;">
+  <div class="contents-header">
+    <h2 class="contents-title">Library Scan</h2>
+    <span class="summary-inline" id="library-summary"></span>
+  </div>
+  <div id="library-results"></div>
 </div>
 
 <div class="card">
@@ -257,14 +272,46 @@
 <div class="modal-overlay" id="moveModal">
   <div class="modal">
     <button class="modal-close" onclick="closeMoveModal()">&times;</button>
-    <h3>📂 Move File</h3>
+    <h3 id="moveModalTitle">📂 Move File</h3>
     <div class="folder-form">
       <p class="file-info">Moving <strong id="moveItemName"></strong></p>
       <input type="text" id="moveDestPath" class="folder-input" list="moveFolderOptions" placeholder="/Destination/Folder">
       <datalist id="moveFolderOptions"></datalist>
       <input type="hidden" id="moveItemPath">
+      <input type="hidden" id="moveItemsJson">
       <button class="move-btn-confirm" onclick="confirmMove()">Move</button>
       <button class="delete-btn-cancel" onclick="closeMoveModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bulk Rename Modal -->
+<div class="modal-overlay" id="bulkRenameModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeBulkRenameModal()">&times;</button>
+    <h3>✏️ Bulk Rename</h3>
+    <div class="folder-form">
+      <p class="file-info">Renaming <strong id="bulkRenameCount"></strong></p>
+      <input type="text" id="bulkFindText" class="folder-input" placeholder="Find text">
+      <input type="text" id="bulkReplaceText" class="folder-input" placeholder="Replace with">
+      <input type="text" id="bulkPrefixText" class="folder-input" placeholder="Prefix">
+      <input type="text" id="bulkSuffixText" class="folder-input" placeholder="Suffix before extension">
+      <button class="rename-btn-confirm" onclick="confirmBulkRename()">Rename Selected</button>
+      <button class="delete-btn-cancel" onclick="closeBulkRenameModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Shelf Modal -->
+<div class="modal-overlay" id="shelfModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeShelfModal()">&times;</button>
+    <h3>📚 Add To Shelf</h3>
+    <div class="folder-form">
+      <p class="file-info">Moving <strong id="shelfCount"></strong></p>
+      <input type="text" id="shelfName" class="folder-input" placeholder="Shelf name">
+      <button class="move-btn-confirm" onclick="confirmShelfMove()">Move To Shelf</button>
+      <button class="delete-btn-cancel" onclick="closeShelfModal()">Cancel</button>
     </div>
   </div>
 </div>

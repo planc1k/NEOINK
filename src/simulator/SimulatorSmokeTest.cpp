@@ -6,6 +6,7 @@
 #include <Logging.h>
 
 #include <algorithm>
+#include <cstring>
 #include <cstdlib>
 #include <exception>
 #include <memory>
@@ -27,6 +28,8 @@ namespace {
 enum class SmokeStep : uint8_t {
   Start,
   Home,
+  Flashcards,
+  FlashcardInput,
   FileBrowser,
   RecentBooks,
   Settings,
@@ -67,6 +70,7 @@ class SimulatorSmokeTest {
   const char* activeStepName = nullptr;
   std::vector<ScriptAction> inputScript;
   size_t scriptIndex = 0;
+  bool runningFlashcardScript = false;
 
   static bool enabled() { return std::getenv("CROSSINK_SIMULATOR_SMOKE_TEST") != nullptr; }
 
@@ -113,6 +117,23 @@ class SimulatorSmokeTest {
     }
   }
 
+  static void ensureSmokeFlashcardDeck() {
+    Storage.mkdir("/.crosspoint", true);
+    Storage.mkdir("/.crosspoint/flashcards", true);
+    Storage.mkdir("/.crosspoint/flashcards/decks", true);
+
+    FsFile file;
+    if (!Storage.openFileForWrite("SMOKE", "/.crosspoint/flashcards/decks/smoke.tsv", file)) {
+      fail("Failed to write smoke flashcard deck");
+    }
+    const char deck[] = "front\tback\nCapital of France\tParis\n2 + 2\t4\n";
+    if (file.write(deck, std::strlen(deck)) != std::strlen(deck)) {
+      file.close();
+      fail("Failed to write smoke flashcard deck contents");
+    }
+    file.close();
+  }
+
   void queueStep(const char* name, SmokeStep nextStep, int framesToSettle = 3) {
     activeStepName = name;
     settleFrames = framesToSettle;
@@ -146,8 +167,18 @@ class SimulatorSmokeTest {
         break;
 
       case SmokeStep::Home:
-        activityManager.goToFileBrowser("/books");
-        queueStep("File Browser", SmokeStep::FileBrowser);
+        ensureSmokeFlashcardDeck();
+        activityManager.goToFlashcards();
+        queueStep("Flashcards Deck List", SmokeStep::Flashcards);
+        break;
+
+      case SmokeStep::Flashcards:
+        buildFlashcardInputScript();
+        step = SmokeStep::FlashcardInput;
+        break;
+
+      case SmokeStep::FlashcardInput:
+        runInputScript();
         break;
 
       case SmokeStep::FileBrowser:
@@ -198,7 +229,7 @@ class SimulatorSmokeTest {
         break;
 
       case SmokeStep::ReaderInput:
-        runReaderInputScript();
+        runInputScript();
         break;
 
       case SmokeStep::Done:
@@ -225,6 +256,7 @@ class SimulatorSmokeTest {
   void buildReaderInputScript() {
     inputScript.clear();
     scriptIndex = 0;
+    runningFlashcardScript = false;
 
     const int turns = pageTurnCount();
     for (int i = 0; i < turns; i++) {
@@ -256,8 +288,36 @@ class SimulatorSmokeTest {
     LOG_INF("SMOKE", "Running reader input script with %d page turn(s)", turns);
   }
 
-  void runReaderInputScript() {
+  void buildFlashcardInputScript() {
+    inputScript.clear();
+    scriptIndex = 0;
+    runningFlashcardScript = true;
+
+    addTap(MappedInputManager::Button::Confirm);
+    inputScript.push_back(render("Flashcard front", 4));
+
+    addTap(MappedInputManager::Button::Confirm);
+    inputScript.push_back(render("Flashcard back", 4));
+
+    addTap(MappedInputManager::Button::Confirm);
+    inputScript.push_back(render("Flashcard stats", 4));
+
+    addTap(MappedInputManager::Button::Back);
+    inputScript.push_back(render("Flashcard deck list", 4));
+
+    LOG_INF("SMOKE", "Running flashcard input script");
+  }
+
+  void runInputScript() {
     if (scriptIndex >= inputScript.size()) {
+      inputScript.clear();
+      scriptIndex = 0;
+      if (runningFlashcardScript) {
+        runningFlashcardScript = false;
+        activityManager.goToFileBrowser("/books");
+        queueStep("File Browser", SmokeStep::FileBrowser);
+        return;
+      }
       step = SmokeStep::Done;
       return;
     }

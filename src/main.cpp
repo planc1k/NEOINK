@@ -817,7 +817,9 @@ void setup() {
   HalSystem::checkPanic();
 
   SETTINGS.loadFromFile();
+#ifndef SIMULATOR
   Storage.installDateTimeCallback(&SETTINGS.clockUtcOffsetQ);
+#endif
   APP_STATE.loadFromFile();
   RECENT_BOOKS.loadFromFile();
   I18N.setLanguage(static_cast<Language>(SETTINGS.language));

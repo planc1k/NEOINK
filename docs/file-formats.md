@@ -1,9 +1,116 @@
 # File Formats
 
-These formats describe the SD-card cache files under `/.crosspoint/epub_<hash>/`.
+These formats describe the SD-card cache files under `/.crosspoint/epub_<hash>/`
+and selected persistent data under `/.crosspoint/`.
 All POD fields are written in the ESP32 little-endian representation used by
 `Serialization.h`; strings are length-prefixed UTF-8 unless a format notes a
 fixed-size char buffer.
+
+## Flashcard Deck Files
+
+Flashcard decks live in:
+
+```text
+/.crosspoint/flashcards/decks/
+```
+
+Supported deck extensions:
+
+- `.tsv` preferred
+- `.csv` supported
+
+The firmware reads the first two fields as front and back. A first-row header is
+optional. Lines beginning with `#` are ignored.
+
+TSV example:
+
+```text
+front	back
+Term	Definition
+```
+
+CSV example:
+
+```csv
+front,back
+"Term","Definition"
+```
+
+Limits enforced by the loader:
+
+- Max file size: 512 KB
+- Max indexed cards: 300
+- Max front: 512 bytes
+- Max back: 1024 bytes
+
+The flashcard app stores only deck line offsets and card hashes in RAM. It
+reads the current card text from SD when displaying the question/answer.
+
+## `/.crosspoint/flashcards/progress/<deck>.xfc`
+
+### Version 2
+
+Flashcard progress files store session-based scheduling state. They are binary
+files named from a sanitized deck basename and use the `.xfc` extension.
+Version 1 progress files are still accepted. The next successful save writes
+version 2.
+
+Header:
+
+- `[0-3]` magic `XFC1` (`0x31434658` little-endian)
+- `[4-5]` version (`2`)
+- `[6-7]` record count (`uint16_t` LE)
+- `[8-11]` deck hash (`uint32_t` LE)
+- `[12-15]` total reviews (`uint32_t` LE)
+- `[16-17]` current session count (`uint16_t` LE)
+- `[18-19]` lifetime study sessions (`uint16_t` LE)
+- total Again ratings (`uint32_t` LE)
+- total Hard ratings (`uint32_t` LE)
+- total Good ratings (`uint32_t` LE)
+- total Easy ratings (`uint32_t` LE)
+- total lapses (`uint32_t` LE)
+- last studied session (`uint16_t` LE)
+
+Repeated progress record:
+
+- `cardHash` (`uint32_t` LE)
+- `reviewCount` (`uint16_t` LE)
+- `lapseCount` (`uint16_t` LE)
+- `intervalSessions` (`uint16_t` LE)
+- `easePermille` (`uint16_t` LE, default `2500`)
+- `dueSession` (`uint16_t` LE)
+- `lastReviewedSession` (`uint16_t` LE)
+- `againCount` (`uint16_t` LE)
+- `hardCount` (`uint16_t` LE)
+- `goodCount` (`uint16_t` LE)
+- `easyCount` (`uint16_t` LE)
+- `lastRating` (`uint8_t`)
+
+The scheduler is session-based rather than date-based so it works without a
+reliable RTC or network connection.
+
+## Text And Markdown Books
+
+Supported plain-text reader extensions:
+
+- `.txt`
+- `.md`
+- `.markdown`
+
+Markdown files share the TXT reader's streaming cache and progress format, but
+the renderer now strips common Markdown syntax before wrapping lines. Supported
+Markdown readability features include:
+
+- ATX headings (`# Heading`) as heading text
+- unordered, ordered, and task-list markers as plain list rows
+- blockquotes with a leading `>`
+- links and images rendered as their visible text or alt text
+- emphasis, strong, strike, inline-code markers, horizontal rules, and code
+  fences simplified for e-ink reading
+
+CrossInk does not build a full Markdown AST and does not preserve nested inline
+styling, tables, footnotes, embedded HTML, or remote images. This keeps parsing
+streaming-friendly for the ESP32 memory budget.
 
 ## `book.bin`
 

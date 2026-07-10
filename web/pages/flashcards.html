@@ -1,0 +1,51 @@
+<div class="page-header">
+  <div>
+    <h2>Flashcards</h2>
+    <p class="subtle">Manage study decks stored on the SD card.</p>
+  </div>
+  <div class="top-actions">
+    <a class="btn btn-secondary" href="/api/flashcards/export">Export Progress</a>
+    <a class="btn btn-secondary" href="/files?path=%2F.crosspoint%2Fflashcards%2Fdecks">Open Deck Folder</a>
+  </div>
+</div>
+
+<div class="grid">
+  <div class="card">
+    <h2>Decks</h2>
+    <div id="deckList"><p class="empty">Loading...</p></div>
+  </div>
+
+  <div class="card">
+    <h2>Stats</h2>
+    <div id="deckDetail"><p class="empty">Select a deck</p></div>
+  </div>
+
+  <div class="card">
+    <h2>Import</h2>
+    <form id="importForm" class="upload-form">
+      <input type="file" id="deckFile" accept=".csv,.tsv,.apkg" required />
+      <button type="submit" class="btn btn-primary">Convert & Upload</button>
+    </form>
+    <div class="options">
+      <label>
+        <span>Deck name</span>
+        <input type="text" id="deckName" placeholder="Auto from filename" />
+      </label>
+      <label>
+        <span>Card limit</span>
+        <input type="number" id="cardLimit" min="1" max="300" value="300" />
+      </label>
+    </div>
+    <p class="hint">CSV/TSV files upload directly. APKG imports Basic-style notes by using the first field as the front and the second field as the back.</p>
+    <div id="status"></div>
+  </div>
+
+  <div class="card">
+    <h2>Progress Backup</h2>
+    <form id="progressImportForm" class="upload-form">
+      <input type="file" id="progressFile" accept=".json,application/json" required />
+      <button type="submit" class="btn btn-primary">Import Progress</button>
+    </form>
+    <p class="hint">Progress imports merge by matching deck hash and card hash. Deck files are never created or overwritten by a progress import.</p>
+  </div>
+</div>

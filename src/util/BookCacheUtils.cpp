@@ -52,7 +52,7 @@ std::string getBookCachePath(const std::string& path) {
   if (FsHelpers::hasXtcExtension(path)) {
     return Xtc(path, "/.crosspoint").getCachePath();
   }
-  if (FsHelpers::hasTxtExtension(path)) {
+  if (FsHelpers::hasTxtExtension(path) || FsHelpers::hasMarkdownExtension(path)) {
     return Txt(path, "/.crosspoint").getCachePath();
   }
   return "";
@@ -63,7 +63,7 @@ const PreservedCacheFile* preservedFilesForPath(const std::string& path, size_t&
     count = std::size(EPUB_USER_STATE_FILES);
     return EPUB_USER_STATE_FILES;
   }
-  if (FsHelpers::hasXtcExtension(path) || FsHelpers::hasTxtExtension(path)) {
+  if (FsHelpers::hasXtcExtension(path) || FsHelpers::hasTxtExtension(path) || FsHelpers::hasMarkdownExtension(path)) {
     count = std::size(PAGE_PROGRESS_FILES);
     return PAGE_PROGRESS_FILES;
   }
@@ -248,7 +248,7 @@ bool clearBookCacheForPath(const std::string& path) {
   if (FsHelpers::hasXtcExtension(path)) {
     return Xtc(path, "/.crosspoint").clearCache();
   }
-  if (FsHelpers::hasTxtExtension(path)) {
+  if (FsHelpers::hasTxtExtension(path) || FsHelpers::hasMarkdownExtension(path)) {
     return Txt(path, "/.crosspoint").clearCache();
   }
   return false;

@@ -9,6 +9,7 @@
 #include <Utf8.h>
 
 #include <algorithm>
+#include <cctype>
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
@@ -25,13 +26,142 @@ namespace {
 constexpr size_t CHUNK_SIZE = 8 * 1024;  // 8KB chunk for reading
 // Cache file magic and version
 constexpr uint32_t CACHE_MAGIC = 0x54585449;  // "TXTI"
-constexpr uint8_t CACHE_VERSION = 3;          // Increment when cache format changes
+constexpr uint8_t CACHE_VERSION = 4;          // Increment when cache format changes
 constexpr uint32_t MAX_CACHE_PAGES = 65535;   // Sanity cap to prevent unbounded reserve()
+
+bool isMarkdownMarker(const char c) {
+  return c == '*' || c == '_' || c == '~' || c == '`';
+}
+
+std::string trimMarkdownWhitespace(std::string value) {
+  while (!value.empty() && std::isspace(static_cast<unsigned char>(value.back()))) {
+    value.pop_back();
+  }
+  size_t start = 0;
+  while (start < value.size() && std::isspace(static_cast<unsigned char>(value[start]))) {
+    start++;
+  }
+  return start == 0 ? value : value.substr(start);
+}
+
+bool isMarkdownHorizontalRule(const std::string& line) {
+  const std::string trimmed = trimMarkdownWhitespace(line);
+  if (trimmed.size() < 3) return false;
+  const char marker = trimmed[0];
+  if (marker != '-' && marker != '*' && marker != '_') return false;
+  for (const char c : trimmed) {
+    if (c != marker && !std::isspace(static_cast<unsigned char>(c))) return false;
+  }
+  return true;
+}
+
+std::string removeMarkdownInlineMarkup(const std::string& text) {
+  std::string out;
+  out.reserve(text.size());
+
+  for (size_t i = 0; i < text.size(); ++i) {
+    const char c = text[i];
+    if (c == '\\' && i + 1 < text.size()) {
+      out.push_back(text[++i]);
+      continue;
+    }
+
+    if (c == '!' && i + 1 < text.size() && text[i + 1] == '[') {
+      const size_t close = text.find("](", i + 2);
+      const size_t end = close == std::string::npos ? std::string::npos : text.find(')', close + 2);
+      if (close != std::string::npos && end != std::string::npos) {
+        out.append(text, i + 2, close - (i + 2));
+        i = end;
+        continue;
+      }
+    }
+
+    if (c == '[') {
+      const size_t close = text.find("](", i + 1);
+      const size_t end = close == std::string::npos ? std::string::npos : text.find(')', close + 2);
+      if (close != std::string::npos && end != std::string::npos) {
+        out.append(text, i + 1, close - (i + 1));
+        i = end;
+        continue;
+      }
+    }
+
+    if (isMarkdownMarker(c)) {
+      continue;
+    }
+    out.push_back(c);
+  }
+
+  return out;
+}
+
+std::string renderMarkdownSegment(const std::string& line, const size_t start, const size_t end) {
+  if (start >= end) return "";
+
+  std::string segment = line.substr(start, end - start);
+  if (start == 0) {
+    if (isMarkdownHorizontalRule(segment)) return "";
+
+    size_t pos = 0;
+    while (pos < segment.size() && pos < 3 && segment[pos] == ' ') pos++;
+
+    size_t hashes = 0;
+    while (pos + hashes < segment.size() && segment[pos + hashes] == '#') hashes++;
+    if (hashes > 0 && hashes <= 6 && pos + hashes < segment.size() &&
+        std::isspace(static_cast<unsigned char>(segment[pos + hashes]))) {
+      segment = trimMarkdownWhitespace(segment.substr(pos + hashes + 1));
+      return removeMarkdownInlineMarkup(segment);
+    }
+
+    if (pos < segment.size() && segment[pos] == '>') {
+      pos++;
+      while (pos < segment.size() && std::isspace(static_cast<unsigned char>(segment[pos]))) pos++;
+      segment = "> " + segment.substr(pos);
+    } else if (pos + 1 < segment.size() &&
+               (segment[pos] == '-' || segment[pos] == '*' || segment[pos] == '+') &&
+               std::isspace(static_cast<unsigned char>(segment[pos + 1]))) {
+      pos += 2;
+      while (pos + 2 < segment.size() && segment[pos] == '[' && segment[pos + 2] == ']' &&
+             (segment[pos + 1] == ' ' || segment[pos + 1] == 'x' || segment[pos + 1] == 'X')) {
+        pos += 3;
+        while (pos < segment.size() && std::isspace(static_cast<unsigned char>(segment[pos]))) pos++;
+      }
+      segment = "- " + segment.substr(pos);
+    } else {
+      size_t digits = pos;
+      while (digits < segment.size() && std::isdigit(static_cast<unsigned char>(segment[digits]))) digits++;
+      if (digits > pos && digits + 1 < segment.size() && segment[digits] == '.' &&
+          std::isspace(static_cast<unsigned char>(segment[digits + 1]))) {
+        const std::string number = segment.substr(pos, digits - pos);
+        pos = digits + 2;
+        segment = number + ". " + segment.substr(pos);
+      }
+    }
+  }
+
+  return removeMarkdownInlineMarkup(segment);
+}
+
+int markdownTextWidth(GfxRenderer& renderer, const int fontId, const std::string& line, const size_t start,
+                      const size_t end) {
+  const std::string rendered = renderMarkdownSegment(line, start, end);
+  return rendered.empty() ? 0 : renderer.getTextWidth(fontId, rendered.c_str());
+}
+
+void pushWrappedLine(const std::string& line, const size_t start, const size_t end, const bool markdownMode,
+                     std::vector<std::string>& outLines) {
+  if (markdownMode) {
+    outLines.push_back(renderMarkdownSegment(line, start, end));
+  } else {
+    outLines.push_back(line.substr(start, end - start));
+  }
+}
 
 // Parses and word-wraps lines from a file chunk into outLines.
 // Returns the number of bytes consumed from the start of buffer.
 size_t parseAndWrapLines(const uint8_t* buffer, size_t chunkSize, size_t fileOffset, size_t fileSize, int linesPerPage,
-                         GfxRenderer& renderer, int fontId, int vw, std::vector<std::string>& outLines) {
+                         GfxRenderer& renderer, int fontId, int vw, std::vector<std::string>& outLines,
+                         bool markdownMode) {
   size_t pos = 0;
   while (pos < chunkSize && static_cast<int>(outLines.size()) < linesPerPage) {
     size_t lineEnd = pos;
@@ -51,34 +181,38 @@ size_t parseAndWrapLines(const uint8_t* buffer, size_t chunkSize, size_t fileOff
         break;
       }
 
-      if (renderer.getTextWidth(fontId, line.c_str()) <= vw) {
-        outLines.push_back(line);
+      const int fullWidth =
+          markdownMode ? markdownTextWidth(renderer, fontId, line, lineBytePos, line.length())
+                       : renderer.getTextWidth(fontId, line.substr(lineBytePos).c_str());
+      if (fullWidth <= vw) {
+        pushWrappedLine(line, lineBytePos, line.length(), markdownMode, outLines);
         lineBytePos = displayLen;
-        line.clear();
         break;
       }
       size_t breakPos = line.length();
-      while (breakPos > 0 && renderer.getTextWidth(fontId, line.substr(0, breakPos).c_str()) > vw) {
+      while (breakPos > lineBytePos &&
+             (markdownMode ? markdownTextWidth(renderer, fontId, line, lineBytePos, breakPos)
+                           : renderer.getTextWidth(fontId, line.substr(lineBytePos, breakPos - lineBytePos).c_str())) >
+                 vw) {
         size_t spacePos = line.rfind(' ', breakPos - 1);
-        if (spacePos != std::string::npos && spacePos > 0) {
+        if (spacePos != std::string::npos && spacePos > lineBytePos) {
           breakPos = spacePos;
         } else {
           breakPos--;
-          while (breakPos > 0 && (line[breakPos] & 0xC0) == 0x80) breakPos--;
+          while (breakPos > lineBytePos && (line[breakPos] & 0xC0) == 0x80) breakPos--;
         }
       }
-      if (breakPos == 0) {
-        breakPos = 1;
+      if (breakPos <= lineBytePos) {
+        breakPos = lineBytePos + 1;
         while (breakPos < line.length() && (line[breakPos] & 0xC0) == 0x80) breakPos++;
       }
-      outLines.push_back(line.substr(0, breakPos));
-      size_t skipChars = breakPos;
+      pushWrappedLine(line, lineBytePos, breakPos, markdownMode, outLines);
+      size_t skipChars = breakPos - lineBytePos;
       if (breakPos < line.length() && line[breakPos] == ' ') skipChars++;
       lineBytePos += skipChars;
-      line = line.substr(skipChars);
-    } while (!line.empty() && static_cast<int>(outLines.size()) < linesPerPage);
+    } while (lineBytePos < displayLen && static_cast<int>(outLines.size()) < linesPerPage);
 
-    if (line.empty()) {
+    if (lineBytePos >= displayLen) {
       pos = lineEnd + 1;
     } else {
       pos = pos + lineBytePos;
@@ -488,7 +622,7 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
   }
 
   size_t pos = parseAndWrapLines(buffer, chunkSize, offset, fileSize, linesPerPage, renderer, cachedFontId,
-                                 viewportWidth, outLines);
+                                 viewportWidth, outLines, txt->isMarkdown());
   nextOffset = offset + pos;
   if (nextOffset > fileSize) {
     nextOffset = fileSize;
@@ -916,7 +1050,8 @@ bool TxtReaderActivity::drawCurrentPageToBuffer(const std::string& filePath, Gfx
   }
   buffer[chunkSize] = '\0';
 
-  parseAndWrapLines(buffer, chunkSize, offset, fileSize, linesPerPage, renderer, fontId, vw, pageLines);
+  parseAndWrapLines(buffer, chunkSize, offset, fileSize, linesPerPage, renderer, fontId, vw, pageLines,
+                    txt.isMarkdown());
   free(buffer);
 
   if (pageLines.empty()) return false;

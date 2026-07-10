@@ -96,7 +96,18 @@ class CrossPointWebServer {
   void handleNotFound() const;
   void handleStatus() const;
   void handleFileList() const;
+  void handleFlashcardsPage() const;
+  void handleFlashcardDecks() const;
+  void handleFlashcardDeckDetail() const;
+  void handleFlashcardExport() const;
+  void handleFlashcardImport();
+  void handleFlashcardReset();
+  void handleFlashcardDelete();
+  void handleFlashcardRename();
   void handleFileListData() const;
+  void handleLibraryScan() const;
+  void handleLibraryEnsureFolder();
+  void handleLibraryBulkMove();
   void handleDownload() const;
   void handleUpload(UploadState& state) const;
   void handleUploadPost(UploadState& state) const;

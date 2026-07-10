@@ -28,6 +28,9 @@ The main data directory is `.crosspoint` on the SD card. It stores render caches
 ├── koreader.json           # KOReader sync credentials
 ├── bookmarks/              # Bookmark files, one per book
 ├── clippings/              # EPUB clipping/highlight files, one per book
+├── flashcards/
+│   ├── decks/              # User flashcard decks (.tsv preferred, .csv supported)
+│   └── progress/           # Binary flashcard progress files
 ├── home_carousel_cache.bin # Lyra Carousel home-screen snapshot cache
 ├── sleep_frame.bin         # Temporary sleep overlay framebuffer, when used
 ├── epub_12471232/          # Each EPUB is cached to epub_<hash>
@@ -71,6 +74,11 @@ removes the in-app saved clipping but does not rewrite old text already exported
 to `/My Clippings.txt`.
 
 Cache data is cleared by supported CrossInk delete/move flows. If you remove or rename books outside CrossInk by editing the SD card directly, old cache folders may remain until you clear reading cache.
+
+Flashcard decks live under `/.crosspoint/flashcards/decks/`, while progress
+lives under `/.crosspoint/flashcards/progress/`. The web file manager exposes
+only the deck folder as a managed upload target. Do not edit progress files by
+hand unless you are intentionally resetting deck scheduling.
 
 All-time reading stats can also be backed up outside `.crosspoint` in:
 

@@ -22,14 +22,15 @@ Only the smallest point sizes.
 
 ### `tiny`
 
-No 18 pt or 20 pt font size. This is the preferred general-purpose build.
+Omits the two smallest and three largest built-in font sizes. This is the
+preferred general-purpose build because it keeps more flash headroom for
+features such as the Flashcards app and web UI.
 
 - Emoji and miscellaneous-symbol support
-- 4 font sizes:
+- 3 font sizes:
   - 10 pt
   - 12 pt
   - 14 pt
-  - 16 pt
 
 ### `xlarge`
 

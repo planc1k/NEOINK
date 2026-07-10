@@ -9,8 +9,10 @@ The web server is available while the device is in **File Transfer** or
 **Calibre Wireless** mode. It can:
 
 - Upload, download, rename, move, and delete files on the SD card
+- Scan book metadata and duplicate candidates
 - Create folders
 - Edit many device settings from a browser
+- Manage and import flashcard decks
 - Manage saved Wi-Fi networks and OPDS servers
 - Upload and delete `.cpfont` SD-card font families
 - Accept WebDAV clients and Calibre wireless uploads
@@ -72,7 +74,7 @@ OPDS server.
 
 ## Web Interface
 
-The browser UI has four primary pages.
+The browser UI has five primary pages.
 
 ### Home
 
@@ -89,12 +91,31 @@ The File Manager page can:
 - Create folders
 - Download files
 - Rename files
-- Move files into existing folders
+- Move files into folders, including auto-created Read, Unread, and Collections shelves
+- Bulk move and bulk rename selected files
+- Scan author/title metadata and duplicate candidates for the current folder tree
 - Delete one or more selected files or empty folders
 
 Existing files with the same name are overwritten by uploads. When EPUB files
-are overwritten, moved, renamed, or deleted through the web server, the matching
-book cache is cleared so stale metadata is not reused.
+are overwritten or deleted through the web server, the matching book cache is
+cleared so stale metadata is not reused. Rename and move operations migrate the
+known EPUB, XTC, TXT, and Markdown cache path where possible so reading progress
+survives ordinary library organization.
+
+Library organization uses normal SD-card folders:
+
+- `/Read`
+- `/Unread`
+- `/Collections/<shelf name>`
+
+Duplicate detection is intentionally lightweight: the scan groups books by
+normalized title/filename plus file size. It is meant to find likely duplicates
+without hashing every file on the ESP32.
+
+The File Manager keeps most dot-prefixed system folders hidden. The managed
+flashcard deck folder is the exception: `/.crosspoint/flashcards/decks/` can be
+opened from the Flashcards page so decks can be uploaded without exposing the
+rest of `.crosspoint`.
 
 #### EPUB Optimization
 
@@ -122,6 +143,27 @@ cards for:
 
 Passwords are accepted when adding or editing entries, but saved passwords are
 not returned by the API.
+
+### Flashcards
+
+The Flashcards page lists installed decks and shows total, new, due, reviewed,
+retention, rating, lapse, session, and compact per-card progress stats. It can
+upload `.csv` and `.tsv` decks directly.
+
+It can also import `.apkg` files in the browser. APKG conversion is not done on
+the reader itself; the browser extracts the Anki SQLite collection, converts
+Basic-style front/back notes to TSV, and uploads the generated deck to:
+
+```text
+/.crosspoint/flashcards/decks/
+```
+
+See [Flashcards](./flashcards.md) for file format details, APKG limits, and the
+on-device study workflow.
+
+Progress can be exported as JSON and imported into another device. Import
+matches by deck hash and card hash, then merges only progress records for cards
+that already exist in the local deck. It never creates or overwrites deck files.
 
 ### Fonts
 
@@ -160,6 +202,7 @@ Endpoint details are documented in [webserver-endpoints.md](./webserver-endpoint
 ## Related Documentation
 
 - [User Guide](../USER_GUIDE.md)
+- [Flashcards](./flashcards.md)
 - [Webserver Endpoints](./webserver-endpoints.md)
 - [SD Card Fonts](./sd-card-fonts.md)
 - [Troubleshooting](./troubleshooting.md)

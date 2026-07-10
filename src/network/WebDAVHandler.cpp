@@ -18,11 +18,25 @@
 namespace {
 constexpr const char* HIDDEN_ITEMS[] = {"System Volume Information", "XTCache"};
 constexpr size_t HIDDEN_ITEM_COUNT = sizeof(HIDDEN_ITEMS) / sizeof(HIDDEN_ITEMS[0]);
+constexpr char FLASHCARD_ROOT_DIR[] = "/.crosspoint";
+constexpr char FLASHCARD_DIR[] = "/.crosspoint/flashcards";
+constexpr char FLASHCARD_DECKS_DIR[] = "/.crosspoint/flashcards/decks";
 
 bool isProtectedPathSegment(const char* name) {
   return (!SETTINGS.showHiddenFiles && name[0] == '.') ||
          std::any_of(HIDDEN_ITEMS, HIDDEN_ITEMS + HIDDEN_ITEM_COUNT,
                      [name](const char* item) { return strcmp(name, item) == 0; });
+}
+
+bool isFlashcardDecksPath(const String& path) {
+  return path == FLASHCARD_DECKS_DIR || path.startsWith(String(FLASHCARD_DECKS_DIR) + "/");
+}
+
+bool ensureFlashcardDecksDir() {
+  if (!Storage.exists(FLASHCARD_ROOT_DIR) && !Storage.mkdir(FLASHCARD_ROOT_DIR)) return false;
+  if (!Storage.exists(FLASHCARD_DIR) && !Storage.mkdir(FLASHCARD_DIR)) return false;
+  if (!Storage.exists(FLASHCARD_DECKS_DIR) && !Storage.mkdir(FLASHCARD_DECKS_DIR)) return false;
+  return Storage.exists(FLASHCARD_DECKS_DIR);
 }
 
 // RFC 1123 date format helper: "Sun, 06 Nov 1994 08:49:37 GMT"
@@ -64,6 +78,10 @@ void WebDAVHandler::raw(WebServer& server, const String& uri, HTTPRaw& raw) {
   if (raw.status == RAW_START) {
     _putPath = getRequestPath(server);
     if (isProtectedPath(_putPath)) {
+      _putOk = false;
+      return;
+    }
+    if (isFlashcardDecksPath(_putPath) && !ensureFlashcardDecksDir()) {
       _putOk = false;
       return;
     }
@@ -193,8 +211,12 @@ void WebDAVHandler::handlePropfind(WebServer& s) {
 
   // Check if path exists
   if (!Storage.exists(path.c_str()) && path != "/") {
+    if (isFlashcardDecksPath(path) && ensureFlashcardDecksDir()) {
+      // Continue below with the newly created managed deck directory.
+    } else {
     s.send(404, "text/plain", "Not Found");
     return;
+    }
   }
 
   HalFile root = Storage.open(path.c_str());
@@ -403,6 +425,10 @@ void WebDAVHandler::handleDelete(WebServer& s) {
     s.send(403, "text/plain", "Cannot delete root");
     return;
   }
+  if (path == FLASHCARD_DECKS_DIR) {
+    s.send(403, "text/plain", "Cannot delete managed deck folder");
+    return;
+  }
 
   if (isProtectedPath(path)) {
     s.send(403, "text/plain", "Forbidden");
@@ -497,6 +523,10 @@ void WebDAVHandler::handleMove(WebServer& s) {
 
   if (srcPath == "/" || srcPath.isEmpty()) {
     s.send(403, "text/plain", "Cannot move root");
+    return;
+  }
+  if (srcPath == FLASHCARD_DECKS_DIR) {
+    s.send(403, "text/plain", "Cannot move managed deck folder");
     return;
   }
 
@@ -770,6 +800,10 @@ void WebDAVHandler::urlEncodePath(const String& path, String& out) const {
 }
 
 bool WebDAVHandler::isProtectedPath(const String& path) const {
+  if (isFlashcardDecksPath(path)) {
+    return false;
+  }
+
   // Check every segment of the path, not just the last one.
   // This prevents access to e.g. /.hidden/somefile or /System Volume Information/foo
   int start = 0;
@@ -808,7 +842,7 @@ bool WebDAVHandler::getOverwrite(WebServer& s) const {
 String WebDAVHandler::getMimeType(const String& path) const {
   if (FsHelpers::hasEpubExtension(path)) return "application/epub+zip";
   if (FsHelpers::checkFileExtension(path, ".pdf")) return "application/pdf";
-  if (FsHelpers::hasTxtExtension(path)) return "text/plain";
+  if (FsHelpers::hasTxtExtension(path) || FsHelpers::hasMarkdownExtension(path)) return "text/plain";
   if (FsHelpers::checkFileExtension(path, ".html") || FsHelpers::checkFileExtension(path, ".htm")) return "text/html";
   if (FsHelpers::checkFileExtension(path, ".css")) return "text/css";
   if (FsHelpers::checkFileExtension(path, ".js")) return "application/javascript";

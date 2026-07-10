@@ -115,7 +115,9 @@ bool hasXtcExtension(std::string_view fileName) {
 
 bool hasTxtExtension(std::string_view fileName) { return checkFileExtension(fileName, ".txt"); }
 
-bool hasMarkdownExtension(std::string_view fileName) { return checkFileExtension(fileName, ".md"); }
+bool hasMarkdownExtension(std::string_view fileName) {
+  return checkFileExtension(fileName, ".md") || checkFileExtension(fileName, ".markdown");
+}
 
 bool hasCssExtension(std::string_view fileName) { return checkFileExtension(fileName, ".css"); }
 

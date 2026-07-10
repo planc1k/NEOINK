@@ -17,6 +17,7 @@ the IP address shown on the device screen.
 |--------|------|---------|
 | `GET` | `/` | Home/status page |
 | `GET` | `/files` | File manager page |
+| `GET` | `/flashcards` | Flashcard deck manager/import page |
 | `GET` | `/settings` | Web settings page |
 | `GET` | `/fonts` | SD-card font manager page |
 | `GET` | `/js/jszip.min.js` | JavaScript asset used by the file manager |
@@ -80,6 +81,8 @@ Response:
 
 Hidden dotfiles are omitted unless the device setting `showHiddenFiles` is
 enabled. `System Volume Information` and `XTCache` are always hidden/protected.
+The managed flashcard deck folder, `/.crosspoint/flashcards/decks`, is allowed
+so decks can be uploaded without exposing the rest of `.crosspoint`.
 
 ### `GET /download`
 
@@ -124,6 +127,7 @@ Notes:
 - Existing files with the same name are overwritten.
 - EPUB cache data for the uploaded path is cleared after a successful upload.
 - HTTP upload uses a 4 KB write buffer before flushing to the SD card.
+- Flashcard decks can be uploaded to `/.crosspoint/flashcards/decks`.
 
 ### `POST /mkdir`
 
@@ -155,12 +159,13 @@ Form parameters:
 | `path` | Yes | Existing file path |
 | `name` | Yes | New file name, not a path |
 
-Only files can be renamed through this endpoint. The old EPUB cache path is
-cleared before the rename.
+Only files can be renamed through this endpoint. Known EPUB, XTC, TXT, and
+Markdown cache paths are migrated to the new path where possible.
 
 ### `POST /move`
 
-Moves a file into an existing folder.
+Moves a file into a folder. Missing destination folders are created, and name
+collisions are auto-renamed with a numeric suffix.
 
 ```bash
 curl -X POST -d "path=/Books/mybook.epub&dest=/Read" http://crosspoint.local/move
@@ -171,10 +176,54 @@ Form parameters:
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `path` | Yes | Existing file path |
-| `dest` | Yes | Existing destination folder |
+| `dest` | Yes | Destination folder |
 
-Only files can be moved through this endpoint. The old EPUB cache path is
-cleared before the move.
+Only files can be moved through this endpoint. Known EPUB, XTC, TXT, and
+Markdown cache paths are migrated to the new path where possible.
+
+### `GET /api/library/scan`
+
+Scans the selected folder tree for supported book files and returns cheap
+metadata plus duplicate grouping keys.
+
+```bash
+curl "http://crosspoint.local/api/library/scan?path=/Books"
+```
+
+Response fields:
+
+| Field | Description |
+|-------|-------------|
+| `root` | Scanned root path |
+| `limit` | Maximum number of book files returned |
+| `count` | Number of book files included |
+| `truncated` | True if the scan hit the safety limit |
+| `items[]` | Book entries |
+
+Each item includes `path`, `name`, `folder`, `type`, `title`, `author`, `size`,
+`readState`, and `duplicateKey`. Duplicate keys are normalized title-or-filename
+plus file size; they are a fast hint, not a cryptographic hash.
+
+### `POST /api/library/ensure-folder`
+
+Creates a folder path, including missing parent folders.
+
+```bash
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"path":"/Collections/Essays"}' \
+  http://crosspoint.local/api/library/ensure-folder
+```
+
+### `POST /api/library/bulk-move`
+
+Moves multiple selected files. Missing destination folders are created. When
+`renameCollisions` is true, existing target names get numeric suffixes.
+
+```bash
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"dest":"/Read","paths":["/Books/A.md","/Books/B.epub"],"renameCollisions":true}' \
+  http://crosspoint.local/api/library/bulk-move
+```
 
 ### `POST /delete`
 
@@ -194,6 +243,106 @@ Form parameters:
 
 Protected items cannot be deleted. Non-empty folders are rejected. EPUB cache
 data for deleted files is cleared.
+
+The managed flashcard deck folder itself cannot be deleted through the web API,
+but deck files inside it can be deleted.
+
+## Flashcards
+
+### `GET /flashcards`
+
+Serves the Flashcards web page. The page can upload CSV/TSV decks and convert
+Basic-style APKG notes to a generated TSV deck in the browser before upload.
+
+### `GET /api/flashcards/decks`
+
+Returns deck summaries from `/.crosspoint/flashcards/decks`.
+
+```bash
+curl http://crosspoint.local/api/flashcards/decks
+```
+
+Response:
+
+```json
+[
+  {
+    "path": "/.crosspoint/flashcards/decks/spanish.tsv",
+    "title": "spanish",
+    "valid": true,
+    "totalCards": 120,
+    "newCards": 42,
+    "dueCards": 18
+  }
+]
+```
+
+Invalid decks are returned with `valid: false` and an `error` field.
+
+### `GET /api/flashcards/deck`
+
+Returns detailed stats and compact per-card progress for one deck.
+
+```bash
+curl "http://crosspoint.local/api/flashcards/deck?path=/.crosspoint/flashcards/decks/spanish.tsv"
+```
+
+### `GET /api/flashcards/export`
+
+Exports flashcard progress as JSON. Without a `path` query parameter, all local
+deck progress is exported.
+
+```bash
+curl -OJ http://crosspoint.local/api/flashcards/export
+curl -OJ "http://crosspoint.local/api/flashcards/export?path=/.crosspoint/flashcards/decks/spanish.tsv"
+```
+
+The export contains progress only. It does not contain deck text.
+
+### `POST /api/flashcards/import`
+
+Imports a JSON progress backup produced by `/api/flashcards/export`.
+
+```bash
+curl -X POST \
+  -H "Content-Type: application/json" \
+  --data-binary @crossink-flashcards-progress.json \
+  http://crosspoint.local/api/flashcards/import
+```
+
+Import matches by deck hash and card hash. Decks whose content hash does not
+match a local deck are skipped. Deck files are never created or overwritten.
+
+### `POST /api/flashcards/reset`
+
+Deletes the progress file for one deck.
+
+```bash
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"path":"/.crosspoint/flashcards/decks/spanish.tsv"}' \
+  http://crosspoint.local/api/flashcards/reset
+```
+
+### `POST /api/flashcards/delete`
+
+Deletes one deck and, by default, its progress file.
+
+```bash
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"path":"/.crosspoint/flashcards/decks/spanish.tsv","deleteProgress":true}' \
+  http://crosspoint.local/api/flashcards/delete
+```
+
+### `POST /api/flashcards/rename`
+
+Renames one deck and moves its progress file to the new deck-derived progress
+filename.
+
+```bash
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"path":"/.crosspoint/flashcards/decks/spanish.tsv","name":"spanish-core"}' \
+  http://crosspoint.local/api/flashcards/rename
+```
 
 ## Settings API
 

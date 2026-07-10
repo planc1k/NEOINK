@@ -104,6 +104,8 @@
           if (overlay.id === 'deleteModal') return closeDeleteModal();
           if (overlay.id === 'renameModal') return closeRenameModal();
           if (overlay.id === 'moveModal') return closeMoveModal();
+          if (overlay.id === 'bulkRenameModal') return closeBulkRenameModal();
+          if (overlay.id === 'shelfModal') return closeShelfModal();
           overlay.classList.remove('open');
         }
       });
@@ -1091,6 +1093,110 @@
       });
     });
     return items;
+  }
+
+  function getSelectedFiles() {
+    return getSelectedItems().filter(item => !item.isFolder);
+  }
+
+  async function scanLibrary() {
+    const panel = document.getElementById('libraryPanel');
+    const summary = document.getElementById('library-summary');
+    const results = document.getElementById('library-results');
+    panel.style.display = 'block';
+    summary.textContent = 'Scanning...';
+    results.innerHTML = '<div class="loader-container"><span class="loader"></span></div>';
+
+    try {
+      const response = await fetch('/api/library/scan?path=' + encodeURIComponent(currentPath) + '&_=' + Date.now());
+      if (!response.ok) throw new Error(await response.text());
+      const data = await response.json();
+      const items = data.items || [];
+      const duplicates = new Map();
+      const typeCounts = {};
+      let readCount = 0;
+      let unreadCount = 0;
+      let unknownCount = 0;
+      items.forEach(item => {
+        typeCounts[item.type] = (typeCounts[item.type] || 0) + 1;
+        if (item.readState === 'read') readCount++;
+        else if (item.readState === 'unread') unreadCount++;
+        else unknownCount++;
+        if (!duplicates.has(item.duplicateKey)) duplicates.set(item.duplicateKey, []);
+        duplicates.get(item.duplicateKey).push(item);
+      });
+      const duplicateGroups = Array.from(duplicates.values()).filter(group => group.length > 1);
+      summary.textContent = `${items.length} books${data.truncated ? ' (limited)' : ''}, ${duplicateGroups.length} duplicate group${duplicateGroups.length === 1 ? '' : 's'}`;
+
+      const statsHtml = `
+        <div class="library-tools-grid">
+          <div class="library-stat"><div class="library-stat-label">Books</div><div class="library-stat-value">${items.length}</div></div>
+          <div class="library-stat"><div class="library-stat-label">Read</div><div class="library-stat-value">${readCount}</div></div>
+          <div class="library-stat"><div class="library-stat-label">Unread</div><div class="library-stat-value">${unreadCount}</div></div>
+          <div class="library-stat"><div class="library-stat-label">Unsorted</div><div class="library-stat-value">${unknownCount}</div></div>
+        </div>`;
+
+      const duplicateHtml = duplicateGroups.length === 0 ? '' : `
+        <div class="library-duplicates">
+          ${duplicateGroups.map(group => `
+            <div class="library-duplicate-group">
+              <div class="library-duplicate-title">${escapeHtml(group[0].title || group[0].name)} (${group.length})</div>
+              ${group.map(item => `<div class="library-duplicate-path">${escapeHtml(item.path)} · ${formatFileSize(item.size)}</div>`).join('')}
+            </div>
+          `).join('')}
+        </div>`;
+
+      const rows = items.slice(0, 80).map(item => `
+        <tr>
+          <td>${escapeHtml(item.title || item.name)}${item.author ? '<br><span class="summary-inline">' + escapeHtml(item.author) + '</span>' : ''}</td>
+          <td>${escapeHtml((item.type || '').toUpperCase())}</td>
+          <td><span class="state-badge ${escapeHtml(item.readState || 'unknown')}">${escapeHtml(item.readState || 'unknown')}</span></td>
+          <td>${formatFileSize(item.size || 0)}</td>
+          <td class="library-duplicate-path">${escapeHtml(item.path)}</td>
+        </tr>
+      `).join('');
+      const tableHtml = items.length === 0 ? '<div class="no-files">No supported books found in this folder tree</div>' : `
+        <table class="library-table">
+          <tr><th>Title</th><th>Type</th><th>State</th><th>Size</th><th>Path</th></tr>
+          ${rows}
+        </table>`;
+      results.innerHTML = statsHtml + duplicateHtml + tableHtml;
+    } catch (e) {
+      console.error(e);
+      summary.textContent = 'Scan failed';
+      results.innerHTML = '<div class="no-files">Library scan failed</div>';
+    }
+  }
+
+  async function postBulkMove(paths, dest) {
+    const response = await fetch('/api/library/bulk-move', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paths, dest, renameCollisions: true })
+    });
+    const data = await response.json().catch(() => ({ ok: false, failed: [{ error: response.statusText }] }));
+    if (!response.ok && response.status !== 207) {
+      throw new Error(data.error || response.statusText);
+    }
+    if (data.failed && data.failed.length > 0) {
+      const shown = data.failed.slice(0, 4).map(item => `${item.path}: ${item.error}`).join('\n');
+      throw new Error(shown + (data.failed.length > 4 ? `\n...and ${data.failed.length - 4} more` : ''));
+    }
+    return data;
+  }
+
+  async function moveSelectedTo(dest) {
+    const items = getSelectedFiles();
+    if (items.length === 0) {
+      alert('Please select at least one file to move.');
+      return;
+    }
+    try {
+      await postBulkMove(items.map(item => item.path), dest);
+      window.location.reload();
+    } catch (e) {
+      alert('Failed to move selected files:\n' + e.message);
+    }
   }
 
   // Open delete modal for currently selected checkboxes
@@ -3797,6 +3903,9 @@ function retryAllFailedUploads() {
   async function loadMoveFolderOptions() {
     const options = new Set();
     options.add('/');
+    options.add('/Read');
+    options.add('/Unread');
+    options.add('/Collections');
     const parent = getParentPath(currentPath);
     if (parent) options.add(parent);
 
@@ -3839,9 +3948,29 @@ function retryAllFailedUploads() {
   }
 
   function openMoveModal(name, path) {
+    document.getElementById('moveModalTitle').textContent = '📂 Move File';
     document.getElementById('moveItemName').textContent = '📄 ' + name;
     document.getElementById('moveItemPath').value = path;
+    document.getElementById('moveItemsJson').value = '';
     document.getElementById('moveDestPath').value = currentPath === '/' ? '/' : currentPath;
+    document.getElementById('moveModal').classList.add('open');
+    loadMoveFolderOptions();
+    setTimeout(() => {
+      document.getElementById('moveDestPath').focus();
+    }, 50);
+  }
+
+  function openMoveSelectedModal() {
+    const items = getSelectedFiles();
+    if (items.length === 0) {
+      alert('Please select at least one file to move.');
+      return;
+    }
+    document.getElementById('moveModalTitle').textContent = '📂 Move Selected';
+    document.getElementById('moveItemName').textContent = `${items.length} file${items.length === 1 ? '' : 's'}`;
+    document.getElementById('moveItemPath').value = '';
+    document.getElementById('moveItemsJson').value = JSON.stringify(items.map(item => item.path));
+    document.getElementById('moveDestPath').value = currentPath === '/' ? '/Read' : currentPath;
     document.getElementById('moveModal').classList.add('open');
     loadMoveFolderOptions();
     setTimeout(() => {
@@ -3853,12 +3982,25 @@ function retryAllFailedUploads() {
     document.getElementById('moveModal').classList.remove('open');
   }
 
-  function confirmMove() {
+  async function confirmMove() {
     const path = document.getElementById('moveItemPath').value;
+    const pathsJson = document.getElementById('moveItemsJson').value;
     const destPath = normalizePath(document.getElementById('moveDestPath').value);
 
     if (!destPath) {
       alert('Please enter a destination folder.');
+      return;
+    }
+
+    if (pathsJson) {
+      try {
+        const paths = JSON.parse(pathsJson);
+        await postBulkMove(paths, destPath);
+        window.location.reload();
+      } catch (e) {
+        alert('Failed to move selected files:\n' + e.message);
+        closeMoveModal();
+      }
       return;
     }
 
@@ -3884,5 +4026,93 @@ function retryAllFailedUploads() {
     };
 
     xhr.send(formData);
+  }
+
+  function splitNameExtension(name) {
+    const idx = name.lastIndexOf('.');
+    if (idx <= 0) return { stem: name, ext: '' };
+    return { stem: name.slice(0, idx), ext: name.slice(idx) };
+  }
+
+  function openBulkRenameModal() {
+    const items = getSelectedFiles();
+    if (items.length === 0) {
+      alert('Please select at least one file to rename.');
+      return;
+    }
+    document.getElementById('bulkRenameCount').textContent = `${items.length} file${items.length === 1 ? '' : 's'}`;
+    document.getElementById('bulkFindText').value = '';
+    document.getElementById('bulkReplaceText').value = '';
+    document.getElementById('bulkPrefixText').value = '';
+    document.getElementById('bulkSuffixText').value = '';
+    document.getElementById('bulkRenameModal').classList.add('open');
+    setTimeout(() => document.getElementById('bulkFindText').focus(), 50);
+  }
+
+  function closeBulkRenameModal() {
+    document.getElementById('bulkRenameModal').classList.remove('open');
+  }
+
+  async function confirmBulkRename() {
+    const items = getSelectedFiles();
+    const findText = document.getElementById('bulkFindText').value;
+    const replaceText = document.getElementById('bulkReplaceText').value;
+    const prefix = document.getElementById('bulkPrefixText').value;
+    const suffix = document.getElementById('bulkSuffixText').value;
+    if (!findText && !prefix && !suffix) {
+      alert('Add find text, a prefix, or a suffix.');
+      return;
+    }
+
+    const failed = [];
+    for (const item of items) {
+      const currentName = item.path.split('/').pop();
+      const parts = splitNameExtension(currentName);
+      const replacedStem = findText ? parts.stem.replaceAll(findText, replaceText) : parts.stem;
+      const newName = `${prefix}${replacedStem}${suffix}${parts.ext}`;
+      if (!newName || newName === currentName || newName.includes('/') || newName.includes('\\')) continue;
+
+      const formData = new FormData();
+      formData.append('path', item.path);
+      formData.append('name', newName);
+      try {
+        const response = await fetch('/rename', { method: 'POST', body: formData });
+        if (!response.ok) failed.push(`${item.path}: ${await response.text()}`);
+      } catch (_) {
+        failed.push(`${item.path}: network error`);
+      }
+    }
+
+    if (failed.length > 0) {
+      alert('Failed to rename some files:\n' + failed.slice(0, 5).join('\n'));
+      closeBulkRenameModal();
+      return;
+    }
+    window.location.reload();
+  }
+
+  function openShelfModal() {
+    const items = getSelectedFiles();
+    if (items.length === 0) {
+      alert('Please select at least one file to shelve.');
+      return;
+    }
+    document.getElementById('shelfCount').textContent = `${items.length} file${items.length === 1 ? '' : 's'}`;
+    document.getElementById('shelfName').value = '';
+    document.getElementById('shelfModal').classList.add('open');
+    setTimeout(() => document.getElementById('shelfName').focus(), 50);
+  }
+
+  function closeShelfModal() {
+    document.getElementById('shelfModal').classList.remove('open');
+  }
+
+  async function confirmShelfMove() {
+    const shelfName = document.getElementById('shelfName').value.trim();
+    if (!/^(?!\.{1,2}$)[^"*:<>?\/\\|]+$/.test(shelfName)) {
+      alert('Shelf name cannot contain \" * : < > ? / \\ | and must not be . or ..');
+      return;
+    }
+    await moveSelectedTo('/Collections/' + shelfName);
   }
   hydrate();

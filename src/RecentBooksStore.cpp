@@ -6,6 +6,7 @@
 #include <JsonSettingsIO.h>
 #include <Logging.h>
 #include <Serialization.h>
+#include <Txt.h>
 #include <Xtc.h>
 
 #include <algorithm>
@@ -130,6 +131,10 @@ RecentBook RecentBooksStore::getDataFromBook(std::string path) const {
       return RecentBook{path, xtc.getTitle(), xtc.getAuthor(), xtc.getThumbBmpPath()};
     }
   } else if (FsHelpers::hasTxtExtension(lastBookFileName) || FsHelpers::hasMarkdownExtension(lastBookFileName)) {
+    Txt txt(path, "/.crosspoint");
+    if (txt.load()) {
+      return RecentBook{path, txt.getTitle(), "", ""};
+    }
     return RecentBook{path, lastBookFileName, "", ""};
   }
   return RecentBook{path, "", "", ""};

@@ -1,0 +1,10 @@
+front,back
+"What does ESP32 stand for?","Espressif Systems' 32-bit microcontroller family."
+"Where do CrossInk flashcard decks go?","/.crosspoint/flashcards/decks on the SD card."
+"Which file format is preferred for flashcards?","TSV is preferred, but CSV is accepted for compatibility."
+"What should a deck avoid?","Very large files, huge card text, and unnecessary media."
+"What does the Good rating do?","It schedules the card farther out than Again, but less aggressively than Easy."
+"What is tracked per card?","Review count, lapses, ease, interval sessions, due session, and last rating."
+"Comma test","This answer contains commas, quotes, and normal CSV escaping."
+"Quote test","Use two quotes inside quoted CSV fields, like ""CrossInk""."
+"Longer prompt","Explain one limitation of this first flashcard version."

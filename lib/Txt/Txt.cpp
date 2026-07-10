@@ -4,6 +4,40 @@
 #include <JpegToBmpConverter.h>
 #include <Logging.h>
 
+#include <algorithm>
+#include <cctype>
+
+namespace {
+std::string trimMarkdownTitle(std::string line) {
+  while (!line.empty() && (line.back() == '\r' || line.back() == '\n' ||
+                           std::isspace(static_cast<unsigned char>(line.back())))) {
+    line.pop_back();
+  }
+  size_t start = 0;
+  while (start < line.size() && std::isspace(static_cast<unsigned char>(line[start]))) {
+    start++;
+  }
+  if (start > 0) {
+    line.erase(0, start);
+  }
+  return line;
+}
+
+std::string filenameWithoutKnownExtension(const std::string& path) {
+  const size_t lastSlash = path.find_last_of('/');
+  std::string filename = (lastSlash != std::string::npos) ? path.substr(lastSlash + 1) : path;
+
+  if (FsHelpers::hasMarkdownExtension(filename)) {
+    const size_t dot = filename.find_last_of('.');
+    return dot == std::string::npos ? filename : filename.substr(0, dot);
+  }
+  if (FsHelpers::hasTxtExtension(filename)) {
+    return filename.substr(0, filename.length() - 4);
+  }
+  return filename;
+}
+}  // namespace
+
 Txt::Txt(std::string path, std::string cacheBasePath)
     : filepath(std::move(path)), cacheBasePath(std::move(cacheBasePath)) {
   // Generate cache path from file path hash
@@ -36,17 +70,41 @@ bool Txt::load() {
 }
 
 std::string Txt::getTitle() const {
-  // Extract filename without path and extension
-  size_t lastSlash = filepath.find_last_of('/');
-  std::string filename = (lastSlash != std::string::npos) ? filepath.substr(lastSlash + 1) : filepath;
+  if (isMarkdown()) {
+    HalFile file;
+    if (Storage.openFileForRead("TXT", filepath, file)) {
+      std::string line;
+      line.reserve(160);
+      int linesSeen = 0;
+      while (file.available() && linesSeen < 60) {
+        line.clear();
+        while (file.available()) {
+          const int c = file.read();
+          if (c < 0 || c == '\n') break;
+          if (line.size() < 160) line.push_back(static_cast<char>(c));
+        }
+        linesSeen++;
 
-  // Remove .txt extension
-  if (FsHelpers::hasTxtExtension(filename)) {
-    filename = filename.substr(0, filename.length() - 4);
+        std::string trimmed = trimMarkdownTitle(line);
+        size_t hashes = 0;
+        while (hashes < trimmed.size() && trimmed[hashes] == '#') hashes++;
+        if (hashes > 0 && hashes <= 6 && hashes < trimmed.size() &&
+            std::isspace(static_cast<unsigned char>(trimmed[hashes]))) {
+          std::string title = trimMarkdownTitle(trimmed.substr(hashes + 1));
+          if (!title.empty()) {
+            file.close();
+            return title;
+          }
+        }
+      }
+      file.close();
+    }
   }
 
-  return filename;
+  return filenameWithoutKnownExtension(filepath);
 }
+
+bool Txt::isMarkdown() const { return FsHelpers::hasMarkdownExtension(filepath); }
 
 void Txt::setupCacheDir() const {
   if (!Storage.exists(cacheBasePath.c_str())) {

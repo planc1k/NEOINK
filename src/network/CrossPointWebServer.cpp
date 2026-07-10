@@ -9,27 +9,35 @@
 #include <HalGPIO.h>
 #include <HalStorage.h>
 #include <Logging.h>
+#include <Txt.h>
 #include <WiFi.h>
+#include <Xtc.h>
 #include <esp_task_wdt.h>
 
 #include <algorithm>
+#include <cctype>
 #include <iterator>
 
 #include "AppVersion.h"
 #include "CrossPointSettings.h"
+#include "CrossPointState.h"
+#include "flashcards/FlashcardDeck.h"
 #include "FontInstaller.h"
 #include "OpdsServerStore.h"
+#include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
 #include "SettingsList.h"
 #include "WebDAVHandler.h"
 #include "WifiCredentialStore.h"
 #include "html/FilesPageHtml.generated.h"
+#include "html/FlashcardsPageHtml.generated.h"
 #include "html/FontsPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
 #include "html/LogoPng.generated.h"
 #include "html/SettingsPageHtml.generated.h"
 #include "html/StyleCss.generated.h"
 #include "html/js/jszip_minJs.generated.h"
+#include "util/BookMoveUtils.h"
 #include "util/BookCacheUtils.h"
 #include "util/StringUtils.h"
 
@@ -37,6 +45,11 @@ namespace {
 // Folders/files to hide from the web interface file browser.
 // Dot-prefixed items are hidden unless showHiddenFiles is enabled.
 constexpr const char* HIDDEN_ITEMS[] = {"System Volume Information", "XTCache"};
+constexpr char FLASHCARD_ROOT_DIR[] = "/.crosspoint";
+constexpr char FLASHCARD_DIR[] = "/.crosspoint/flashcards";
+constexpr char FLASHCARD_DECKS_DIR[] = "/.crosspoint/flashcards/decks";
+constexpr size_t FLASHCARD_IMPORT_MAX_BYTES = 48U * 1024U;
+constexpr size_t LIBRARY_SCAN_MAX_FILES = 800U;
 constexpr uint16_t UDP_PORTS[] = {54982, 48123, 39001, 44044, 59678};
 constexpr uint16_t LOCAL_UDP_PORT = 8134;
 
@@ -98,6 +111,10 @@ String normalizeWebPath(const String& inputPath) {
 }
 
 bool isProtectedPath(const String& path) {
+  if (path == FLASHCARD_DECKS_DIR || path.startsWith(String(FLASHCARD_DECKS_DIR) + "/")) {
+    return false;
+  }
+
   // Check every segment of the path, not just the last one.
   // This prevents access to e.g. /.hidden/somefile or /System Volume Information/foo
   int start = 0;
@@ -121,6 +138,262 @@ bool isProtectedPath(const String& path) {
   }
 
   return false;
+}
+
+bool ensureFlashcardDecksDir() {
+  if (!Storage.exists(FLASHCARD_ROOT_DIR) && !Storage.mkdir(FLASHCARD_ROOT_DIR)) return false;
+  if (!Storage.exists(FLASHCARD_DIR) && !Storage.mkdir(FLASHCARD_DIR)) return false;
+  if (!Storage.exists(FLASHCARD_DECKS_DIR) && !Storage.mkdir(FLASHCARD_DECKS_DIR)) return false;
+  return Storage.exists(FLASHCARD_DECKS_DIR);
+}
+
+bool isFlashcardDecksPath(const String& path) {
+  return path == FLASHCARD_DECKS_DIR || path.startsWith(String(FLASHCARD_DECKS_DIR) + "/");
+}
+
+bool isFlashcardDeckFilePath(const String& path) {
+  if (!isFlashcardDecksPath(path) || path == FLASHCARD_DECKS_DIR) return false;
+  return FsHelpers::checkFileExtension(path, ".tsv") || FsHelpers::checkFileExtension(path, ".csv");
+}
+
+bool isLibraryBookFile(const String& path) {
+  return FsHelpers::hasEpubExtension(path) || FsHelpers::hasXtcExtension(path) || FsHelpers::hasTxtExtension(path) ||
+         FsHelpers::hasMarkdownExtension(path);
+}
+
+String parentPathOf(const String& path) {
+  const int slash = path.lastIndexOf('/');
+  if (slash <= 0) return "/";
+  return path.substring(0, slash);
+}
+
+String fileNameOf(const String& path) {
+  const int slash = path.lastIndexOf('/');
+  return slash < 0 ? path : path.substring(slash + 1);
+}
+
+String extensionOf(const String& name) {
+  const int dot = name.lastIndexOf('.');
+  return dot < 0 ? "" : name.substring(dot);
+}
+
+String baseNameWithoutExtension(const String& name) {
+  const int dot = name.lastIndexOf('.');
+  return dot < 0 ? name : name.substring(0, dot);
+}
+
+String normalizedDuplicateKey(const String& title, const String& name, const size_t size) {
+  String basis = title.isEmpty() ? baseNameWithoutExtension(name) : title;
+  basis.toLowerCase();
+  String normalized;
+  normalized.reserve(basis.length() + 16);
+  for (size_t i = 0; i < basis.length(); ++i) {
+    const char c = basis.charAt(i);
+    if (std::isalnum(static_cast<unsigned char>(c))) {
+      normalized += c;
+    }
+  }
+  normalized += ":";
+  normalized += String(static_cast<unsigned long>(size));
+  return normalized;
+}
+
+const char* readStateForPath(const String& path) {
+  if (path == "/Read" || path.startsWith("/Read/")) return "read";
+  if (path == "/Unread" || path.startsWith("/Unread/")) return "unread";
+  return "unknown";
+}
+
+std::string cachePathForBookPath(const String& path) {
+  const std::string p = path.c_str();
+  if (FsHelpers::hasEpubExtension(p)) return Epub::cachePathForFilePath(p, "/.crosspoint");
+  if (FsHelpers::hasXtcExtension(p)) return Xtc(p, "/.crosspoint").getCachePath();
+  if (FsHelpers::hasTxtExtension(p) || FsHelpers::hasMarkdownExtension(p)) return Txt(p, "/.crosspoint").getCachePath();
+  return "";
+}
+
+bool ensureDirectoryPath(const String& rawPath) {
+  const String path = normalizeWebPath(rawPath);
+  if (path.isEmpty() || path == "/") return true;
+  if (isProtectedPath(path)) return false;
+
+  String partial = "";
+  int start = 1;
+  while (start <= static_cast<int>(path.length())) {
+    int slash = path.indexOf('/', start);
+    if (slash < 0) slash = path.length();
+    const String segment = path.substring(start, slash);
+    if (!segment.isEmpty()) {
+      const String sanitized = StringUtils::sanitizeFilename(segment.c_str()).c_str();
+      if (sanitized != segment) {
+        return false;
+      }
+      partial += "/";
+      partial += segment;
+      if (!Storage.exists(partial.c_str()) && !Storage.mkdir(partial.c_str())) {
+        return false;
+      }
+      HalFile dir = Storage.open(partial.c_str());
+      if (!dir || !dir.isDirectory()) {
+        if (dir) dir.close();
+        return false;
+      }
+      dir.close();
+    }
+    start = slash + 1;
+    if (slash == static_cast<int>(path.length())) break;
+  }
+  return true;
+}
+
+String uniqueDestinationPath(const String& destinationDir, const String& itemName) {
+  String path = destinationDir;
+  if (!path.endsWith("/")) path += "/";
+  path += itemName;
+  if (!Storage.exists(path.c_str())) return path;
+
+  const String base = baseNameWithoutExtension(itemName);
+  const String ext = extensionOf(itemName);
+  for (int suffix = 2; suffix < 1000; ++suffix) {
+    String candidate = destinationDir;
+    if (!candidate.endsWith("/")) candidate += "/";
+    candidate += base;
+    candidate += " (";
+    candidate += suffix;
+    candidate += ")";
+    candidate += ext;
+    if (!Storage.exists(candidate.c_str())) return candidate;
+  }
+  return "";
+}
+
+bool migrateMovedBookState(const String& oldPath, const String& newPath) {
+  const std::string oldPathStd = oldPath.c_str();
+  const std::string newPathStd = newPath.c_str();
+  if (FsHelpers::hasEpubExtension(oldPathStd)) {
+    Epub epub(oldPathStd, "/.crosspoint");
+    epub.load(false, true);
+    return BookMoveUtils::migrateMovedEpubState(oldPathStd, newPathStd, epub.getCachePath(), epub.getTitle(),
+                                                epub.getAuthor(), true);
+  }
+
+  const std::string oldCache = cachePathForBookPath(oldPath);
+  const std::string newCache = cachePathForBookPath(newPath);
+  bool ok = true;
+  if (!oldCache.empty() && !newCache.empty() && Storage.exists(oldCache.c_str())) {
+    if (Storage.exists(newCache.c_str())) Storage.removeDir(newCache.c_str());
+    if (!Storage.rename(oldCache.c_str(), newCache.c_str())) {
+      LOG_ERR("WEB", "Failed to migrate cache dir %s -> %s", oldCache.c_str(), newCache.c_str());
+      ok = false;
+    }
+  }
+  RECENT_BOOKS.updatePath(oldPathStd, newPathStd, oldCache, newCache);
+  if (APP_STATE.openEpubPath == oldPathStd) {
+    APP_STATE.openEpubPath = newPathStd;
+    APP_STATE.saveToFile();
+  }
+  return ok;
+}
+
+bool moveLibraryFile(const String& itemPath, const String& destinationDir, const bool renameCollisions, String& newPath,
+                     String& error) {
+  if (itemPath.isEmpty() || itemPath == "/" || destinationDir.isEmpty()) {
+    error = "Invalid path";
+    return false;
+  }
+  if (isProtectedPath(itemPath) || isProtectedPath(destinationDir)) {
+    error = "Protected path";
+    return false;
+  }
+  if (!Storage.exists(itemPath.c_str())) {
+    error = "Item not found";
+    return false;
+  }
+  if (!ensureDirectoryPath(destinationDir)) {
+    error = "Could not create destination";
+    return false;
+  }
+
+  HalFile file = Storage.open(itemPath.c_str());
+  if (!file || file.isDirectory()) {
+    if (file) file.close();
+    error = "Only files can be moved";
+    return false;
+  }
+
+  newPath = renameCollisions ? uniqueDestinationPath(destinationDir, fileNameOf(itemPath)) : destinationDir;
+  if (!renameCollisions) {
+    if (!newPath.endsWith("/")) newPath += "/";
+    newPath += fileNameOf(itemPath);
+    if (Storage.exists(newPath.c_str())) {
+      file.close();
+      error = "Target already exists";
+      return false;
+    }
+  }
+  if (newPath.isEmpty() || newPath == itemPath) {
+    file.close();
+    error = newPath == itemPath ? "Already in destination" : "No available destination name";
+    return newPath == itemPath;
+  }
+
+  const bool success = file.rename(newPath.c_str());
+  file.close();
+  if (!success) {
+    error = "Move failed";
+    return false;
+  }
+  migrateMovedBookState(itemPath, newPath);
+  return true;
+}
+
+String normalizeFlashcardDeckPathArg(WebServer* server) {
+  if (server == nullptr || !server->hasArg("path")) return "";
+  const String path = normalizeWebPath(server->arg("path"));
+  return isFlashcardDeckFilePath(path) ? path : "";
+}
+
+String flashcardDeckPathForName(const String& rawName, const char* fallbackExt = ".tsv") {
+  String name = StringUtils::sanitizeFilename(rawName.c_str()).c_str();
+  if (name.isEmpty()) return "";
+  if (!FsHelpers::checkFileExtension(name, ".tsv") && !FsHelpers::checkFileExtension(name, ".csv")) {
+    name += fallbackExt;
+  }
+  String path = FLASHCARD_DECKS_DIR;
+  path += "/";
+  path += name;
+  return isFlashcardDeckFilePath(path) ? path : "";
+}
+
+String jsonBody(WebServer* server) {
+  if (server == nullptr) return "";
+  if (server->hasArg("plain")) return server->arg("plain");
+  return "";
+}
+
+void addFlashcardSummaryJson(JsonDocument& doc, const flashcards::DeckSummary& summary) {
+  doc["path"] = summary.path;
+  doc["title"] = summary.title;
+  doc["valid"] = summary.valid;
+  doc["totalCards"] = summary.totalCards;
+  doc["newCards"] = summary.newCards;
+  doc["dueCards"] = summary.dueCards;
+  doc["reviewedCards"] = summary.reviewedCards;
+  doc["learningCards"] = summary.learningCards;
+  doc["matureCards"] = summary.matureCards;
+  doc["totalReviews"] = summary.totalReviews;
+  doc["totalAgain"] = summary.totalAgain;
+  doc["totalHard"] = summary.totalHard;
+  doc["totalGood"] = summary.totalGood;
+  doc["totalEasy"] = summary.totalEasy;
+  doc["totalLapses"] = summary.totalLapses;
+  doc["sessionCount"] = summary.sessionCount;
+  doc["totalSessions"] = summary.totalSessions;
+  doc["lastStudiedSession"] = summary.lastStudiedSession;
+  doc["retentionPermille"] = summary.retentionPermille;
+  if (!summary.error.empty()) {
+    doc["error"] = summary.error;
+  }
 }
 }  // namespace
 
@@ -178,12 +451,23 @@ void CrossPointWebServer::begin() {
   LOG_DBG("WEB", "Setting up routes...");
   server->on("/", HTTP_GET, [this] { handleRoot(); });
   server->on("/files", HTTP_GET, [this] { handleFileList(); });
+  server->on("/flashcards", HTTP_GET, [this] { handleFlashcardsPage(); });
   server->on("/js/jszip.min.js", HTTP_GET, [this] { handleJszip(); });
   server->on("/style.css", HTTP_GET, [this] { handleStyleCss(); });
   server->on("/logo.png", HTTP_GET, [this] { handleLogo(); });
 
   server->on("/api/status", HTTP_GET, [this] { handleStatus(); });
   server->on("/api/files", HTTP_GET, [this] { handleFileListData(); });
+  server->on("/api/library/scan", HTTP_GET, [this] { handleLibraryScan(); });
+  server->on("/api/library/ensure-folder", HTTP_POST, [this] { handleLibraryEnsureFolder(); });
+  server->on("/api/library/bulk-move", HTTP_POST, [this] { handleLibraryBulkMove(); });
+  server->on("/api/flashcards/decks", HTTP_GET, [this] { handleFlashcardDecks(); });
+  server->on("/api/flashcards/deck", HTTP_GET, [this] { handleFlashcardDeckDetail(); });
+  server->on("/api/flashcards/export", HTTP_GET, [this] { handleFlashcardExport(); });
+  server->on("/api/flashcards/import", HTTP_POST, [this] { handleFlashcardImport(); });
+  server->on("/api/flashcards/reset", HTTP_POST, [this] { handleFlashcardReset(); });
+  server->on("/api/flashcards/delete", HTTP_POST, [this] { handleFlashcardDelete(); });
+  server->on("/api/flashcards/rename", HTTP_POST, [this] { handleFlashcardRename(); });
   server->on("/download", HTTP_GET, [this] { handleDownload(); });
 
   // Upload endpoint with special handling for multipart form data
@@ -500,6 +784,419 @@ void CrossPointWebServer::handleFileList() const {
   sendHtmlContent(server.get(), FilesPageHtml, sizeof(FilesPageHtml));
 }
 
+void CrossPointWebServer::handleFlashcardsPage() const {
+  sendHtmlContent(server.get(), FlashcardsPageHtml, sizeof(FlashcardsPageHtml));
+}
+
+void CrossPointWebServer::handleFlashcardDecks() const {
+  flashcards::ensureDirectories();
+
+  server->setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server->send(200, "application/json", "");
+  server->sendContent("[");
+
+  char output[512];
+  constexpr size_t outputSize = sizeof(output);
+  JsonDocument doc;
+  bool seenFirst = false;
+
+  for (const std::string& path : flashcards::scanDeckFiles()) {
+    const flashcards::DeckSummary summary = flashcards::summarizeDeck(path);
+    doc.clear();
+    addFlashcardSummaryJson(doc, summary);
+
+    const size_t written = serializeJson(doc, output, outputSize);
+    if (written >= outputSize) {
+      LOG_DBG("WEB", "Skipping oversized flashcard deck JSON for: %s", path.c_str());
+      continue;
+    }
+
+    if (seenFirst) {
+      server->sendContent(",");
+    } else {
+      seenFirst = true;
+    }
+    server->sendContent(output);
+  }
+
+  server->sendContent("]");
+  server->sendContent("");
+}
+
+void CrossPointWebServer::handleFlashcardDeckDetail() const {
+  const String path = normalizeFlashcardDeckPathArg(server.get());
+  if (path.isEmpty()) {
+    server->send(400, "application/json", "{\"error\":\"Invalid deck path\"}");
+    return;
+  }
+
+  flashcards::Deck deck;
+  std::string error;
+  const bool valid = flashcards::loadDeck(path.c_str(), deck, &error);
+  if (valid) {
+    flashcards::loadProgress(deck, nullptr);
+  }
+  const flashcards::DeckSummary summary = flashcards::summarizeDeck(path.c_str());
+
+  server->setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server->send(200, "application/json", "");
+  server->sendContent("{\"summary\":");
+
+  char output[768];
+  JsonDocument doc;
+  doc.clear();
+  addFlashcardSummaryJson(doc, summary);
+  serializeJson(doc, output, sizeof(output));
+  server->sendContent(output);
+
+  server->sendContent(",\"cards\":[");
+  if (valid) {
+    bool seenFirst = false;
+    for (size_t i = 0; i < deck.cardRefs.size(); ++i) {
+      flashcards::Card card;
+      if (!flashcards::loadCard(deck, i, card, nullptr)) continue;
+      const flashcards::ProgressRecord* record = flashcards::findProgress(deck, card.hash);
+      doc.clear();
+      doc["hash"] = card.hash;
+      doc["front"] = card.front;
+      if (record != nullptr) {
+        doc["reviewCount"] = record->reviewCount;
+        doc["lapseCount"] = record->lapseCount;
+        doc["intervalSessions"] = record->intervalSessions;
+        doc["easePermille"] = record->easePermille;
+        doc["dueSession"] = record->dueSession;
+        doc["lastReviewedSession"] = record->lastReviewedSession;
+        doc["lastRating"] = record->lastRating;
+        doc["againCount"] = record->againCount;
+        doc["hardCount"] = record->hardCount;
+        doc["goodCount"] = record->goodCount;
+        doc["easyCount"] = record->easyCount;
+      } else {
+        doc["reviewCount"] = 0;
+      }
+      const size_t written = serializeJson(doc, output, sizeof(output));
+      if (written >= sizeof(output)) continue;
+      if (seenFirst) {
+        server->sendContent(",");
+      } else {
+        seenFirst = true;
+      }
+      server->sendContent(output);
+      yield();
+      esp_task_wdt_reset();
+    }
+  }
+  server->sendContent("]}");
+  server->sendContent("");
+}
+
+void CrossPointWebServer::handleFlashcardExport() const {
+  flashcards::ensureDirectories();
+  const bool singleDeck = server->hasArg("path");
+  const String requestedPath = singleDeck ? normalizeFlashcardDeckPathArg(server.get()) : "";
+  if (singleDeck && requestedPath.isEmpty()) {
+    server->send(400, "application/json", "{\"error\":\"Invalid deck path\"}");
+    return;
+  }
+
+  server->sendHeader("Content-Disposition", "attachment; filename=\"crossink-flashcards-progress.json\"");
+  server->setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server->send(200, "application/json", "");
+  server->sendContent("{\"version\":1,\"format\":\"crossink-flashcards-progress\",\"decks\":[");
+
+  std::vector<std::string> paths;
+  if (singleDeck) {
+    paths.push_back(requestedPath.c_str());
+  } else {
+    paths = flashcards::scanDeckFiles();
+  }
+
+  JsonDocument doc;
+  char output[768];
+  bool seenDeck = false;
+  for (const std::string& path : paths) {
+    flashcards::Deck deck;
+    std::string error;
+    if (!flashcards::loadDeck(path, deck, &error)) continue;
+    flashcards::loadProgress(deck, nullptr);
+
+    if (seenDeck) {
+      server->sendContent(",");
+    } else {
+      seenDeck = true;
+    }
+
+    doc.clear();
+    doc["path"] = deck.path;
+    doc["title"] = deck.title;
+    doc["deckHash"] = deck.deckHash;
+    doc["totalReviews"] = deck.totalReviews;
+    doc["totalAgain"] = deck.totalAgain;
+    doc["totalHard"] = deck.totalHard;
+    doc["totalGood"] = deck.totalGood;
+    doc["totalEasy"] = deck.totalEasy;
+    doc["totalLapses"] = deck.totalLapses;
+    doc["sessionCount"] = deck.sessionCount;
+    doc["totalSessions"] = deck.totalSessions;
+    doc["lastStudiedSession"] = deck.lastStudiedSession;
+    serializeJson(doc, output, sizeof(output));
+    server->sendContent(output);
+    server->sendContent(",\"records\":[");
+
+    bool seenRecord = false;
+    for (const flashcards::ProgressRecord& record : deck.progress) {
+      doc.clear();
+      doc["cardHash"] = record.cardHash;
+      doc["reviewCount"] = record.reviewCount;
+      doc["lapseCount"] = record.lapseCount;
+      doc["intervalSessions"] = record.intervalSessions;
+      doc["easePermille"] = record.easePermille;
+      doc["dueSession"] = record.dueSession;
+      doc["lastReviewedSession"] = record.lastReviewedSession;
+      doc["lastRating"] = record.lastRating;
+      doc["againCount"] = record.againCount;
+      doc["hardCount"] = record.hardCount;
+      doc["goodCount"] = record.goodCount;
+      doc["easyCount"] = record.easyCount;
+      const size_t written = serializeJson(doc, output, sizeof(output));
+      if (written >= sizeof(output)) continue;
+      if (seenRecord) {
+        server->sendContent(",");
+      } else {
+        seenRecord = true;
+      }
+      server->sendContent(output);
+    }
+    server->sendContent("]}");
+    yield();
+    esp_task_wdt_reset();
+  }
+
+  server->sendContent("]}");
+  server->sendContent("");
+}
+
+void CrossPointWebServer::handleFlashcardImport() {
+  const String body = jsonBody(server.get());
+  if (body.isEmpty()) {
+    server->send(400, "application/json", "{\"error\":\"Missing JSON body\"}");
+    return;
+  }
+  if (body.length() > static_cast<int>(FLASHCARD_IMPORT_MAX_BYTES)) {
+    server->send(413, "application/json", "{\"error\":\"Import is too large\"}");
+    return;
+  }
+
+  JsonDocument doc;
+  const DeserializationError err = deserializeJson(doc, body);
+  if (err) {
+    server->send(400, "application/json", String("{\"error\":\"Invalid JSON: ") + err.c_str() + "\"}");
+    return;
+  }
+
+  JsonArray decksJson = doc["decks"].as<JsonArray>();
+  if (decksJson.isNull()) {
+    server->send(400, "application/json", "{\"error\":\"Missing decks array\"}");
+    return;
+  }
+
+  int mergedDecks = 0;
+  int mergedRecords = 0;
+  int skippedDecks = 0;
+  const std::vector<std::string> localPaths = flashcards::scanDeckFiles();
+
+  for (JsonObject importedDeck : decksJson) {
+    const uint32_t importedDeckHash = importedDeck["deckHash"] | 0UL;
+    if (importedDeckHash == 0) {
+      skippedDecks++;
+      continue;
+    }
+
+    flashcards::Deck deck;
+    bool found = false;
+    for (const std::string& path : localPaths) {
+      std::string error;
+      if (!flashcards::loadDeck(path, deck, &error)) continue;
+      if (deck.deckHash == importedDeckHash) {
+        flashcards::loadProgress(deck, nullptr);
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      skippedDecks++;
+      continue;
+    }
+
+    JsonArray records = importedDeck["records"].as<JsonArray>();
+    if (records.isNull()) {
+      skippedDecks++;
+      continue;
+    }
+
+    for (JsonObject importedRecord : records) {
+      const uint32_t cardHash = importedRecord["cardHash"] | 0UL;
+      if (cardHash == 0 || flashcards::findProgress(deck, cardHash) == nullptr) {
+        bool cardExists = false;
+        for (const flashcards::CardRef& card : deck.cardRefs) {
+          if (card.hash == cardHash) {
+            cardExists = true;
+            break;
+          }
+        }
+        if (!cardExists) continue;
+      }
+
+      flashcards::ProgressRecord& local = flashcards::findOrCreateProgress(deck, cardHash);
+      const uint16_t importedReviewCount = importedRecord["reviewCount"] | 0;
+      const uint16_t importedLastReviewed = importedRecord["lastReviewedSession"] | 0;
+      const bool shouldMerge = importedReviewCount > local.reviewCount ||
+                               (importedReviewCount == local.reviewCount &&
+                                importedLastReviewed > local.lastReviewedSession);
+      if (!shouldMerge) continue;
+
+      local.reviewCount = importedReviewCount;
+      local.lapseCount = importedRecord["lapseCount"] | 0;
+      local.intervalSessions = importedRecord["intervalSessions"] | 0;
+      local.easePermille = importedRecord["easePermille"] | 2500;
+      local.dueSession = importedRecord["dueSession"] | 0;
+      local.lastReviewedSession = importedLastReviewed;
+      local.lastRating = importedRecord["lastRating"] | 0;
+      local.againCount = importedRecord["againCount"] | 0;
+      local.hardCount = importedRecord["hardCount"] | 0;
+      local.goodCount = importedRecord["goodCount"] | 0;
+      local.easyCount = importedRecord["easyCount"] | 0;
+      mergedRecords++;
+    }
+
+    deck.totalReviews = std::max<uint32_t>(deck.totalReviews, importedDeck["totalReviews"] | 0UL);
+    deck.totalAgain = std::max<uint32_t>(deck.totalAgain, importedDeck["totalAgain"] | 0UL);
+    deck.totalHard = std::max<uint32_t>(deck.totalHard, importedDeck["totalHard"] | 0UL);
+    deck.totalGood = std::max<uint32_t>(deck.totalGood, importedDeck["totalGood"] | 0UL);
+    deck.totalEasy = std::max<uint32_t>(deck.totalEasy, importedDeck["totalEasy"] | 0UL);
+    deck.totalLapses = std::max<uint32_t>(deck.totalLapses, importedDeck["totalLapses"] | 0UL);
+    deck.sessionCount = std::max<uint16_t>(deck.sessionCount, importedDeck["sessionCount"] | 0);
+    deck.totalSessions = std::max<uint16_t>(deck.totalSessions, importedDeck["totalSessions"] | 0);
+    deck.lastStudiedSession = std::max<uint16_t>(deck.lastStudiedSession, importedDeck["lastStudiedSession"] | 0);
+    flashcards::saveProgress(deck);
+    mergedDecks++;
+  }
+
+  JsonDocument out;
+  out["ok"] = true;
+  out["mergedDecks"] = mergedDecks;
+  out["mergedRecords"] = mergedRecords;
+  out["skippedDecks"] = skippedDecks;
+  String json;
+  serializeJson(out, json);
+  server->send(200, "application/json", json);
+}
+
+void CrossPointWebServer::handleFlashcardReset() {
+  const String body = jsonBody(server.get());
+  JsonDocument doc;
+  if (!body.isEmpty() && deserializeJson(doc, body)) {
+    server->send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+    return;
+  }
+  const String path = normalizeWebPath(doc["path"] | "");
+  if (!isFlashcardDeckFilePath(path)) {
+    server->send(400, "application/json", "{\"error\":\"Invalid deck path\"}");
+    return;
+  }
+  const std::string progressPath = flashcards::progressPathForDeck(path.c_str());
+  if (Storage.exists(progressPath.c_str())) {
+    Storage.remove(progressPath.c_str());
+  }
+  server->send(200, "application/json", "{\"ok\":true}");
+}
+
+void CrossPointWebServer::handleFlashcardDelete() {
+  const String body = jsonBody(server.get());
+  JsonDocument doc;
+  if (body.isEmpty() || deserializeJson(doc, body)) {
+    server->send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+    return;
+  }
+  const String path = normalizeWebPath(doc["path"] | "");
+  if (!isFlashcardDeckFilePath(path)) {
+    server->send(400, "application/json", "{\"error\":\"Invalid deck path\"}");
+    return;
+  }
+  const bool deleteProgress = doc["deleteProgress"] | true;
+  if (deleteProgress) {
+    const std::string progressPath = flashcards::progressPathForDeck(path.c_str());
+    if (Storage.exists(progressPath.c_str())) {
+      Storage.remove(progressPath.c_str());
+    }
+  }
+  if (Storage.exists(path.c_str()) && !Storage.remove(path.c_str())) {
+    server->send(500, "application/json", "{\"error\":\"Failed to delete deck\"}");
+    return;
+  }
+  server->send(200, "application/json", "{\"ok\":true}");
+}
+
+void CrossPointWebServer::handleFlashcardRename() {
+  const String body = jsonBody(server.get());
+  JsonDocument doc;
+  if (body.isEmpty() || deserializeJson(doc, body)) {
+    server->send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+    return;
+  }
+
+  const String oldPath = normalizeWebPath(doc["path"] | "");
+  if (!isFlashcardDeckFilePath(oldPath)) {
+    server->send(400, "application/json", "{\"error\":\"Invalid deck path\"}");
+    return;
+  }
+  if (!Storage.exists(oldPath.c_str())) {
+    server->send(404, "application/json", "{\"error\":\"Deck not found\"}");
+    return;
+  }
+
+  const char* fallbackExt = FsHelpers::checkFileExtension(oldPath, ".csv") ? ".csv" : ".tsv";
+  const String newPath = flashcardDeckPathForName(doc["name"] | "", fallbackExt);
+  if (newPath.isEmpty()) {
+    server->send(400, "application/json", "{\"error\":\"Invalid deck name\"}");
+    return;
+  }
+  if (newPath == oldPath) {
+    server->send(200, "application/json", "{\"ok\":true}");
+    return;
+  }
+  if (Storage.exists(newPath.c_str())) {
+    server->send(409, "application/json", "{\"error\":\"Target deck already exists\"}");
+    return;
+  }
+
+  HalFile file = Storage.open(oldPath.c_str());
+  if (!file) {
+    server->send(500, "application/json", "{\"error\":\"Failed to open deck\"}");
+    return;
+  }
+  const bool renamed = file.rename(newPath.c_str());
+  file.close();
+  if (!renamed) {
+    server->send(500, "application/json", "{\"error\":\"Failed to rename deck\"}");
+    return;
+  }
+
+  const std::string oldProgress = flashcards::progressPathForDeck(oldPath.c_str());
+  const std::string newProgress = flashcards::progressPathForDeck(newPath.c_str());
+  if (Storage.exists(oldProgress.c_str())) {
+    if (Storage.exists(newProgress.c_str())) Storage.remove(newProgress.c_str());
+    Storage.rename(oldProgress.c_str(), newProgress.c_str());
+  }
+
+  JsonDocument out;
+  out["ok"] = true;
+  out["path"] = newPath;
+  String json;
+  serializeJson(out, json);
+  server->send(200, "application/json", json);
+}
+
 void CrossPointWebServer::handleFileListData() const {
   // Get current path from query string (default to root)
   String currentPath = "/";
@@ -509,6 +1206,10 @@ void CrossPointWebServer::handleFileListData() const {
 
   if (isProtectedPath(currentPath)) {
     server->send(403, "application/json", "[]");
+    return;
+  }
+  if (isFlashcardDecksPath(currentPath) && !ensureFlashcardDecksDir()) {
+    server->send(500, "application/json", "[]");
     return;
   }
 
@@ -545,6 +1246,201 @@ void CrossPointWebServer::handleFileListData() const {
   // End of streamed response, empty chunk to signal client
   server->sendContent("");
   LOG_DBG("WEB", "Served file listing page for path: %s", currentPath.c_str());
+}
+
+void CrossPointWebServer::handleLibraryScan() const {
+  String rootPath = "/";
+  if (server->hasArg("path")) {
+    rootPath = normalizeWebPath(server->arg("path"));
+  }
+  if (isProtectedPath(rootPath)) {
+    server->send(403, "application/json", "{\"error\":\"Protected path\"}");
+    return;
+  }
+
+  server->setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server->send(200, "application/json", "");
+  JsonDocument head;
+  head["root"] = rootPath;
+  head["limit"] = LIBRARY_SCAN_MAX_FILES;
+  String headJson;
+  serializeJson(head, headJson);
+  if (headJson.endsWith("}")) {
+    headJson.remove(headJson.length() - 1);
+  }
+  server->sendContent(headJson);
+  server->sendContent(",\"items\":[");
+
+  bool seenFirst = false;
+  size_t scanned = 0;
+  char output[768];
+  JsonDocument doc;
+
+  std::function<void(String, uint8_t)> scanDir = [&](String dirPath, uint8_t depth) {
+    if (scanned >= LIBRARY_SCAN_MAX_FILES || depth > 8) return;
+    HalFile dir = Storage.open(dirPath.c_str());
+    if (!dir || !dir.isDirectory()) {
+      if (dir) dir.close();
+      return;
+    }
+
+    char name[256];
+    for (HalFile file = dir.openNextFile(); file && scanned < LIBRARY_SCAN_MAX_FILES; file = dir.openNextFile()) {
+      const bool isDir = file.isDirectory();
+      file.getName(name, sizeof(name));
+      String childPath = dirPath;
+      if (!childPath.endsWith("/")) childPath += "/";
+      childPath += name;
+
+      if (!isProtectedPath(childPath)) {
+        if (isDir) {
+          file.close();
+          scanDir(childPath, depth + 1);
+          yield();
+          esp_task_wdt_reset();
+          continue;
+        }
+
+        if (isLibraryBookFile(childPath)) {
+          const size_t size = file.size();
+          const String fileName = name;
+          String title = baseNameWithoutExtension(fileName);
+          String author = "";
+          String type = "book";
+
+          if (FsHelpers::hasEpubExtension(childPath)) {
+            type = "epub";
+            Epub epub(childPath.c_str(), "/.crosspoint");
+            epub.load(false, true);
+            if (!epub.getTitle().empty()) title = epub.getTitle().c_str();
+            if (!epub.getAuthor().empty()) author = epub.getAuthor().c_str();
+          } else if (FsHelpers::hasXtcExtension(childPath)) {
+            type = "xtc";
+            Xtc xtc(childPath.c_str(), "/.crosspoint");
+            if (xtc.load()) {
+              if (!xtc.getTitle().empty()) title = xtc.getTitle().c_str();
+              if (!xtc.getAuthor().empty()) author = xtc.getAuthor().c_str();
+            }
+          } else if (FsHelpers::hasMarkdownExtension(childPath)) {
+            type = "markdown";
+            Txt txt(childPath.c_str(), "/.crosspoint");
+            if (txt.load() && !txt.getTitle().empty()) title = txt.getTitle().c_str();
+          } else if (FsHelpers::hasTxtExtension(childPath)) {
+            type = "txt";
+            Txt txt(childPath.c_str(), "/.crosspoint");
+            if (txt.load() && !txt.getTitle().empty()) title = txt.getTitle().c_str();
+          }
+
+          doc.clear();
+          doc["path"] = childPath;
+          doc["name"] = fileName;
+          doc["folder"] = parentPathOf(childPath);
+          doc["type"] = type;
+          doc["title"] = title;
+          doc["author"] = author;
+          doc["size"] = size;
+          doc["readState"] = readStateForPath(childPath);
+          doc["duplicateKey"] = normalizedDuplicateKey(title, fileName, size);
+
+          const size_t written = serializeJson(doc, output, sizeof(output));
+          if (written < sizeof(output)) {
+            if (seenFirst) {
+              server->sendContent(",");
+            } else {
+              seenFirst = true;
+            }
+            server->sendContent(output);
+            scanned++;
+          }
+        }
+      }
+
+      file.close();
+      yield();
+      esp_task_wdt_reset();
+    }
+    dir.close();
+  };
+
+  scanDir(rootPath, 0);
+  server->sendContent("],\"truncated\":");
+  server->sendContent(scanned >= LIBRARY_SCAN_MAX_FILES ? "true" : "false");
+  server->sendContent(",\"count\":");
+  server->sendContent(String(static_cast<unsigned long>(scanned)));
+  server->sendContent("}");
+  server->sendContent("");
+}
+
+void CrossPointWebServer::handleLibraryEnsureFolder() {
+  const String body = jsonBody(server.get());
+  JsonDocument doc;
+  if (deserializeJson(doc, body)) {
+    server->send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+    return;
+  }
+  const String path = normalizeWebPath(doc["path"] | "");
+  if (path.isEmpty() || isProtectedPath(path)) {
+    server->send(400, "application/json", "{\"error\":\"Invalid folder path\"}");
+    return;
+  }
+  if (!ensureDirectoryPath(path)) {
+    server->send(500, "application/json", "{\"error\":\"Could not create folder\"}");
+    return;
+  }
+  JsonDocument out;
+  out["ok"] = true;
+  out["path"] = path;
+  String json;
+  serializeJson(out, json);
+  server->send(200, "application/json", json);
+}
+
+void CrossPointWebServer::handleLibraryBulkMove() {
+  const String body = jsonBody(server.get());
+  JsonDocument doc;
+  if (deserializeJson(doc, body)) {
+    server->send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+    return;
+  }
+
+  const String dest = normalizeWebPath(doc["dest"] | "");
+  const bool renameCollisions = doc["renameCollisions"] | true;
+  JsonArray paths = doc["paths"].as<JsonArray>();
+  if (dest.isEmpty() || paths.isNull() || paths.size() == 0) {
+    server->send(400, "application/json", "{\"error\":\"Missing destination or paths\"}");
+    return;
+  }
+  if (!ensureDirectoryPath(dest)) {
+    server->send(500, "application/json", "{\"error\":\"Could not create destination\"}");
+    return;
+  }
+
+  JsonDocument out;
+  out["ok"] = true;
+  JsonArray moved = out["moved"].to<JsonArray>();
+  JsonArray failed = out["failed"].to<JsonArray>();
+
+  for (JsonVariant value : paths) {
+    String itemPath = normalizeWebPath(value.as<String>());
+    String newPath;
+    String error;
+    if (moveLibraryFile(itemPath, dest, renameCollisions, newPath, error)) {
+      JsonObject item = moved.add<JsonObject>();
+      item["from"] = itemPath;
+      item["to"] = newPath;
+    } else {
+      out["ok"] = false;
+      JsonObject item = failed.add<JsonObject>();
+      item["path"] = itemPath;
+      item["error"] = error;
+    }
+    yield();
+    esp_task_wdt_reset();
+  }
+
+  String json;
+  serializeJson(out, json);
+  server->send(failed.size() == 0 ? 200 : 207, "application/json", json);
 }
 
 void CrossPointWebServer::handleDownload() const {
@@ -693,6 +1589,11 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
     if (isProtectedPath(filePath)) {
       state.error = "Access denied to protected path";
       LOG_DBG("WEB", "[UPLOAD] FAILED: Access denied to protected path: %s", filePath.c_str());
+      return;
+    }
+    if (isFlashcardDecksPath(filePath) && !ensureFlashcardDecksDir()) {
+      state.error = "Failed to create flashcard deck folder";
+      LOG_DBG("WEB", "[UPLOAD] FAILED: Could not create flashcard deck folder");
       return;
     }
 
@@ -915,11 +1816,11 @@ void CrossPointWebServer::handleRename() const {
     return;
   }
 
-  clearBookCache(itemPath.c_str());
   const bool success = file.rename(newPath.c_str());
   file.close();
 
   if (success) {
+    migrateMovedBookState(itemPath, newPath);
     LOG_DBG("WEB", "Renamed file: %s -> %s", itemPath.c_str(), newPath.c_str());
     server->send(200, "text/plain", "Renamed successfully");
   } else {
@@ -937,85 +1838,14 @@ void CrossPointWebServer::handleMove() const {
   String itemPath = normalizeWebPath(server->arg("path"));
   String destPath = normalizeWebPath(server->arg("dest"));
 
-  if (itemPath.isEmpty() || itemPath == "/") {
-    server->send(400, "text/plain", "Invalid path");
-    return;
-  }
-  if (destPath.isEmpty()) {
-    server->send(400, "text/plain", "Invalid destination");
-    return;
-  }
-
-  if (isProtectedPath(itemPath)) {
-    server->send(403, "text/plain", "Cannot move protected item");
-    return;
-  }
-  if (isProtectedPath(destPath)) {
-    server->send(403, "text/plain", "Cannot move into protected folder");
-    return;
-  }
-
-  const String itemName = itemPath.substring(itemPath.lastIndexOf('/') + 1);
-
-  if (!Storage.exists(itemPath.c_str())) {
-    server->send(404, "text/plain", "Item not found");
-    return;
-  }
-
-  HalFile file = Storage.open(itemPath.c_str());
-  if (!file) {
-    server->send(500, "text/plain", "Failed to open file");
-    return;
-  }
-  if (file.isDirectory()) {
-    file.close();
-    server->send(400, "text/plain", "Only files can be moved");
-    return;
-  }
-
-  if (!Storage.exists(destPath.c_str())) {
-    file.close();
-    server->send(404, "text/plain", "Destination not found");
-    return;
-  }
-  HalFile destDir = Storage.open(destPath.c_str());
-  if (!destDir || !destDir.isDirectory()) {
-    if (destDir) {
-      destDir.close();
-    }
-    file.close();
-    server->send(400, "text/plain", "Destination is not a folder");
-    return;
-  }
-  destDir.close();
-
-  String newPath = destPath;
-  if (!newPath.endsWith("/")) {
-    newPath += "/";
-  }
-  newPath += itemName;
-
-  if (newPath == itemPath) {
-    file.close();
-    server->send(200, "text/plain", "Already in destination");
-    return;
-  }
-  if (Storage.exists(newPath.c_str())) {
-    file.close();
-    server->send(409, "text/plain", "Target already exists");
-    return;
-  }
-
-  clearBookCache(itemPath.c_str());
-  const bool success = file.rename(newPath.c_str());
-  file.close();
-
-  if (success) {
+  String newPath;
+  String error;
+  if (moveLibraryFile(itemPath, destPath, true, newPath, error)) {
     LOG_DBG("WEB", "Moved file: %s -> %s", itemPath.c_str(), newPath.c_str());
-    server->send(200, "text/plain", "Moved successfully");
+    server->send(200, "text/plain", "Moved successfully: " + newPath);
   } else {
-    LOG_ERR("WEB", "Failed to move file: %s -> %s", itemPath.c_str(), newPath.c_str());
-    server->send(500, "text/plain", "Failed to move file");
+    LOG_ERR("WEB", "Failed to move file: %s -> %s (%s)", itemPath.c_str(), destPath.c_str(), error.c_str());
+    server->send(error == "Item not found" ? 404 : 400, "text/plain", error);
   }
 }
 
@@ -1078,6 +1908,11 @@ void CrossPointWebServer::handleDelete() const {
     // Security check: prevent deletion of protected items
     if (isProtectedPath(itemPath)) {
       failedItems += itemPath + " (protected path); ";
+      allSuccess = false;
+      continue;
+    }
+    if (itemPath == FLASHCARD_DECKS_DIR) {
+      failedItems += itemPath + " (managed folder); ";
       allSuccess = false;
       continue;
     }
@@ -1633,6 +2468,12 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
 
           if (isProtectedPath(filePath)) {
             wsServer->sendTXT(num, "ERROR:Access denied to protected path");
+            wsUploadInProgress = false;
+            wsUploadClientNum = 255;
+            return;
+          }
+          if (isFlashcardDecksPath(filePath) && !ensureFlashcardDecksDir()) {
+            wsServer->sendTXT(num, "ERROR:Failed to create flashcard deck folder");
             wsUploadInProgress = false;
             wsUploadClientNum = 255;
             return;

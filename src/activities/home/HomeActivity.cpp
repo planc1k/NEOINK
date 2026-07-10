@@ -50,6 +50,7 @@ enum class HomeMenuAction {
   ContinueReading,
   RecentBooks,
   OpdsBrowser,
+  Flashcards,
   ReadingStats,
   Bookmarks,
   FileTransfer,
@@ -63,7 +64,7 @@ struct HomeMenuEntry {
 };
 
 struct HomeMenuEntries {
-  static constexpr int kCapacity = 8;
+  static constexpr int kCapacity = 10;
   std::array<HomeMenuEntry, kCapacity> entries{};
   int count = 0;
 
@@ -210,6 +211,7 @@ void appendHomeMenuItems(HomeMenuEntries& items, bool hasOpdsServers, bool hasRe
                          bool hasClippings) {
   items.push({tr(STR_BROWSE_FILES), Folder, HomeMenuAction::BrowseFiles});
   items.push({tr(STR_MENU_RECENT_BOOKS), Recent, HomeMenuAction::RecentBooks});
+  items.push({"Flashcards", Book, HomeMenuAction::Flashcards});
 
   if (hasOpdsServers) {
     items.push({tr(STR_OPDS_BROWSER), Library, HomeMenuAction::OpdsBrowser});
@@ -234,6 +236,7 @@ HomeMenuEntries buildHomeMenuItems(bool hasOpdsServers, bool hasReadingStats, bo
 HomeMenuEntries buildMinimalMenuItems(bool hasOpdsServers, bool hasReadingStats, bool hasBookmarks, bool hasClippings) {
   HomeMenuEntries items;
   items.push({tr(STR_MENU_RECENT_BOOKS), Recent, HomeMenuAction::RecentBooks});
+  items.push({"Flashcards", Book, HomeMenuAction::Flashcards});
 
   if (hasOpdsServers) {
     items.push({tr(STR_OPDS_BROWSER), Library, HomeMenuAction::OpdsBrowser});
@@ -267,6 +270,8 @@ HomeMenuAction homeActionForInitialMenuItem(HomeMenuItem item) {
       return HomeMenuAction::RecentBooks;
     case HomeMenuItem::OPDS_BROWSER:
       return HomeMenuAction::OpdsBrowser;
+    case HomeMenuItem::FLASHCARDS:
+      return HomeMenuAction::Flashcards;
     case HomeMenuItem::FILE_TRANSFER:
       return HomeMenuAction::FileTransfer;
     case HomeMenuItem::SETTINGS_MENU:
@@ -509,22 +514,10 @@ static_assert(HomeActivity::kMaxCachedBooks >= LyraCarouselMetrics::values.homeR
 
 int HomeActivity::getMenuItemCount() const {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  int count = 4;  // File Browser, Recents, File transfer, Settings
-  if (!metrics.homeContinueReadingInMenu && !recentBooks.empty()) {
-    count += getVisibleRecentBookCount();
-  } else if (metrics.homeContinueReadingInMenu && !recentBooks.empty()) {
-    count++;  // Continue Reading menu item
-  }
-  if (hasOpdsServers) {
-    count++;
-  }
-  if (hasReadingStats) {
-    count++;
-  }
-  if (hasBookmarks || hasClippings) {
-    count++;
-  }
-  return count;
+  const bool includeContinueReading = metrics.homeContinueReadingInMenu && !recentBooks.empty();
+  const auto menuItems =
+      buildSelectableHomeMenuItems(hasOpdsServers, hasReadingStats, hasBookmarks, hasClippings, includeContinueReading);
+  return getHomeMenuSelectionOffset(recentBooks) + static_cast<int>(menuItems.size());
 }
 
 void HomeActivity::loadRecentBooks(int maxBooks) {
@@ -1337,6 +1330,9 @@ void HomeActivity::loop() {
           case HomeMenuAction::OpdsBrowser:
             onOpdsBrowserOpen();
             break;
+          case HomeMenuAction::Flashcards:
+            onFlashcardsOpen();
+            break;
           case HomeMenuAction::ReadingStats:
             onReadingStatsOpen();
             break;
@@ -1528,6 +1524,9 @@ void HomeActivity::loop() {
         break;
       case HomeMenuAction::OpdsBrowser:
         onOpdsBrowserOpen();
+        break;
+      case HomeMenuAction::Flashcards:
+        onFlashcardsOpen();
         break;
       case HomeMenuAction::ReadingStats:
         onReadingStatsOpen();
@@ -1758,6 +1757,8 @@ void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
 void HomeActivity::onFileTransferOpen() { activityManager.goToFileTransfer(); }
 
 void HomeActivity::onOpdsBrowserOpen() { activityManager.goToBrowser(); }
+
+void HomeActivity::onFlashcardsOpen() { activityManager.goToFlashcards(); }
 
 void HomeActivity::onReadingStatsOpen() {
   const int highlightedBookIdx = getHighlightedBookIndex();
