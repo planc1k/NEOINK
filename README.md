@@ -1,158 +1,254 @@
-> **This is a personal fork of [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader)** with a focus on improved fonts and minimal reading stats.
+# CrossInk Planck
 
-## What's different in this fork
+CrossInk Planck is a public firmware fork for the Xteink X3/X4 e-ink reader,
+based on [uxjulia/CrossInk](https://github.com/uxjulia/CrossInk), itself a fork
+of [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader).
 
-My goal with this fork was to maintain the core Crosspoint firmware while integrating my preferred typography and some lightweight reading statistics. I’ve focused on keeping the underlying system stable while layering in a few "nice-to-have" features and UI refinements along the way.
+This fork keeps the reading-focused CrossInk experience and adds a lightweight
+study and library-management layer: flashcards, richer browser tools, native
+Markdown reading, and safer SD-card organization helpers.
 
-<table>
-  <tr>
-    <td align="center">
-      <img src="./docs/images/bitter-small-15-margin.jpg" alt="Font: Bitter, Size: 12 pt, Margin: 15" /><br/>
-      <em>Font: Bitter, Size: 12 pt, Margin: 15</em>
-    </td>
-    <td align="center">
-      <img src="./docs/images/reading-stats.jpg" alt="Reading Stats with custom front button mapping shown" /><br/>
-      <em>Reading Stats with custom front button mapping shown</em>
-    </td>
-  </tr>
-</table>
+> Status: experimental but build-tested. The `tiny` firmware currently builds
+> with flash headroom and has been sanity-checked in the simulator smoke test.
 
----
+## What This Fork Adds
 
-**Note**: This firmware is confirmed to be working on both the X3 and X4.
+### Flashcards
 
-### Highlights
+- Home-screen **Flashcards** app.
+- CSV and TSV deck support.
+- Browser-side `.apkg` import for simple Anki Basic-style notes.
+- Session-based spaced repetition with Again, Good, and Easy ratings.
+- SD-backed card loading: the firmware indexes card line offsets and hashes,
+  then reads the active card text from SD instead of keeping every card in RAM.
+- Web UI deck management, upload, rename, delete, reset, progress import, and
+  progress export.
+- Web UI stats: total cards, new cards, due cards, reviewed cards, retention
+  estimate, rating totals, lapses, sessions, and compact per-card progress.
 
-- New reader fonts: ChareInk, Lexend Deca, and Bitter.
-- Unicode emoji and miscellaneous symbols support (a limited subset).
-- Adjusted font sizes: 8 pt, 9 pt, 10 pt, 12 pt, 14 pt, 16 pt, 18 pt, and 20 pt. See [Font Build Variants](./docs/font-build-variants.md) for more details.
-- Added ~~strikethrough~~ support.
-- Made <u>underlines</u> thicker for better visibility.
-- Added a custom `Minimal` theme and sleep screen option for the minimalists out there.
-- Added support for `<hr>` section breaks.
-- Added support for "redaction" style rendering.
-- Added improved support for tables with simple markup.
-- Added ability to add bookmarks.
-- Added ability to remap front buttons that only applies in the reader.
-- Added Bionic Reading and Guide Dots as optional reader modes.
-- Added Force Paragraph Indents for books that render as one giant wall of text.
-- Added ability to pin a sleep image as a favorite. The favorited image will always be displayed when your sleep settings are set to `Custom` or `Cover + Custom` (when no cover is available).
-- Added more in-reader control remapping options for side buttons, short power button clicks, and long-press menu actions.
-- Added ability to mark a book as finished from the in-book menu. A pop-up will also display once 99% of the book is reached. This status allows tracking of total books read.
-- Added ability to move finished books to "Read" folder.
-- In-book menu to quickly adjust reader options without having to exit the book.
-- Reading stats: total books read, total reading time, number of sessions, pages turned, average session time, pages turned per minute. You can also set your reading stats as your sleep screen.
-- Reading stats [syncing](./docs/reading-stats-sync.md) between two devices.
-- Added customizable Auto Page Turn Interval (anything between 5-120 seconds).
-- Added ability to view Recent Books as a 3x3 grid view.
-- Added lightweight flashcards with CSV/TSV decks, session-based scheduling, and browser-side APKG import. See [Flashcards](./docs/flashcards.md).
-- To view a more detailed list for each version, visit the [releases](https://github.com/uxjulia/CrossInk/releases) page to read release notes.
+See [Flashcards](./docs/flashcards.md) for deck format, button controls,
+scheduler behavior, limits, and backup details.
 
----
+### Library Management
 
-### Reader Fonts
+- Author/title metadata scan from the web file manager.
+- Read, Unread, and Collections folder workflows.
+- Bulk rename and bulk move in the web UI.
+- Duplicate-candidate detection for likely repeated books.
+- "Move to Read" and finished-book organization improvements.
+- Cache migration for ordinary rename/move operations so progress is preserved
+  when possible.
 
-The default fonts have been replaced with ChareInk, Lexend Deca, and Bitter. These fonts have been chosen specifically to improve reading fluency and e-ink performance. These 'sturdier' typefaces feature uniform stroke weights and open geometries, allowing the X4/X3 to render crisp, high-contrast text with font-aliasing on while significantly reducing ghosting and artifacts.
+See [Web Server Guide](./docs/webserver.md) and
+[Web Server Endpoints](./docs/webserver-endpoints.md).
 
-- [ChareInk](https://www.mobileread.com/forums/showthread.php?t=184056) - A cult favorite among the e-reading community for over a decade based off of the typeface [Charis](https://software.sil.org/charis/). It is specially designed to make long texts pleasant and easy to read.
-- [Lexend Deca](https://fonts.google.com/specimen/Lexend+Deca) - A research-backed sans-serif typeface designed to improve reading fluency. Lexend was engineered based on the theory that reading issues are often a design problem (visual crowding) rather than a cognitive one.
-- [Bitter](https://fonts.google.com/specimen/Bitter) - A "contemporary" slab serif typeface for text, it is specially designed for comfortably reading on digital screens. The consistent stroke weight of Bitter helps it render particularly well on e-ink devices. The medium weight has been chosen specifically for improved rendering on the X4/X3.
+### Native Markdown Reading
 
-The UI now uses [Inter](https://fonts.google.com/specimen/Inter) as the display font which has improved readability at smaller sizes.
+- `.md` and `.markdown` files open in the text reader.
+- Streaming-friendly Markdown cleanup for headings, lists, blockquotes, links,
+  images, emphasis, strike, inline code, horizontal rules, and code fences.
+- Uses the same lightweight TXT cache/progress path instead of adding a large
+  Markdown engine.
 
-### Emojis and Misc Glyphs
+See [File Formats](./docs/file-formats.md#text-and-markdown-books).
 
-- Support for a limited set of Unicode [Emoticons](https://unicode-explorer.com/b/1F600) and [Miscellaneous Symbols](https://unicode-explorer.com/b/2600) using [Noto Emoji](https://fonts.google.com/noto/specimen/Noto+Emoji) and [Noto Sans Symbols](https://fonts.google.com/noto/specimen/Noto+Sans+Symbols) font.
+### CrossInk Base Features
 
----
+This fork keeps CrossInk's existing reader improvements:
 
-### Font Sizes
+- ChareInk, Lexend Deca, Bitter, and Inter typography.
+- Font build variants for different point-size/headroom tradeoffs.
+- Bookmarks, reader control remapping, Bionic Reading, Guide Dots, and Force
+  Paragraph Indents.
+- Reading stats, finished-book tracking, Read-folder movement, and reading
+  stats sync.
+- Custom sleep images, favorite sleep image support, and Minimal theme.
+- EPUB optimization in the browser before upload.
+- Web file transfer, WebDAV, Calibre wireless upload, OPDS, and SD-card fonts.
 
-There are 3 available build variants to choose from due to build size constraints: `teensy`, `tiny`, and `xlarge`.
+## Device Limits
 
-See [Font Build Variants](./docs/font-build-variants.md) for the full point-size and emoji-support matrix.
+The reader is built around an ESP32-C3 with limited RAM and flash. This fork is
+designed around those constraints instead of trying to behave like a phone app.
 
----
+- Keep folders below about 200 files. For the smoothest browsing, aim for
+  50-100 files per folder.
+- Split large libraries into folders by author, series, genre, read/unread
+  status, or collection.
+- Text-first EPUBs work best. Large scanned books, comics, image-heavy EPUBs,
+  and giant omnibus files are more likely to be slow or memory-sensitive.
+- EPUBs under roughly 20 MB are the safest target. Files over 50 MB may still
+  work, but they are more likely to need browser-side optimization.
+- Flashcard decks are intentionally text-first. Media, cloze cards, Anki
+  templates, and full Anki scheduling are not stored or rendered on-device.
+- The web server has no authentication. Use it on trusted private networks or
+  in hotspot mode only while you are actively transferring files.
 
-### Reader features
+## Flashcard Decks
 
-Reader Options, Bionic Reading, Guide Dots, Force Paragraph Indents, reading stats, and finished-book behavior are documented in [Reader Features](./docs/reader-features.md).
+Decks live on the SD card at:
 
-### Custom button actions
+```text
+/.crosspoint/flashcards/decks/
+```
 
-CrossInk adds configurable button shortcuts.
+Progress lives at:
 
-See [Controls](./docs/controls.md) for the full action list and defaults.
+```text
+/.crosspoint/flashcards/progress/
+```
 
----
+TSV is recommended:
 
-## Tips for the best reading experience
+```text
+front	back
+Capital of Bangladesh?	Dhaka
+Largest planet?	Jupiter
+```
 
-CrossInk runs on an ESP32-C3 with limited RAM, so very large folders or complex EPUBs can be slower than they would be on a phone, tablet, or desktop app.
+CSV is also supported:
 
-- Keep folders under about 200  files. For the smoothest browsing, aim for 50-100 files per folder.
-- Having 1000+ books on the SD card is fine if they are split into smaller folders, such as by author, series, genre, or read/unread status.
-- Avoid putting every book in the SD card root. The file browser has to scan and sort the current folder before it can show it.
-- Text-first EPUBs are the best fit. Large image-heavy EPUBs, scanned books, comics, and omnibus files with thousands of sections may load slowly or fail under memory pressure.
-- As a rough target, EPUBs under 20 MB tend to work the best. Files over 50 MB may still work, but they are more likely to be slow or memory-sensitive, especially if they contain many large images.
-- If an EPUB is unusually slow, try [optimizing](./docs/webserver.md#epub-optimization) it with the built-in web optimizer (via File Transfer) before copying it to the SD card: remove unused high-resolution images, split very large omnibus files, and avoid embedding multiple full font families when possible.
-- Use a reliable SD card and leave some free space. CrossInk stores settings, reading progress, cache files, stats, and generated book data on the card.
+```csv
+front,back
+"Capital of Bangladesh?","Dhaka"
+"Largest planet?","Jupiter"
+```
 
-## Development Device Simulator
+A sample test deck is included at
+[docs/flashcards/test_deck.csv](./docs/flashcards/test_deck.csv).
 
-The [device simulator](https://github.com/uxjulia/crosspoint-simulator) renders the e-ink display in an SDL2 window so firmware changes can be sanity-checked without flashing hardware.
+## Web UI Workflow
 
-See [Simulator](./docs/simulator.md) for setup, platform notes, keyboard controls, and cache tips.
+1. On the reader, open **File Transfer**.
+2. Join Wi-Fi or create a hotspot.
+3. Open the displayed URL or scan the QR code.
+4. Use **Files** for library organization, EPUB optimization, bulk rename/move,
+   metadata scan, duplicate scan, and uploads.
+5. Use **Flashcards** for deck upload, APKG conversion, stats, reset, rename,
+   delete, and progress backup/restore.
+6. Exit File Transfer when finished.
 
----
+The file manager keeps most dot-prefixed system folders hidden. The flashcard
+deck folder is exposed only through the Flashcards page so decks can be managed
+without opening the rest of `/.crosspoint`.
+
 ## Installation
 
-Download a `firmware-*.bin` from the [releases page](https://github.com/uxjulia/CrossInk/releases), then flash it with the web installer or command line.
+Download a `firmware-*.bin` release when available, then flash with the web
+installer or command line.
 
-See [Installation](./docs/installation.md) for step-by-step flashing and revert instructions.
+For local builds, the tested firmware artifact is:
 
----
+```text
+.pio/build/tiny/firmware-tiny.bin
+```
 
-## Documentation
+See [Installation](./docs/installation.md) for flashing and revert guidance.
 
-- [User Guide](./USER_GUIDE.md)
-- [Installation](./docs/installation.md)
-- [Font Build Variants](./docs/font-build-variants.md)
-- [Reader Features](./docs/reader-features.md)
-- [Flashcards](./docs/flashcards.md)
-- [Controls](./docs/controls.md)
-- [Simulator](./docs/simulator.md)
-- [Data Cache](./docs/data-cache.md)
-- [Web server usage](./docs/webserver.md)
-- [Web server endpoints](./docs/webserver-endpoints.md)
-- [Common issues](./docs/troubleshooting.md)
-- [Project scope](./SCOPE.md)
-- [Contributing docs](./docs/contributing/README.md)
+## Build From Source
 
----
+CrossInk uses PlatformIO.
 
-## Development quick start
+```sh
+pio run -e tiny
+```
 
-CrossInk uses PlatformIO for building and flashing firmware.
-
-See [Getting Started](./docs/contributing/getting-started.md) for prerequisites, clone setup, hooks, and validation commands.
-
-### Build / flash / monitor
-
-Connect your Xteink X4 or X3 via USB-C and run:
+To flash a connected Xteink X3/X4:
 
 ```sh
 pio run -e tiny --target upload
 ```
 
-Replace `tiny` with another build variant if needed. See [Font Build Variants](./docs/font-build-variants.md).
+Other variants are available for different font-size/headroom tradeoffs:
 
-See [Testing and Debugging](./docs/contributing/testing-debugging.md) for serial logging, simulator checks, static analysis, and bug-report guidance.
+```sh
+pio run -e teensy
+pio run -e xlarge
+```
 
----
+See [Font Build Variants](./docs/font-build-variants.md) for the full matrix.
 
-## Internals
+## Simulator And Testing
 
-The ESP32-C3 has about 380 KB of usable RAM, so CrossInk stores reusable book and device data on the SD card instead of rebuilding everything in memory.
+Build the simulator:
 
-See [Data Cache](./docs/data-cache.md) for the `.crosspoint` layout and [File Formats](./docs/file-formats.md) for binary cache details.
+```sh
+pio run -e simulator
+```
+
+Run the simulator smoke test:
+
+```sh
+CROSSINK_SIMULATOR_SMOKE_TEST=1 .pio/build/simulator/program
+```
+
+Recommended validation before flashing:
+
+```sh
+git diff --check
+pio run -e simulator
+pio run -e tiny
+CROSSINK_SIMULATOR_SMOKE_TEST=1 .pio/build/simulator/program
+```
+
+See [Simulator](./docs/simulator.md) and
+[Testing and Debugging](./docs/contributing/testing-debugging.md).
+
+## Documentation
+
+- [Installation](./docs/installation.md)
+- [Flashcards](./docs/flashcards.md)
+- [File Formats](./docs/file-formats.md)
+- [Web Server Guide](./docs/webserver.md)
+- [Web Server Endpoints](./docs/webserver-endpoints.md)
+- [Font Build Variants](./docs/font-build-variants.md)
+- [Reader Features](./docs/reader-features.md)
+- [Controls](./docs/controls.md)
+- [Simulator](./docs/simulator.md)
+- [Data Cache](./docs/data-cache.md)
+- [Common Issues](./docs/troubleshooting.md)
+- [Contributing Docs](./docs/contributing/README.md)
+
+## SD Card Data Model
+
+CrossInk stores reusable data on the SD card so the firmware does not need to
+rebuild or retain everything in RAM.
+
+Important paths:
+
+```text
+/.crosspoint/epub_<hash>/          EPUB metadata, reader settings, and cache
+/.crosspoint/flashcards/decks/     User flashcard decks
+/.crosspoint/flashcards/progress/  Flashcard scheduler/progress files
+/.fonts/ or /fonts/                Optional SD-card font files
+/Read                              Finished/read books
+/Unread                            Unread books
+/Collections/<name>                User-created shelves
+```
+
+See [Data Cache](./docs/data-cache.md) for the `.crosspoint` layout and
+[File Formats](./docs/file-formats.md) for binary cache details.
+
+## Safety Notes
+
+- Back up the SD card before testing experimental firmware.
+- Keep a copy of important flashcard decks and exported progress JSON.
+- Do not manually edit files in `/.crosspoint/flashcards/progress/`.
+- If a deck shows a memory error, split it into smaller decks or reduce the web
+  import card limit.
+- If an EPUB is unusually slow, try the browser-side EPUB optimizer before
+  copying it to the SD card.
+- Exit File Transfer mode when done so the unauthenticated web server is no
+  longer reachable.
+
+## Upstream
+
+This fork builds on substantial work from:
+
+- [uxjulia/CrossInk](https://github.com/uxjulia/CrossInk)
+- [crosspoint-reader/crosspoint-reader](https://github.com/crosspoint-reader/crosspoint-reader)
+- [crosspoint-reader/crosspoint-simulator](https://github.com/crosspoint-reader/crosspoint-simulator)
+- [yattsu/biscuit](https://github.com/yattsu/biscuit), used as flashcard design
+  reference material
+- [bigbag/papyrix-reader](https://github.com/bigbag/papyrix-reader), used as
+  Markdown-reader reference material
