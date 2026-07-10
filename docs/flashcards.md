@@ -14,7 +14,7 @@ the browser.
 
 - Deck selection from the Home screen.
 - Front/back card review on the device.
-- Three review ratings: Again, Good, and Easy.
+- Four review ratings: Again, Hard, Good, and Easy.
 - Session-based spaced repetition.
 - Configurable e-ink full-refresh cadence, defaulting to every 30 reviewed cards.
 - CSV and TSV deck files.
@@ -98,10 +98,12 @@ Deck list:
 
 Studying:
 
-| Screen | Back | Confirm | Up | Down |
-|--------|------|---------|----|------|
+| Screen | Back | Confirm | Up / Left | Down / Right |
+|--------|------|---------|-----------|--------------|
 | Front | Deck list | Flip card | - | - |
-| Back | Front | Good | Again | Easy |
+| Back | Front | Good | Again | Hard |
+
+On the answer screen, long-press **Confirm** to rate the card **Easy**.
 
 ## Scheduling
 
@@ -109,6 +111,7 @@ CrossInk uses a small session-based scheduler:
 
 - New or due cards enter the review queue.
 - Again makes the card due next session and lowers ease.
+- Hard passes the card, but keeps the next interval shorter than Good.
 - Good increases the interval using the card's ease.
 - Easy increases ease and schedules farther out.
 

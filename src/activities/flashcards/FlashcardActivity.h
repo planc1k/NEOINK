@@ -20,10 +20,12 @@ class FlashcardActivity final : public Activity {
   int deckIndex = 0;
   int queueIndex = 0;
   int againCount = 0;
+  int hardCount = 0;
   int goodCount = 0;
   int easyCount = 0;
   int cardsUntilFullRefresh = 30;
   bool fullRefreshNextRender = false;
+  bool easyLongPressFired = false;
   std::string errorMessage;
 
   void loadDeckList();

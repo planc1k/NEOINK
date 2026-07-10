@@ -64,10 +64,12 @@ void FlashcardActivity::startSelectedDeck() {
   reviewQueue = flashcards::buildReviewQueue(deck);
   queueIndex = 0;
   againCount = 0;
+  hardCount = 0;
   goodCount = 0;
   easyCount = 0;
   cardsUntilFullRefresh = SETTINGS.getFlashcardRefreshFrequency();
   fullRefreshNextRender = false;
+  easyLongPressFired = false;
   screen = reviewQueue.empty() ? Screen::Stats : Screen::CardFront;
   requestUpdate();
 }
@@ -100,6 +102,8 @@ void FlashcardActivity::rateCurrentCard(flashcards::Rating rating) {
       ++easyCount;
       break;
     case flashcards::Rating::Hard:
+      ++hardCount;
+      break;
     case flashcards::Rating::Good:
       ++goodCount;
       break;
@@ -161,6 +165,9 @@ void FlashcardActivity::loop() {
   }
 
   if (screen == Screen::CardFront) {
+    if (easyLongPressFired && !mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
+      easyLongPressFired = false;
+    }
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       loadDeckList();
       requestUpdate();
@@ -172,6 +179,21 @@ void FlashcardActivity::loop() {
   }
 
   if (screen == Screen::CardBack) {
+    if (easyLongPressFired) {
+      if (!mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
+        easyLongPressFired = false;
+      }
+      return;
+    }
+
+    if (mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
+        mappedInput.getHeldTime() >= SETTINGS.getPowerButtonLongPressDuration()) {
+      easyLongPressFired = true;
+      mappedInput.suppressNextConfirmRelease();
+      rateCurrentCard(flashcards::Rating::Easy);
+      return;
+    }
+
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       screen = Screen::CardFront;
       requestUpdate();
@@ -182,7 +204,7 @@ void FlashcardActivity::loop() {
       rateCurrentCard(flashcards::Rating::Again);
     } else if (mappedInput.wasReleased(MappedInputManager::Button::Right) ||
                mappedInput.wasReleased(MappedInputManager::Button::Down)) {
-      rateCurrentCard(flashcards::Rating::Easy);
+      rateCurrentCard(flashcards::Rating::Hard);
     }
     return;
   }
@@ -282,7 +304,7 @@ void FlashcardActivity::drawStudyCard(bool showingBack) {
   drawWrappedCentered(text, contentY, pageWidth - 50, maxLines, fontId, showingBack ? EpdFontFamily::REGULAR
                                                                                    : EpdFontFamily::BOLD);
 
-  const auto labels = showingBack ? mappedInput.mapLabels("Back", "Good", "Again", "Easy")
+  const auto labels = showingBack ? mappedInput.mapLabels("Back", "Good/Easy", "Again", "Hard")
                                   : mappedInput.mapLabels("Decks", "Flip", "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
@@ -297,9 +319,9 @@ void FlashcardActivity::drawStats() {
   if (reviewQueue.empty()) {
     drawWrappedCentered("No cards are due in this deck.", pageHeight / 2 - 30, pageWidth - 60, 3, UI_10_FONT_ID);
   } else {
-    char stats[96];
-    snprintf(stats, sizeof(stats), "Reviewed %d cards\nAgain %d   Good %d   Easy %d",
-             static_cast<int>(reviewQueue.size()), againCount, goodCount, easyCount);
+    char stats[112];
+    snprintf(stats, sizeof(stats), "Reviewed %d cards\nAgain %d   Hard %d\nGood %d   Easy %d",
+             static_cast<int>(reviewQueue.size()), againCount, hardCount, goodCount, easyCount);
     drawWrappedCentered(stats, pageHeight / 2 - 45, pageWidth - 60, 4, UI_10_FONT_ID);
   }
 
