@@ -314,15 +314,27 @@ void NeobrutalistTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int but
                                        const std::function<std::string(int index)>& buttonLabel,
                                        const std::function<UIIcon(int index)>& rowIcon) const {
   const auto& metrics = NeobrutalistMetrics::values;
-  const int rowStep = metrics.menuRowHeight + metrics.menuSpacing;
-  const int pageItems = std::max(1, rect.height / rowStep);
+  int rowHeight = metrics.menuRowHeight;
+  int rowSpacing = metrics.menuSpacing;
+  if (buttonCount > 1) {
+    const int desiredHeight = buttonCount * rowHeight + (buttonCount - 1) * rowSpacing;
+    if (desiredHeight > rect.height) {
+      constexpr int kMinRowHeight = 42;
+      rowHeight = std::max(kMinRowHeight, (rect.height - (buttonCount - 1) * rowSpacing) / buttonCount);
+      if (buttonCount * rowHeight + (buttonCount - 1) * rowSpacing > rect.height) {
+        rowSpacing = std::max(3, (rect.height - buttonCount * rowHeight) / (buttonCount - 1));
+      }
+    }
+  }
+  const int rowStep = rowHeight + rowSpacing;
+  const int pageItems = std::max(1, (rect.height + rowSpacing) / rowStep);
   const int safeSelected = std::max(0, selectedIndex);
   const int pageStart = (safeSelected / pageItems) * pageItems;
   const int rowX = rect.x + metrics.contentSidePadding;
   const int rowW = rect.width - metrics.contentSidePadding * 2 - (buttonCount > pageItems ? 14 : 0);
 
   for (int i = pageStart; i < buttonCount && i < pageStart + pageItems; i++) {
-    Rect row{rowX, rect.y + (i - pageStart) * rowStep, rowW, metrics.menuRowHeight};
+    Rect row{rowX, rect.y + (i - pageStart) * rowStep, rowW, rowHeight};
     const bool selected = i == selectedIndex;
     drawPanel(renderer, row, selected, false, true);
     int textX = row.x + kPadX;
