@@ -16,6 +16,7 @@ the browser.
 - Front/back card review on the device.
 - Three review ratings: Again, Good, and Easy.
 - Session-based spaced repetition.
+- Configurable e-ink full-refresh cadence, defaulting to every 30 reviewed cards.
 - CSV and TSV deck files.
 - Browser-side APKG import from the Flashcards web tab.
 - Per-deck stats in the web UI: total cards, new cards, and due cards.
@@ -113,6 +114,19 @@ CrossInk uses a small session-based scheduler:
 
 Because scheduling is session-based, flashcards work even if the device clock is
 wrong or Wi-Fi is unavailable.
+
+## Display Refresh
+
+Flashcards use fast e-ink updates while studying and periodically force a
+stronger refresh to clear ghosting. The default cadence is every 30 reviewed
+cards. Change it from:
+
+```text
+Settings > Display > Flashcard Refresh Frequency
+```
+
+Available values are 1, 5, 10, 15, and 30 reviewed cards. This setting is
+separate from the reader's page refresh frequency.
 
 ## Progress Tracking
 

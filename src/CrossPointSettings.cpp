@@ -648,6 +648,22 @@ int CrossPointSettings::getRefreshFrequency() const {
   }
 }
 
+int CrossPointSettings::getFlashcardRefreshFrequency() const {
+  switch (flashcardRefreshFrequency) {
+    case REFRESH_1:
+      return 1;
+    case REFRESH_5:
+      return 5;
+    case REFRESH_10:
+      return 10;
+    case REFRESH_15:
+      return 15;
+    case REFRESH_30:
+    default:
+      return 30;
+  }
+}
+
 uint8_t CrossPointSettings::getActiveReaderFontSizeCount() {
   return static_cast<uint8_t>(std::count_if(std::begin(READER_FONT_SIZE_STORAGE_ORDER),
                                             std::end(READER_FONT_SIZE_STORAGE_ORDER),

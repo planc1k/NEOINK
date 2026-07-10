@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cstdio>
 
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -65,6 +66,8 @@ void FlashcardActivity::startSelectedDeck() {
   againCount = 0;
   goodCount = 0;
   easyCount = 0;
+  cardsUntilFullRefresh = SETTINGS.getFlashcardRefreshFrequency();
+  fullRefreshNextRender = false;
   screen = reviewQueue.empty() ? Screen::Stats : Screen::CardFront;
   requestUpdate();
 }
@@ -102,6 +105,7 @@ void FlashcardActivity::rateCurrentCard(flashcards::Rating rating) {
       break;
   }
 
+  markReviewedCardForRefreshCycle();
   ++queueIndex;
   if (queueIndex >= static_cast<int>(reviewQueue.size())) {
     finishSession();
@@ -109,6 +113,24 @@ void FlashcardActivity::rateCurrentCard(flashcards::Rating rating) {
     screen = Screen::CardFront;
   }
   requestUpdate();
+}
+
+void FlashcardActivity::markReviewedCardForRefreshCycle() {
+  if (cardsUntilFullRefresh <= 1) {
+    fullRefreshNextRender = true;
+    cardsUntilFullRefresh = SETTINGS.getFlashcardRefreshFrequency();
+  } else {
+    --cardsUntilFullRefresh;
+  }
+}
+
+void FlashcardActivity::displayWithRefreshPolicy() {
+  if (fullRefreshNextRender) {
+    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+    fullRefreshNextRender = false;
+    return;
+  }
+  renderer.displayBuffer();
 }
 
 void FlashcardActivity::finishSession() {
@@ -199,7 +221,7 @@ void FlashcardActivity::render(RenderLock&&) {
       drawMessage("Flashcards", errorMessage, "Reload");
       break;
   }
-  renderer.displayBuffer();
+  displayWithRefreshPolicy();
 }
 
 void FlashcardActivity::drawDeckSelect() {

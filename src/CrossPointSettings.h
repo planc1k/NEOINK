@@ -375,6 +375,8 @@ class CrossPointSettings {
   uint8_t sleepTimeoutMinutes = 10;
   // E-ink refresh frequency (default 15 pages)
   uint8_t refreshFrequency = REFRESH_15;
+  // Flashcard e-ink refresh frequency (default 30 reviewed cards)
+  uint8_t flashcardRefreshFrequency = REFRESH_30;
   uint8_t hyphenationEnabled = 0;
 
   // Reader screen margin settings
@@ -534,6 +536,7 @@ class CrossPointSettings {
   float getReaderLineCompression() const;
   unsigned long getSleepTimeoutMs() const;
   int getRefreshFrequency() const;
+  int getFlashcardRefreshFrequency() const;
 };
 
 // Helper macro to access settings

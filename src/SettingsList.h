@@ -95,6 +95,17 @@ inline void removeEnumRawValue(SettingInfo& setting, const uint8_t rawValue) {
   }
 }
 
+inline SettingInfo buildFlashcardRefreshFrequencySetting() {
+  SettingInfo s;
+  s.nameId = StrId::STR_FLASHCARD_REFRESH_FREQ;
+  s.type = SettingType::ENUM;
+  s.valuePtr = &CrossPointSettings::flashcardRefreshFrequency;
+  s.enumStringValues = {"1 card", "5 cards", "10 cards", "15 cards", "30 cards"};
+  s.key = "flashcardRefreshFrequency";
+  s.category = StrId::STR_CAT_DISPLAY;
+  return s;
+}
+
 inline SettingInfo buildFontSizeSetting(const SdCardFontRegistry* registry) {
   if (registry && SETTINGS.sdFontFamilyName[0] != '\0') {
     const SdCardFontFamilyInfo* family = registry->findFamily(SETTINGS.sdFontFamilyName);
@@ -270,7 +281,7 @@ inline SettingInfo buildSleepScreenSetting() {
 inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* registry = nullptr) {
   static const std::vector<SettingInfo> baseList = [] {
     std::vector<SettingInfo> v;
-    v.reserve(66);
+    v.reserve(67);
     auto add = [&v](SettingInfo setting) { v.push_back(std::move(setting)); };
 
     // --- Display ---
@@ -295,6 +306,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         StrId::STR_REFRESH_FREQ, &CrossPointSettings::refreshFrequency,
         {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15, StrId::STR_PAGES_30},
         "refreshFrequency", StrId::STR_CAT_DISPLAY));
+    add(buildFlashcardRefreshFrequencySetting());
     add(SettingInfo::Enum(
             StrId::STR_UI_THEME, &CrossPointSettings::uiTheme,
             {StrId::STR_THEME_CLASSIC, StrId::STR_THEME_MINIMAL, StrId::STR_THEME_LYRA, StrId::STR_THEME_LYRA_EXTENDED,
@@ -865,7 +877,7 @@ inline std::vector<SettingInfo> buildControlsSideButtonSettingsList(const std::v
 
 inline std::vector<SettingInfo> buildGroupedDisplaySettingsList(const std::vector<SettingInfo>& allSettings) {
   std::vector<SettingInfo> displaySettings;
-  displaySettings.reserve(7);
+  displaySettings.reserve(8);
 
   auto addDisplaySetting = [&](StrId nameId) {
     const auto it = std::find_if(allSettings.begin(), allSettings.end(),
@@ -881,6 +893,7 @@ inline std::vector<SettingInfo> buildGroupedDisplaySettingsList(const std::vecto
     addDisplaySetting(StrId::STR_HIDE_CLOCK);
   }
   addDisplaySetting(StrId::STR_REFRESH_FREQ);
+  addDisplaySetting(StrId::STR_FLASHCARD_REFRESH_FREQ);
   addDisplaySetting(StrId::STR_UI_THEME);
   addDisplaySetting(StrId::STR_RECENT_BOOKS_VIEW);
   addDisplaySetting(StrId::STR_SUNLIGHT_FADING_FIX);

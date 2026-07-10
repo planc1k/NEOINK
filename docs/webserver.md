@@ -135,8 +135,9 @@ the original file.
 
 ### Settings
 
-The Settings page exposes many firmware settings in the browser. It also has
-cards for:
+The Settings page exposes many firmware settings in the browser, including the
+reader page refresh cadence and the separate flashcard full-refresh cadence. It
+also has cards for:
 
 - Saved Wi-Fi networks
 - OPDS servers

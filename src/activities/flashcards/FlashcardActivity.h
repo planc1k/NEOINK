@@ -22,11 +22,15 @@ class FlashcardActivity final : public Activity {
   int againCount = 0;
   int goodCount = 0;
   int easyCount = 0;
+  int cardsUntilFullRefresh = 30;
+  bool fullRefreshNextRender = false;
   std::string errorMessage;
 
   void loadDeckList();
   void startSelectedDeck();
   void rateCurrentCard(flashcards::Rating rating);
+  void markReviewedCardForRefreshCycle();
+  void displayWithRefreshPolicy();
   void finishSession();
   bool loadCurrentCard(flashcards::Card& card, std::string* error = nullptr) const;
   void drawDeckSelect();

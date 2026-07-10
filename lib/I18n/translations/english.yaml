@@ -148,6 +148,7 @@ STR_RESET_ALL_TIME_STATS_CONFIRM: "Clear this reader's all-time stats? Backups a
 STR_SYSTEM_NETWORK_SYNC: "Network & Sync"
 STR_SYSTEM_UPDATES: "Updates"
 STR_REFRESH_FREQ: "Refresh Frequency"
+STR_FLASHCARD_REFRESH_FREQ: "Flashcard Refresh Frequency"
 STR_KOREADER_SYNC: "KOReader Sync"
 STR_CHECK_UPDATES: "Check for Updates"
 STR_LANGUAGE: "Language"
