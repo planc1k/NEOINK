@@ -68,6 +68,9 @@ constexpr uint8_t SD_FONT_RANGE_POINT_SIZES[CrossPointSettings::SD_FONT_SIZE_RAN
                                                {8, 9, 10, 12, 14, 16, 18, 20},
 };
 constexpr uint8_t SD_FONT_RANGE_STEP_COUNTS[CrossPointSettings::SD_FONT_SIZE_RANGE_COUNT] = {4, 4, 3, 5, 8};
+constexpr uint8_t REMOVED_INX_THEME = 7;
+constexpr uint8_t REMOVED_INX_FLOW_THEME = 8;
+constexpr uint8_t REMOVED_INX_NEOBRUTALIST_THEME = 9;
 
 bool isValidDeviceName(const char* name) {
   if (!name) return false;
@@ -239,6 +242,19 @@ void applyLegacyFrontButtonLayout(CrossPointSettings& settings) {
 }
 
 }  // namespace
+
+uint8_t CrossPointSettings::normalizeUiTheme(uint8_t rawTheme) {
+  if (rawTheme < UI_THEME_COUNT) {
+    return rawTheme;
+  }
+  if (rawTheme == REMOVED_INX_NEOBRUTALIST_THEME) {
+    return static_cast<uint8_t>(NEOBRUTALIST);
+  }
+  if (rawTheme == REMOVED_INX_THEME || rawTheme == REMOVED_INX_FLOW_THEME) {
+    return static_cast<uint8_t>(LYRA);
+  }
+  return static_cast<uint8_t>(LYRA);
+}
 
 const char* CrossPointSettings::getDefaultDeviceName() {
   if (gpio.deviceIsX3()) return "NEOINK X3";
@@ -550,12 +566,11 @@ bool CrossPointSettings::loadFromBinaryFile() {
     {
       // Older builds wrote uiTheme via raw readPod, so any byte (including
       // values that were briefly assigned to themes that are not currently
-      // exposed) may be on disk. Map anything outside the active theme count
-      // to LYRA so the migration is deterministic instead of leaning on
-      // readAndValidate's no-op-on-invalid behaviour.
+      // exposed) may be on disk. Normalize removed or invalid themes so boot
+      // never depends on a missing theme class.
       uint8_t rawTheme = LYRA;
       serialization::readPod(inputFile, rawTheme);
-      uiTheme = (rawTheme < UI_THEME_COUNT) ? rawTheme : static_cast<uint8_t>(LYRA);
+      uiTheme = normalizeUiTheme(rawTheme);
     }
     if (++settingsRead >= fileSettingsCount) break;
     readAndValidate(inputFile, frontButtonBack, FRONT_BUTTON_HARDWARE_COUNT);

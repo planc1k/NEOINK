@@ -239,10 +239,7 @@ class CrossPointSettings {
     LYRA_CAROUSEL = 4,
     MINIMAL = 5,
     NEOBRUTALIST = 6,
-    INX = 7,
-    INX_FLOW = 8,
-    INX_NEOBRUTALIST = 9,
-    UI_THEME_COUNT = 10
+    UI_THEME_COUNT = 7
   };
   enum RECENT_BOOKS_VIEW { RECENT_BOOKS_LIST = 0, RECENT_BOOKS_GRID = 1, RECENT_BOOKS_VIEW_COUNT };
 
@@ -520,6 +517,7 @@ class CrossPointSettings {
 
   static void validateFrontButtonMapping(CrossPointSettings& settings);
   static void validateReaderFrontButtonMapping(CrossPointSettings& settings);
+  static uint8_t normalizeUiTheme(uint8_t rawTheme);
   static uint8_t sleepTimeoutEnumToMinutes(uint8_t legacyValue);
   static uint8_t sleepScreenStorageToMode(uint8_t storedValue);
   static uint8_t sleepScreenModeToStorage(uint8_t mode);

@@ -295,107 +295,6 @@ bool isMinimalTheme() {
   return static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme) == CrossPointSettings::UI_THEME::MINIMAL;
 }
 
-bool isInxTheme() {
-  const auto theme = static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme);
-  return theme == CrossPointSettings::UI_THEME::INX || theme == CrossPointSettings::UI_THEME::INX_FLOW ||
-         theme == CrossPointSettings::UI_THEME::INX_NEOBRUTALIST;
-}
-
-enum class InxHomeTab : uint8_t { Recent = 0, Library, Flashcards, FileTransfer, Statistics, Settings, Count };
-
-constexpr int kInxHomeTabCount = static_cast<int>(InxHomeTab::Count);
-
-const char* inxHomeTabLabel(const int index) {
-  switch (static_cast<InxHomeTab>(index)) {
-    case InxHomeTab::Recent:
-      return "Recent";
-    case InxHomeTab::Library:
-      return "Library";
-    case InxHomeTab::Flashcards:
-      return "Cards";
-    case InxHomeTab::FileTransfer:
-      return "Transfer";
-    case InxHomeTab::Statistics:
-      return "Stats";
-    case InxHomeTab::Settings:
-      return tr(STR_SETTINGS_TITLE);
-    case InxHomeTab::Count:
-    default:
-      return "";
-  }
-}
-
-struct InxTabPanelEntry {
-  const char* title;
-  const char* subtitle;
-  UIIcon icon;
-  HomeMenuAction action;
-};
-
-struct InxTabPanelEntries {
-  static constexpr int kCapacity = 4;
-  std::array<InxTabPanelEntry, kCapacity> entries{};
-  int count = 0;
-
-  void push(const InxTabPanelEntry& entry) {
-    if (count >= kCapacity) return;
-    entries[count++] = entry;
-  }
-
-  int size() const { return count; }
-
-  const InxTabPanelEntry& operator[](int index) const { return entries[index]; }
-};
-
-InxTabPanelEntries buildInxTabPanelEntries(const InxHomeTab tab, const bool hasReadingStats) {
-  InxTabPanelEntries entries;
-  switch (tab) {
-    case InxHomeTab::Recent:
-      entries.push({tr(STR_MENU_RECENT_BOOKS), tr(STR_CONTINUE_READING), Recent, HomeMenuAction::RecentBooks});
-      break;
-    case InxHomeTab::Library:
-      entries.push({tr(STR_BROWSE_FILES), "Open books and folders", Folder, HomeMenuAction::BrowseFiles});
-      entries.push({tr(STR_MENU_RECENT_BOOKS), "Return to a recent title", Recent, HomeMenuAction::RecentBooks});
-      break;
-    case InxHomeTab::Flashcards:
-      entries.push({"Flashcards", "Study decks and review progress", Book, HomeMenuAction::Flashcards});
-      break;
-    case InxHomeTab::FileTransfer:
-      entries.push({tr(STR_FILE_TRANSFER), "WiFi transfer and sync tools", Transfer, HomeMenuAction::FileTransfer});
-      break;
-    case InxHomeTab::Statistics:
-      entries.push({tr(STR_READING_STATS), hasReadingStats ? "Open reading progress" : "No sessions recorded yet",
-                    Chart, HomeMenuAction::ReadingStats});
-      break;
-    case InxHomeTab::Settings:
-      entries.push({tr(STR_SETTINGS_TITLE), "Display, reader, controls, system", Settings, HomeMenuAction::Settings});
-      break;
-    case InxHomeTab::Count:
-    default:
-      break;
-  }
-  return entries;
-}
-
-int inxTabForInitialMenuItem(HomeMenuItem item) {
-  switch (item) {
-    case HomeMenuItem::FILE_BROWSER:
-      return static_cast<int>(InxHomeTab::Library);
-    case HomeMenuItem::RECENTS:
-      return static_cast<int>(InxHomeTab::Recent);
-    case HomeMenuItem::FLASHCARDS:
-      return static_cast<int>(InxHomeTab::Flashcards);
-    case HomeMenuItem::FILE_TRANSFER:
-      return static_cast<int>(InxHomeTab::FileTransfer);
-    case HomeMenuItem::SETTINGS_MENU:
-      return static_cast<int>(InxHomeTab::Settings);
-    case HomeMenuItem::OPDS_BROWSER:
-    case HomeMenuItem::NONE:
-    default:
-      return static_cast<int>(InxHomeTab::Recent);
-  }
-}
-
 bool isAnyFrontButtonPressed(const MappedInputManager& mappedInput) {
   return mappedInput.isFrontButtonPressed(HalGPIO::BTN_BACK) ||
          mappedInput.isFrontButtonPressed(HalGPIO::BTN_CONFIRM) ||
@@ -862,7 +761,6 @@ void HomeActivity::onEnter() {
 
   selectorIndex = 0;
   lastCarouselBookIndex = 0;
-  inxTabIndex = inxTabForInitialMenuItem(initialMenuItem);
   minimalMenuOpen = false;
   minimalSuppressInitialFrontRelease = isMinimalTheme();
   minimalMenuIndex = 0;
@@ -899,7 +797,7 @@ void HomeActivity::onEnter() {
   }
   updateHighlightedBookContext();
 
-  if (!isInxTheme() && initialMenuItem != HomeMenuItem::NONE) {
+  if (initialMenuItem != HomeMenuItem::NONE) {
     const bool includeContinueReading = metrics.homeContinueReadingInMenu && !recentBooks.empty();
     const auto menuItems = buildSelectableHomeMenuItems(hasOpdsServers, hasReadingStats, hasBookmarks, hasClippings,
                                                         includeContinueReading);
@@ -1372,114 +1270,6 @@ bool HomeActivity::preRenderCarouselFrames(bool showProgressPopup) {
 }
 
 void HomeActivity::loop() {
-  if (isInxTheme()) {
-    const int previousHighlightedBookIdx = getHighlightedBookIndex();
-    const int visibleBookCount = getVisibleRecentBookCount();
-
-    if (mappedInput.wasPressed(MappedInputManager::Button::Left)) {
-      inxTabIndex = ButtonNavigator::previousIndex(inxTabIndex, kInxHomeTabCount);
-      inxTabItemIndex = 0;
-      requestUpdate();
-    }
-    if (mappedInput.wasPressed(MappedInputManager::Button::Right)) {
-      inxTabIndex = ButtonNavigator::nextIndex(inxTabIndex, kInxHomeTabCount);
-      inxTabItemIndex = 0;
-      requestUpdate();
-    }
-    const InxHomeTab currentInxTab = static_cast<InxHomeTab>(inxTabIndex);
-    if (currentInxTab == InxHomeTab::Recent && visibleBookCount > 0) {
-      if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
-        selectorIndex = ButtonNavigator::previousIndex(selectorIndex, visibleBookCount);
-        lastCarouselBookIndex = selectorIndex;
-        requestUpdate();
-      }
-      if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
-        selectorIndex = ButtonNavigator::nextIndex(selectorIndex, visibleBookCount);
-        lastCarouselBookIndex = selectorIndex;
-        requestUpdate();
-      }
-    } else {
-      const auto entries = buildInxTabPanelEntries(currentInxTab, hasReadingStats);
-      if (entries.size() > 0) {
-        if (inxTabItemIndex >= entries.size()) {
-          inxTabItemIndex = entries.size() - 1;
-        }
-        if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
-          inxTabItemIndex = ButtonNavigator::previousIndex(inxTabItemIndex, entries.size());
-          requestUpdate();
-        }
-        if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
-          inxTabItemIndex = ButtonNavigator::nextIndex(inxTabItemIndex, entries.size());
-          requestUpdate();
-        }
-      }
-    }
-
-    if (getHighlightedBookIndex() != previousHighlightedBookIdx) {
-      updateHighlightedBookContext();
-    }
-
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      auto activateAction = [this](const HomeMenuAction action) {
-        switch (action) {
-          case HomeMenuAction::BrowseFiles:
-            onFileBrowserOpen();
-            break;
-          case HomeMenuAction::ContinueReading:
-            onContinueReading();
-            break;
-          case HomeMenuAction::RecentBooks:
-            onRecentsOpen();
-            break;
-          case HomeMenuAction::OpdsBrowser:
-            onOpdsBrowserOpen();
-            break;
-          case HomeMenuAction::Flashcards:
-            onFlashcardsOpen();
-            break;
-          case HomeMenuAction::ReadingStats:
-            onReadingStatsOpen();
-            break;
-          case HomeMenuAction::Bookmarks:
-            onSavedItemsOpen();
-            break;
-          case HomeMenuAction::FileTransfer:
-            onFileTransferOpen();
-            break;
-          case HomeMenuAction::Settings:
-            onSettingsOpen();
-            break;
-        }
-      };
-
-      switch (currentInxTab) {
-        case InxHomeTab::Recent:
-          if (visibleBookCount > 0) {
-            onSelectBook(recentBooks[std::clamp(selectorIndex, 0, visibleBookCount - 1)].path);
-          } else {
-            onFileBrowserOpen();
-          }
-          break;
-        case InxHomeTab::Library:
-        case InxHomeTab::Flashcards:
-        case InxHomeTab::FileTransfer:
-        case InxHomeTab::Statistics:
-        case InxHomeTab::Settings: {
-          const auto entries = buildInxTabPanelEntries(currentInxTab, hasReadingStats);
-          if (entries.size() > 0) {
-            const int item = std::clamp(inxTabItemIndex, 0, entries.size() - 1);
-            activateAction(entries[item].action);
-          }
-          break;
-        }
-        case InxHomeTab::Count:
-        default:
-          break;
-      }
-    }
-    return;
-  }
-
   if (isMinimalTheme()) {
     const int pressedFrontButton = mappedInput.getPressedFrontButton();
     const int releasedFrontButton = mappedInput.getReleasedFrontButton();
@@ -1770,75 +1560,6 @@ void HomeActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
-
-  if (isInxTheme()) {
-    renderer.clearScreen();
-
-    GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, "NEOINK");
-
-    std::vector<TabInfo> tabs;
-    tabs.reserve(kInxHomeTabCount);
-    for (int i = 0; i < kInxHomeTabCount; ++i) {
-      tabs.push_back({inxHomeTabLabel(i), i == inxTabIndex});
-    }
-    GUI.drawTabBar(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight}, tabs,
-                   true);
-
-    const InxHomeTab currentInxTab = static_cast<InxHomeTab>(inxTabIndex);
-    if (selectorIndex >= getVisibleRecentBookCount() && getVisibleRecentBookCount() > 0) {
-      selectorIndex = getVisibleRecentBookCount() - 1;
-    }
-
-    const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
-    const int contentBottom = pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing;
-    if (currentInxTab == InxHomeTab::Recent) {
-      bool bufferRestored = coverBufferStored && restoreCoverBuffer();
-      coverRectX = 0;
-      coverRectY = metrics.homeTopPadding;
-      coverRectW = pageWidth;
-      coverRectH = metrics.homeCoverTileHeight;
-      GUI.drawRecentBookCover(
-          renderer, Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight}, recentBooks, selectorIndex,
-          coverRendered, coverBufferStored, bufferRestored, std::bind(&HomeActivity::storeCoverBuffer, this),
-          hasAnyBookStats(currentBookStats) ? &currentBookStats : nullptr, currentBookProgressPercent);
-
-      const int promptY = std::min(pageHeight - metrics.buttonHintsHeight - 36,
-                                   metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.verticalSpacing);
-      const char* detail = recentBooks.empty() ? tr(STR_START_READING) : recentBooks[getHighlightedBookIndex()].title.c_str();
-      GUI.drawSubHeader(renderer, Rect{0, promptY, pageWidth, 30}, inxHomeTabLabel(inxTabIndex), detail);
-    } else {
-      const auto entries = buildInxTabPanelEntries(currentInxTab, hasReadingStats);
-      if (entries.size() > 0 && inxTabItemIndex >= entries.size()) {
-        inxTabItemIndex = entries.size() - 1;
-      }
-      GUI.drawSubHeader(renderer, Rect{0, contentTop, pageWidth, 32}, inxHomeTabLabel(inxTabIndex),
-                        entries.size() > 0 ? entries[std::max(0, inxTabItemIndex)].title : "");
-      const int listTop = contentTop + 40;
-      const int listHeight = std::max(0, contentBottom - listTop);
-      GUI.drawList(
-          renderer, Rect{0, listTop, pageWidth, listHeight}, entries.size(), inxTabItemIndex,
-          [&entries](int index) { return std::string(entries[index].title); },
-          [&entries](int index) { return std::string(entries[index].subtitle); },
-          [&entries](int index) { return entries[index].icon; });
-    }
-
-    const auto labels = mappedInput.mapLabels("", tr(STR_SELECT), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-
-    renderer.displayBuffer();
-
-    if (!firstRenderDone) {
-      firstRenderDone = true;
-      requestUpdate();
-      return;
-    }
-
-    if (!recentsLoaded && !recentsLoading) {
-      recentsLoading = true;
-      loadRecentCovers(metrics.homeCoverHeight);
-    }
-    return;
-  }
 
   if (isMinimalTheme()) {
     renderer.clearScreen();

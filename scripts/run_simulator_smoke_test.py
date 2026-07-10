@@ -38,11 +38,6 @@ THEMES = {
     "minimal": 5,
     "neobrutalist": 6,
     "neo": 6,
-    "inx": 7,
-    "inx-flow": 8,
-    "inx_flow": 8,
-    "inx-neobrutalist": 9,
-    "inx_neobrutalist": 9,
 }
 
 

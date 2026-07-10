@@ -238,6 +238,22 @@ bool hasHeapForDeckIndex(size_t expectedIndexBytes) {
 #endif
 }
 
+bool hasHeapForDeckState(size_t expectedBytes) {
+#ifdef SIMULATOR
+  return true;
+#else
+  const auto heap = MemoryBudget::snapshot();
+  const uint32_t minFree = static_cast<uint32_t>(expectedBytes) + kHeapReserveBytes;
+  if (MemoryBudget::hasHeap(heap, minFree, kMinLargestHeapBlockBytes)) {
+    return true;
+  }
+
+  LOG_ERR(TAG, "Low heap for flashcard state (%u free, %u max alloc, need %u/%u)", heap.freeHeap, heap.maxAllocHeap,
+          minFree, kMinLargestHeapBlockBytes);
+  return false;
+#endif
+}
+
 }  // namespace
 
 void ensureDirectories() {
@@ -440,7 +456,14 @@ bool loadProgress(Deck& deck, std::string* error) {
   }
 
   const uint16_t count = std::min<uint16_t>(headerPrefix.recordCount, static_cast<uint16_t>(kMaxLoadedCards));
-  deck.progress.reserve(count);
+  const size_t progressCapacity = std::max<size_t>(count, std::min(deck.cardRefs.size(), kMaxLoadedCards));
+  const size_t expectedStateBytes = (deck.cardRefs.size() * sizeof(CardRef)) + (progressCapacity * sizeof(ProgressRecord));
+  if (!hasHeapForDeckState(expectedStateBytes)) {
+    file.close();
+    setError(error, "Not enough memory for deck progress");
+    return false;
+  }
+  deck.progress.reserve(progressCapacity);
   for (uint16_t i = 0; i < count; ++i) {
     ProgressRecord record{};
     if (headerPrefix.version == kProgressVersionV1) {

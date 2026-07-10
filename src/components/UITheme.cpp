@@ -12,7 +12,6 @@
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
 #include "components/themes/BaseTheme.h"
-#include "components/themes/inx/InxTheme.h"
 #include "components/themes/lyra/Lyra3CoversTheme.h"
 #include "components/themes/lyra/LyraCarouselTheme.h"
 #include "components/themes/lyra/LyraTheme.h"
@@ -40,16 +39,17 @@ std::string addBmpSuffix(const std::string& path, const char* suffix) {
 UITheme UITheme::instance;
 
 UITheme::UITheme() {
-  auto themeType = static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme);
+  auto themeType = static_cast<CrossPointSettings::UI_THEME>(CrossPointSettings::normalizeUiTheme(SETTINGS.uiTheme));
   setTheme(themeType);
 }
 
 void UITheme::reload() {
-  auto themeType = static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme);
+  auto themeType = static_cast<CrossPointSettings::UI_THEME>(CrossPointSettings::normalizeUiTheme(SETTINGS.uiTheme));
   setTheme(themeType);
 }
 
 void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
+  type = static_cast<CrossPointSettings::UI_THEME>(CrossPointSettings::normalizeUiTheme(static_cast<uint8_t>(type)));
   switch (type) {
     case CrossPointSettings::UI_THEME::CLASSIC:
       LOG_DBG("UI", "Using Classic theme");
@@ -85,21 +85,6 @@ void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
       LOG_DBG("UI", "Using Neobrutalist theme");
       currentTheme = std::make_unique<NeobrutalistTheme>();
       currentMetrics = &NeobrutalistMetrics::values;
-      break;
-    case CrossPointSettings::UI_THEME::INX:
-      LOG_DBG("UI", "Using INX theme");
-      currentTheme = std::make_unique<InxTheme>();
-      currentMetrics = &InxMetrics::values;
-      break;
-    case CrossPointSettings::UI_THEME::INX_FLOW:
-      LOG_DBG("UI", "Using INX Flow theme");
-      currentTheme = std::make_unique<InxFlowTheme>();
-      currentMetrics = &InxFlowMetrics::values;
-      break;
-    case CrossPointSettings::UI_THEME::INX_NEOBRUTALIST:
-      LOG_DBG("UI", "Using INX Neobrutalist theme");
-      currentTheme = std::make_unique<InxNeobrutalistTheme>();
-      currentMetrics = &InxNeobrutalistMetrics::values;
       break;
     default:
       LOG_ERR("UI", "Unknown theme %d, falling back to Classic", static_cast<int>(type));

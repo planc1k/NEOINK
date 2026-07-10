@@ -4,7 +4,7 @@ NEOINK is an experimental firmware fork for the Xteink X3/X4 e-ink reader. It
 keeps the reading-focused base from [uxjulia/CrossInk](https://github.com/uxjulia/CrossInk)
 and [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader),
 then adds flashcards, richer SD-card library tools, native Markdown reading, and
-new INX-inspired themes.
+NEOINK-specific polish.
 
 This is still ESP32-C3 firmware, so the project is designed around limited RAM,
 limited flash, and safe SD-card-backed workflows instead of phone-style app
@@ -26,21 +26,22 @@ behavior.
 - Reader fonts can be installed from the SD card, avoiding large baked-in font
   additions for custom families.
 
-## New INX-Inspired UI
+## UI Themes
 
-NEOINK adds three selectable themes under **Settings > Display > UI Theme**:
+Selectable themes are available under **Settings > Display > UI Theme**:
 
-- **INX**: clean monochrome interface with compact headers, underline tabs,
-  refined lists, popups, keyboard, and button hints.
-- **INX Flow**: INX styling with a richer recent-books home treatment and three
-  visible book slots.
-- **INX Neobrutalist**: INX tab navigation with bold bordered panels, hard
-  shadows, dither accents, and sharper selected states.
+- **Classic**
+- **Minimal**
+- **Lyra**
+- **Lyra Extended**
+- **Lyra Carousel**
+- **RoundedRaff**
+- **Neobrutalist**
 
-For these themes the home screen uses six tabs: **Recent**, **Library**,
-**Flashcards**, **File Transfer**, **Statistics**, and **Settings**. The tabs
-call the existing NEOINK/CrossInk activities; INX's internal application
-architecture is not imported.
+The INX-inspired experimental themes have been removed to reduce firmware
+surface area and keep home navigation on the shared, better-tested path. Devices
+that previously saved an INX theme value migrate safely on next boot: INX and
+INX Flow fall back to Lyra, while INX Neobrutalist falls back to Neobrutalist.
 
 ## File Formats
 
@@ -135,9 +136,9 @@ pio run -e simulator
 Run a smoke test:
 
 ```sh
-python3 scripts/run_simulator_smoke_test.py --theme inx
-python3 scripts/run_simulator_smoke_test.py --theme inx-flow --no-build
-python3 scripts/run_simulator_smoke_test.py --theme inx-neobrutalist --no-build
+python3 scripts/run_simulator_smoke_test.py --theme lyra
+python3 scripts/run_simulator_smoke_test.py --theme neobrutalist --no-build
+python3 scripts/run_simulator_smoke_test.py --theme lyra-carousel --no-build
 ```
 
 Before flashing, recommended validation is:
@@ -196,5 +197,5 @@ NEOINK builds on substantial work from:
 - [uxjulia/CrossInk](https://github.com/uxjulia/CrossInk)
 - [crosspoint-reader/crosspoint-reader](https://github.com/crosspoint-reader/crosspoint-reader)
 - [crosspoint-reader/crosspoint-simulator](https://github.com/crosspoint-reader/crosspoint-simulator)
-- [obijuankenobiii/inx](https://github.com/obijuankenobiii/inx), used as visual
-  and navigation inspiration for the INX theme family
+- [obijuankenobiii/inx](https://github.com/obijuankenobiii/inx), previously
+  explored for visual/navigation ideas during the NEOINK theme experiments

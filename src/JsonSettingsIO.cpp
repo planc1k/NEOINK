@@ -291,6 +291,11 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
         const bool isSdFontSize = info.key && strcmp(info.key, "fontSize") == 0 &&
                                   doc["sdFontFamilyName"].is<const char*>() &&
                                   doc["sdFontFamilyName"].as<const char*>()[0] != '\0';
+        if (info.key && strcmp(info.key, "uiTheme") == 0) {
+          const uint8_t normalizedTheme = CrossPointSettings::normalizeUiTheme(v);
+          if (normalizedTheme != v && needsResave) *needsResave = true;
+          v = normalizedTheme;
+        }
         if (isSdFontSize && v < CrossPointSettings::SD_FONT_MAX_SIZE_STEPS) {
           // Keep a saved SD-family size index even when this build's built-in
           // font list has fewer choices; the registry-aware settings list will
