@@ -211,3 +211,53 @@ h2 {
         width: unset;
       }
     }
+
+/* NEOINK polish overrides */
+.setting-row {
+  gap: 14px;
+  padding: 12px 0;
+  border-bottom: 2px solid var(--ink);
+}
+.setting-name {
+  color: var(--ink);
+  font-weight: 850;
+}
+.setting-control select,
+.setting-control input[type="number"],
+.setting-control input[type="text"],
+.setting-control input[type="password"] {
+  border: 2px solid var(--ink);
+  background: var(--surface);
+}
+.toggle-slider {
+  border: 2px solid var(--ink);
+  background: var(--accent-yellow);
+}
+.toggle-slider:before {
+  background: var(--surface);
+  border: 2px solid var(--ink);
+  height: 16px;
+  width: 16px;
+  bottom: 3px;
+}
+.toggle-switch input:checked + .toggle-slider {
+  background: var(--accent-mint);
+}
+.save-container {
+  position: sticky;
+  bottom: 10px;
+  z-index: 20;
+}
+.save-btn,
+.btn-small {
+  border: 3px solid var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+.opds-server {
+  border: 2px solid var(--ink);
+  background: var(--surface);
+}
+.message {
+  border: 2px solid var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
+}

@@ -1,19 +1,59 @@
-<div class="card">
-      <h2>Device Status</h2>
-      <div class="info-row">
-        <span class="label">Version</span>
-        <span class="value" id="version"></span>
-      </div>
-      <div class="info-row">
-        <span class="label">WiFi Status</span>
-        <span class="status">Connected</span>
-      </div>
-      <div class="info-row">
-        <span class="label">IP Address</span>
-        <span class="value" id="ip-address"></span>
-      </div>
-      <div class="info-row">
-        <span class="label">Free Memory</span>
-        <span class="value" id="free-heap"></span>
-      </div>
+<section class="home-hero">
+  <div>
+    <p class="eyebrow">Local reader console</p>
+    <h2>Manage your NEOINK without digging through folders.</h2>
+    <p class="subtle">Upload books, organize the SD card, import decks, tune settings, and install fonts from one offline web UI.</p>
+  </div>
+  <div class="hero-status">
+    <span class="status online">Connected</span>
+    <span class="value" id="ip-address"></span>
+  </div>
+</section>
+
+<section class="quick-grid" aria-label="Quick actions">
+  <a class="quick-card files" href="/files">
+    <span class="quick-kicker">Books</span>
+    <strong>File Manager</strong>
+    <span>Upload, rename, move, shelve, and scan the library.</span>
+  </a>
+  <a class="quick-card cards" href="/flashcards">
+    <span class="quick-kicker">Study</span>
+    <strong>Flashcards</strong>
+    <span>Import APKG, CSV, or TSV decks and back up progress.</span>
+  </a>
+  <a class="quick-card settings" href="/settings">
+    <span class="quick-kicker">Device</span>
+    <strong>Settings</strong>
+    <span>Adjust display, reader, controls, network, and sync behavior.</span>
+  </a>
+  <a class="quick-card fonts" href="/fonts">
+    <span class="quick-kicker">Typography</span>
+    <strong>Fonts</strong>
+    <span>Install SD-card font families without rebuilding firmware.</span>
+  </a>
+</section>
+
+<div class="card status-card">
+  <div class="section-heading">
+    <h2>Device Status</h2>
+    <span class="summary-inline">Live values from the reader</span>
+  </div>
+  <div class="status-grid">
+    <div class="info-row">
+      <span class="label">Version</span>
+      <span class="value" id="version"></span>
     </div>
+    <div class="info-row">
+      <span class="label">WiFi</span>
+      <span class="status">Connected</span>
+    </div>
+    <div class="info-row">
+      <span class="label">IP Address</span>
+      <span class="value" id="ip-address-detail"></span>
+    </div>
+    <div class="info-row">
+      <span class="label">Free Memory</span>
+      <span class="value" id="free-heap"></span>
+    </div>
+  </div>
+</div>

@@ -24,6 +24,7 @@ JSZIP = os.path.join(ROOT, "src", "network", "html", "js", "jszip.min.js")
 PAGES = {
     "home":     ("/",         "NEOINK",                     "home",     ""),
     "files":    ("/files",    "Files - NEOINK",             "files",    '  <script src="/js/jszip.min.js"></script>'),
+    "flashcards": ("/flashcards", "Flashcards - NEOINK",     "flashcards", '  <script src="/js/jszip.min.js"></script>'),
     "settings": ("/settings", "Settings - NEOINK Reader",   "settings", ""),
     "fonts":    ("/fonts",    "Fonts - NEOINK",             "fonts",    ""),
 }
@@ -41,7 +42,7 @@ def render_page(slug):
         "styles": read(WEB, "pages", f"{slug}.css"),
         "body": read(WEB, "pages", f"{slug}.html"),
         "script": f"<script>\n{js}\n</script>" if js else "",
-        "cls_home": "", "cls_files": "", "cls_settings": "", "cls_fonts": "",
+        "cls_home": "", "cls_files": "", "cls_flashcards": "", "cls_settings": "", "cls_fonts": "",
     }
     values[f"cls_{active}"] = ' class="active"'
     base = read(WEB, "templates", "base.html")
@@ -61,6 +62,25 @@ MOCK_API = {
         {"name": "Bookerly", "sizes": [10, 12, 14], "files": [{"size": 120000}, {"size": 140000}]},
         {"name": "Literata", "sizes": [12], "files": [{"size": 160000}]},
     ]},
+    "/api/flashcards/decks": [
+        {"path": "/.crosspoint/flashcards/decks/core.tsv", "title": "Core Words", "valid": True,
+         "totalCards": 120, "dueCards": 18, "newCards": 42, "reviewedCards": 78,
+         "retentionPermille": 870, "totalReviews": 240},
+        {"path": "/.crosspoint/flashcards/decks/history.tsv", "title": "History", "valid": True,
+         "totalCards": 64, "dueCards": 4, "newCards": 20, "reviewedCards": 44,
+         "retentionPermille": 910, "totalReviews": 96},
+    ],
+    "/api/flashcards/deck": {
+        "summary": {"path": "/.crosspoint/flashcards/decks/core.tsv", "title": "Core Words", "valid": True,
+                    "totalCards": 120, "dueCards": 18, "newCards": 42, "reviewedCards": 78,
+                    "retentionPermille": 870, "totalReviews": 240, "totalLapses": 12,
+                    "totalSessions": 14, "matureCards": 31, "totalAgain": 12,
+                    "totalHard": 34, "totalGood": 158, "totalEasy": 36},
+        "cards": [
+            {"front": "serendipity", "reviewCount": 4, "intervalSessions": 8, "lapseCount": 0},
+            {"front": "ephemeral", "reviewCount": 2, "intervalSessions": 3, "lapseCount": 1},
+        ],
+    },
     "/api/wifi": [
         {"ssid": "HomeNetwork", "hasPassword": True, "isLastConnected": True},
         {"ssid": "Library Guest", "hasPassword": False, "isLastConnected": False},

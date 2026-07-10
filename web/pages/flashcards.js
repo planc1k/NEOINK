@@ -60,7 +60,7 @@ async function loadDecks() {
         return `<div class="deck ${deck.path === selectedDeckPath ? 'selected' : ''}" data-path="${escapeHtml(deck.path)}"><div><div class="deck-title">${escapeHtml(deck.title)}</div><div class="deck-meta">${escapeHtml(deck.error || 'Invalid deck')}</div></div></div>`;
       }
       const retention = deck.totalReviews ? Math.round((deck.retentionPermille || 0) / 10) + '%' : '-';
-      return `<div class="deck ${deck.path === selectedDeckPath ? 'selected' : ''}">
+      return `<div class="deck ${deck.path === selectedDeckPath ? 'selected' : ''}" data-path="${escapeHtml(deck.path)}">
         <div>
           <button class="mini-btn" data-action="select" data-path="${escapeHtml(deck.path)}">${escapeHtml(deck.title)}</button>
           <div class="deck-meta">${escapeHtml(deck.path)}</div>
@@ -93,6 +93,12 @@ async function loadDecks() {
 function pct(value, total) {
   if (!total) return 0;
   return Math.max(0, Math.min(100, Math.round((value * 100) / total)));
+}
+
+function syncSelectedDeckRow() {
+  document.querySelectorAll('#deckList .deck').forEach(row => {
+    row.classList.toggle('selected', row.dataset.path === selectedDeckPath);
+  });
 }
 
 async function loadDeckDetail(path) {
@@ -167,6 +173,7 @@ document.getElementById('deckList').addEventListener('click', async event => {
   try {
     if (action === 'select') {
       selectedDeckPath = path;
+      syncSelectedDeckRow();
       await loadDeckDetail(path);
       return;
     }

@@ -115,3 +115,41 @@ h3 {
           min-width: 0;
         }
       }
+
+/* NEOINK polish overrides */
+.family {
+  margin: 0 -8px;
+  padding: 14px 8px;
+  border-bottom: 2px solid var(--ink);
+}
+.family h3 {
+  font-weight: 950;
+}
+.btn {
+  border: 2px solid var(--ink);
+  box-shadow: 2px 2px 0 var(--ink);
+}
+.btn-primary {
+  border-color: var(--ink);
+}
+.btn-danger:hover {
+  background: var(--danger-color);
+  color: #fffef7;
+}
+.upload-form input[type="file"] {
+  border: 2px solid var(--ink);
+  background: var(--surface);
+}
+#status,
+.status-ok,
+.status-err {
+  border: 2px solid var(--ink);
+  border-radius: 0;
+  box-shadow: 3px 3px 0 var(--ink);
+}
+.empty {
+  background: var(--accent-yellow);
+  border: 2px solid var(--ink);
+  color: var(--ink);
+  font-weight: 850;
+}

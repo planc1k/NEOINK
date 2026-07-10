@@ -38,10 +38,10 @@ Selectable themes are available under **Settings > Display > UI Theme**:
 - **RoundedRaff**
 - **Neobrutalist**
 
-The INX-inspired experimental themes have been removed to reduce firmware
-surface area and keep home navigation on the shared, better-tested path. Devices
-that previously saved an INX theme value migrate safely on next boot: INX and
-INX Flow fall back to Lyra, while INX Neobrutalist falls back to Neobrutalist.
+Neobrutalist is the default theme for fresh installs. The INX-inspired
+experimental themes have been removed to reduce firmware surface area and keep
+home navigation on the shared, better-tested path. Devices that previously saved
+an INX theme value migrate safely to Neobrutalist on next boot.
 
 ## File Formats
 

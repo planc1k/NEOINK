@@ -11,19 +11,30 @@
   </style>
 </head>
 <body>
-  <h1><img class="logo-mark" src="/logo.png?v={{ v }}" alt="" /><span class="wordmark">NEO<span class="crossink-header">I</span>NK</span></h1>
+  <header class="app-topbar">
+    <a class="brand" href="/">
+      <img class="logo-mark" src="/logo.png?v={{ v }}" alt="" />
+      <span class="wordmark">NEO<span class="crossink-header">I</span>NK</span>
+    </a>
+    <div class="topbar-meta">
+      <span class="meta-chip">SD tools</span>
+      <span class="meta-chip accent">Offline UI</span>
+    </div>
+  </header>
 
-  <div class="nav-links">
+  <nav class="nav-links" aria-label="Primary">
     <a href="/"{{ cls_home }}>Home</a>
-    <a href="/files"{{ cls_files }}>File Manager</a>
-    <a href="/flashcards"{{ cls_flashcards }}>Flashcards</a>
+    <a href="/files"{{ cls_files }}>Files</a>
+    <a href="/flashcards"{{ cls_flashcards }}>Cards</a>
     <a href="/settings"{{ cls_settings }}>Settings</a>
     <a href="/fonts"{{ cls_fonts }}>Fonts</a>
-  </div>
+  </nav>
 
+  <main class="app-main">
 {{ body }}
+  </main>
 
-  <p class="footer">NEOINK &bull; Open Source</p>
+  <footer class="footer">NEOINK local transfer console</footer>
 
 {{ script }}
 </body>

@@ -247,13 +247,11 @@ uint8_t CrossPointSettings::normalizeUiTheme(uint8_t rawTheme) {
   if (rawTheme < UI_THEME_COUNT) {
     return rawTheme;
   }
-  if (rawTheme == REMOVED_INX_NEOBRUTALIST_THEME) {
+  if (rawTheme == REMOVED_INX_THEME || rawTheme == REMOVED_INX_FLOW_THEME ||
+      rawTheme == REMOVED_INX_NEOBRUTALIST_THEME) {
     return static_cast<uint8_t>(NEOBRUTALIST);
   }
-  if (rawTheme == REMOVED_INX_THEME || rawTheme == REMOVED_INX_FLOW_THEME) {
-    return static_cast<uint8_t>(LYRA);
-  }
-  return static_cast<uint8_t>(LYRA);
+  return static_cast<uint8_t>(NEOBRUTALIST);
 }
 
 const char* CrossPointSettings::getDefaultDeviceName() {
@@ -568,7 +566,7 @@ bool CrossPointSettings::loadFromBinaryFile() {
       // values that were briefly assigned to themes that are not currently
       // exposed) may be on disk. Normalize removed or invalid themes so boot
       // never depends on a missing theme class.
-      uint8_t rawTheme = LYRA;
+      uint8_t rawTheme = NEOBRUTALIST;
       serialization::readPod(inputFile, rawTheme);
       uiTheme = normalizeUiTheme(rawTheme);
     }

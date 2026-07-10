@@ -393,7 +393,7 @@ class CrossPointSettings {
   // Long-press page turn button behavior
   uint8_t longPressButtonBehavior = OFF;
   // UI Theme
-  uint8_t uiTheme = LYRA;
+  uint8_t uiTheme = NEOBRUTALIST;
   // Recent Books screen layout
   uint8_t recentBooksView = RECENT_BOOKS_LIST;
   // Sunlight fading compensation
