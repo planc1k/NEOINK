@@ -1484,12 +1484,24 @@ void HomeActivity::loop() {
     }
   } else {
     const int menuCount = getMenuItemCount();
-    buttonNavigator.onNext([this, menuCount] {
+    buttonNavigator.onNext([this, menuCount, visibleBookCount] {
+      if (selectorIndex < visibleBookCount) {
+        lastCarouselBookIndex = selectorIndex;
+      }
       selectorIndex = ButtonNavigator::nextIndex(selectorIndex, menuCount);
+      if (selectorIndex < visibleBookCount) {
+        lastCarouselBookIndex = selectorIndex;
+      }
       requestUpdate();
     });
-    buttonNavigator.onPrevious([this, menuCount] {
+    buttonNavigator.onPrevious([this, menuCount, visibleBookCount] {
+      if (selectorIndex < visibleBookCount) {
+        lastCarouselBookIndex = selectorIndex;
+      }
       selectorIndex = ButtonNavigator::previousIndex(selectorIndex, menuCount);
+      if (selectorIndex < visibleBookCount) {
+        lastCarouselBookIndex = selectorIndex;
+      }
       requestUpdate();
     });
   }

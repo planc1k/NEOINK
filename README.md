@@ -57,6 +57,8 @@ See [File Formats](./docs/file-formats.md#text-and-markdown-books).
 - Select **Neobrutalist** from **Settings > Display > UI Theme**.
 - Uses square high-contrast panels, thick borders, offset shadows, inverted
   selected states, and dither accents tuned for monochrome e-ink.
+- Shows up to three selectable recent-book covers on the home screen with
+  title, author, and selected-book progress treatment.
 - Covers headers, tab bars, lists, menus, button hints, side hints, recent-book
   home cards, popups, text fields, and the on-screen keyboard.
 

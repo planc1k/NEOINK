@@ -7,10 +7,12 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <string>
 #include <vector>
 
 #include "RecentBooksStore.h"
+#include "activities/reader/BookReadingStats.h"
 #include "components/UITheme.h"
 #include "components/icons/cover.h"
 #include "fontIds.h"
@@ -23,6 +25,9 @@ constexpr int kPadX = 14;
 constexpr int kTitleFont = UI_12_FONT_ID;
 constexpr int kBodyFont = UI_10_FONT_ID;
 constexpr int kMetaFont = SMALL_FONT_ID;
+constexpr int kHomeSlotCount = 3;
+constexpr int kHomeTileGap = 8;
+constexpr int kHomeFramePad = 4;
 
 void drawShadow(const GfxRenderer& renderer, const Rect r) {
   renderer.fillRect(r.x + kShadowOffset, r.y + kShadowOffset, r.width, r.height, true);
@@ -81,6 +86,72 @@ void drawBookmarkRibbon(const GfxRenderer& renderer, const Rect r, const bool bl
   const int px[5] = {x, x + ribbonW, x + ribbonW, cx, x};
   const int py[5] = {y, y, y + ribbonH, y + ribbonH - notch, y + ribbonH};
   renderer.fillPolygon(px, py, 5, black);
+}
+
+bool drawCoverBitmap(GfxRenderer& renderer, const RecentBook& book, const Rect cover) {
+  if (book.coverBmpPath.empty() || cover.width <= 0 || cover.height <= 0) {
+    return false;
+  }
+
+  const std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, cover.height);
+  if (coverPath.empty()) {
+    return false;
+  }
+
+  HalFile file;
+  if (!Storage.openFileForRead("HOME", coverPath, file)) {
+    return false;
+  }
+
+  Bitmap bitmap(file);
+  bool rendered = false;
+  if (bitmap.parseHeaders() == BmpReaderError::Ok && bitmap.getWidth() > 0 && bitmap.getHeight() > 0) {
+    const float srcW = static_cast<float>(bitmap.getWidth());
+    const float srcH = static_cast<float>(bitmap.getHeight());
+    const float srcRatio = srcW / srcH;
+    const float targetRatio = static_cast<float>(cover.width) / static_cast<float>(cover.height);
+    float cropX = 0.0f;
+    float cropY = 0.0f;
+    if (srcRatio > targetRatio) {
+      cropX = std::max(0.0f, 1.0f - (targetRatio / srcRatio));
+    } else if (srcRatio < targetRatio) {
+      cropY = std::max(0.0f, 1.0f - (srcRatio / targetRatio));
+    }
+    renderer.fillRect(cover.x, cover.y, cover.width, cover.height, false);
+    renderer.drawBitmap(bitmap, cover.x, cover.y, cover.width, cover.height, cropX, cropY);
+    rendered = true;
+  }
+  file.close();
+  return rendered;
+}
+
+void drawFallbackCover(const GfxRenderer& renderer, const Rect cover, const RecentBook& book) {
+  renderer.fillRect(cover.x, cover.y, cover.width, cover.height, false);
+  renderer.drawRect(cover.x, cover.y, cover.width, cover.height, kBorder, true);
+  renderer.fillRect(cover.x, cover.y + cover.height / 3, cover.width, cover.height - cover.height / 3, true);
+  renderer.drawIcon(CoverIcon, cover.x + (cover.width - 32) / 2, cover.y + 18, 32, 32);
+
+  const int textX = cover.x + 8;
+  const int textW = cover.width - 16;
+  const int textY = cover.y + cover.height / 3 + 48;
+  const int textH = cover.y + cover.height - 12 - textY;
+  const int lineH = std::max(1, renderer.getLineHeight(kMetaFont));
+  const int maxLines = std::clamp(textH / lineH, 1, 3);
+  const auto lines = renderer.wrappedText(kMetaFont, book.title.c_str(), textW, maxLines, EpdFontFamily::BOLD);
+  int y = textY;
+  for (const auto& line : lines) {
+    renderer.drawText(kMetaFont, textX, y, line.c_str(), false, EpdFontFamily::BOLD);
+    y += lineH;
+  }
+}
+
+void drawProgressPill(const GfxRenderer& renderer, const Rect rect, const float progressPercent) {
+  const float clamped = std::clamp(progressPercent, 0.0f, 100.0f);
+  const int filled = std::clamp(static_cast<int>(rect.width * clamped / 100.0f), 0, rect.width);
+  renderer.drawRect(rect.x, rect.y, rect.width, rect.height, 1, true);
+  if (filled > 0) {
+    renderer.fillRect(rect.x, rect.y, filled, rect.height, true);
+  }
 }
 }  // namespace
 
@@ -335,57 +406,104 @@ void NeobrutalistTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect,
                                             bool& coverRendered, bool& coverBufferStored, bool& bufferRestored,
                                             const std::function<bool()>& storeCoverBuffer,
                                             const BookReadingStats* stats, float progressPercent) const {
-  (void)stats;
-  (void)progressPercent;
-  const bool hasBook = !recentBooks.empty();
-  const bool selected = hasBook && selectorIndex == 0;
+  const int bookCount = std::min(static_cast<int>(recentBooks.size()), kHomeSlotCount);
   const int side = NeobrutalistMetrics::values.contentSidePadding;
-  Rect card{rect.x + side, rect.y + 6, rect.width - side * 2, rect.height - 14};
-  drawPanel(renderer, card, false, true, true);
+  const int availableW = rect.width - side * 2 - kHomeTileGap * (kHomeSlotCount - 1);
+  const int slotW = std::max(1, availableW / kHomeSlotCount);
+  const int totalW = bookCount > 0 ? bookCount * slotW + (bookCount - 1) * kHomeTileGap : slotW * 2;
+  const int startX = rect.x + (rect.width - totalW) / 2;
+  const int tileY = rect.y + 4;
+  const int tileH = rect.height - 12;
+  const int coverH = std::min(NeobrutalistMetrics::values.homeCoverHeight, tileH - 82);
+  const int coverW = std::min(slotW - 10, (coverH * 3 + 2) / 5);
 
-  if (!hasBook) {
-    renderer.drawCenteredText(kTitleFont, card.y + card.height / 2 - renderer.getLineHeight(kTitleFont),
+  if (bookCount <= 0) {
+    Rect empty{rect.x + side, tileY + 8, rect.width - side * 2, std::min(tileH - 16, 164)};
+    drawPanel(renderer, empty, false, true, true);
+    renderer.drawCenteredText(kTitleFont, empty.y + empty.height / 2 - renderer.getLineHeight(kTitleFont),
                               tr(STR_NO_OPEN_BOOK), true, EpdFontFamily::BOLD);
-    renderer.drawCenteredText(kBodyFont, card.y + card.height / 2 + 4, tr(STR_START_READING));
+    renderer.drawCenteredText(kBodyFont, empty.y + empty.height / 2 + 6, tr(STR_START_READING));
     return;
   }
 
-  const RecentBook& book = recentBooks[0];
-  const int coverH = std::min(NeobrutalistMetrics::values.homeCoverHeight, card.height - 28);
-  int coverW = coverH * 3 / 5;
-  Rect cover{card.x + (card.width - coverW) / 2, card.y + 14, coverW, coverH};
-  bool drewCover = false;
-  if (!book.coverBmpPath.empty() && !coverRendered) {
-    const std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, coverH);
-    HalFile file;
-    if (Storage.openFileForRead("HOME", coverPath, file)) {
-      Bitmap bitmap(file);
-      if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-        coverW = std::clamp(bitmap.getWidth(), coverH / 3, std::min(card.width - 32, coverH));
-        cover.x = card.x + (card.width - coverW) / 2;
-        cover.width = coverW;
-        renderer.drawBitmap(bitmap, cover.x, cover.y, cover.width, cover.height);
-        drewCover = true;
+  const bool redrawStaticCovers = !coverRendered || !bufferRestored;
+  if (redrawStaticCovers) {
+    renderer.fillRect(rect.x, rect.y, rect.width, rect.height, false);
+    for (int i = 0; i < bookCount; ++i) {
+      const int slotX = startX + i * (slotW + kHomeTileGap);
+      Rect cover{slotX + (slotW - coverW) / 2, tileY + 10, coverW, coverH};
+      Rect frame{cover.x - kHomeFramePad, cover.y - kHomeFramePad, cover.width + kHomeFramePad * 2,
+                 cover.height + kHomeFramePad * 2};
+      drawShadow(renderer, frame);
+      renderer.fillRect(frame.x, frame.y, frame.width, frame.height, false);
+      renderer.drawRect(frame.x, frame.y, frame.width, frame.height, kBorder, true);
+
+      if (!drawCoverBitmap(renderer, recentBooks[i], cover)) {
+        drawFallbackCover(renderer, cover, recentBooks[i]);
       }
-      file.close();
+      renderer.drawRect(cover.x, cover.y, cover.width, cover.height, 1, true);
+      if (i == 0) {
+        drawBookmarkRibbon(renderer, cover, true);
+      }
     }
-    if (drewCover) {
-      coverBufferStored = storeCoverBuffer();
-      coverRendered = coverBufferStored;
-    }
+    coverBufferStored = storeCoverBuffer();
+    coverRendered = coverBufferStored;
   }
 
-  if (!coverRendered && !bufferRestored) {
-    renderer.fillRect(cover.x, cover.y, cover.width, cover.height, selected);
+  for (int i = 0; i < bookCount; ++i) {
+    const bool selected = selectorIndex == i;
+    const int slotX = startX + i * (slotW + kHomeTileGap);
+    Rect tile{slotX, tileY, slotW, tileH};
+    Rect cover{slotX + (slotW - coverW) / 2, tileY + 10, coverW, coverH};
+    Rect frame{cover.x - kHomeFramePad, cover.y - kHomeFramePad, cover.width + kHomeFramePad * 2,
+               cover.height + kHomeFramePad * 2};
+
     if (selected) {
-      renderer.drawIconInverted(CoverIcon, cover.x + (cover.width - 32) / 2, cover.y + 28, 32, 32);
+      renderer.drawRect(tile.x, tile.y, tile.width, tile.height, kHeavyBorder, true);
+      renderer.fillRect(tile.x, tile.y, tile.width, 8, true);
+      renderer.fillRect(tile.x, tile.y + tile.height - 8, tile.width, 8, true);
+      renderer.drawRect(frame.x - 2, frame.y - 2, frame.width + 4, frame.height + 4, kHeavyBorder, true);
     } else {
-      renderer.drawIcon(CoverIcon, cover.x + (cover.width - 32) / 2, cover.y + 28, 32, 32);
+      renderer.drawRect(frame.x, frame.y, frame.width, frame.height, 1, true);
     }
-    drawBookmarkRibbon(renderer, cover, !selected);
+
+    const int captionX = tile.x + 7;
+    const int captionW = tile.width - 14;
+    int captionY = cover.y + cover.height + 11;
+    const int captionBottom = tile.y + tile.height - 12;
+    const int titleLineH = renderer.getLineHeight(kMetaFont);
+    const int maxTitleLines = selected ? 2 : 1;
+    const auto titleLines =
+        renderer.wrappedText(kMetaFont, recentBooks[i].title.c_str(), captionW, maxTitleLines, EpdFontFamily::BOLD);
+    const int titleBlockH = titleLineH * static_cast<int>(titleLines.size()) + 6;
+    if (selected) {
+      renderer.fillRect(captionX - 4, captionY - 3, captionW + 8, titleBlockH, true);
+    }
+    for (const auto& line : titleLines) {
+      renderer.drawText(kMetaFont, captionX, captionY, line.c_str(), !selected, EpdFontFamily::BOLD);
+      captionY += titleLineH;
+    }
+
+    if (!recentBooks[i].author.empty() && captionY + renderer.getLineHeight(kMetaFont) < captionBottom) {
+      captionY += 4;
+      const std::string author = renderer.truncatedText(kMetaFont, recentBooks[i].author.c_str(), captionW);
+      renderer.drawText(kMetaFont, captionX, captionY, author.c_str(), true);
+      captionY += renderer.getLineHeight(kMetaFont);
+    }
+
+    if (selected && progressPercent >= 0.0f && captionY + 14 < captionBottom) {
+      captionY += 5;
+      drawProgressPill(renderer, Rect{captionX, captionY, captionW, 6}, progressPercent);
+      captionY += 10;
+    }
+
+    if (selected && stats != nullptr && stats->sessionCount > 0 && captionY + renderer.getLineHeight(kMetaFont) < captionBottom) {
+      char statLine[32];
+      snprintf(statLine, sizeof(statLine), "%u session%s", static_cast<unsigned>(stats->sessionCount),
+               stats->sessionCount == 1 ? "" : "s");
+      renderer.drawText(kMetaFont, captionX, captionY, statLine, true);
+    }
   }
-  renderer.drawRect(cover.x, cover.y, cover.width, cover.height, selected ? kHeavyBorder : kBorder, true);
-  renderer.drawRect(cover.x - 5, cover.y - 5, cover.width + 10, cover.height + 10, 1, true);
 }
 
 Rect NeobrutalistTheme::drawPopup(const GfxRenderer& renderer, const char* message) const {
