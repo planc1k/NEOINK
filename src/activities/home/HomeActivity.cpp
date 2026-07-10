@@ -295,6 +295,17 @@ bool isMinimalTheme() {
   return static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme) == CrossPointSettings::UI_THEME::MINIMAL;
 }
 
+bool isNeobrutalistTheme() {
+  return static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme) == CrossPointSettings::UI_THEME::NEOBRUTALIST;
+}
+
+const char* homeHeaderTitle(const ThemeMetrics& metrics, const std::vector<RecentBook>& recentBooks) {
+  if (metrics.homeContinueReadingInMenu && !recentBooks.empty()) {
+    return recentBooks[0].title.c_str();
+  }
+  return isNeobrutalistTheme() ? tr(STR_CROSSINK) : nullptr;
+}
+
 bool isAnyFrontButtonPressed(const MappedInputManager& mappedInput) {
   return mappedInput.isFrontButtonPressed(HalGPIO::BTN_BACK) ||
          mappedInput.isFrontButtonPressed(HalGPIO::BTN_CONFIRM) ||
@@ -1664,7 +1675,7 @@ void HomeActivity::render(RenderLock&&) {
   bool bufferRestored = coverBufferStored && restoreCoverBuffer();
 
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding},
-                 metrics.homeContinueReadingInMenu && !recentBooks.empty() ? recentBooks[0].title.c_str() : nullptr);
+                 homeHeaderTitle(metrics, recentBooks));
 
   // Record the tile rect so storeCoverBuffer (called from the theme) knows
   // which sub-region of the framebuffer to snapshot. ~16 KB in Portrait

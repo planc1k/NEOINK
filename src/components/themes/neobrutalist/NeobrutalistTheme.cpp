@@ -163,7 +163,7 @@ void NeobrutalistTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const
   }
 
   const auto& metrics = NeobrutalistMetrics::values;
-  const int side = metrics.contentSidePadding / 2;
+  const int side = metrics.contentSidePadding;
   Rect panel{rect.x + side, rect.y + 8, rect.width - side * 2, rect.height - 16};
   if (panel.height < 34) panel.height = rect.height - 8;
   drawPanel(renderer, panel, false, false, true);

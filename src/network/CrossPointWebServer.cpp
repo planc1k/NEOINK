@@ -19,8 +19,13 @@
 #include <iterator>
 
 #include "AppVersion.h"
+#include "BookmarkStore.h"
+#include "ClippingStore.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "activities/reader/BookReadingStats.h"
+#include "activities/reader/GlobalReadingStats.h"
+#include "activities/reader/ReadingStatsUtils.h"
 #include "flashcards/FlashcardDeck.h"
 #include "FontInstaller.h"
 #include "OpdsServerStore.h"
@@ -33,6 +38,7 @@
 #include "html/FlashcardsPageHtml.generated.h"
 #include "html/FontsPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
+#include "html/LibraryPageHtml.generated.h"
 #include "html/LogoPng.generated.h"
 #include "html/SettingsPageHtml.generated.h"
 #include "html/StyleCss.generated.h"
@@ -395,6 +401,44 @@ void addFlashcardSummaryJson(JsonDocument& doc, const flashcards::DeckSummary& s
     doc["error"] = summary.error;
   }
 }
+
+String dateString(const ReadingStatsDate& date) {
+  if (!date.isValid()) return "";
+  char buf[16];
+  snprintf(buf, sizeof(buf), "%04u-%02u-%02u", static_cast<unsigned>(date.year), static_cast<unsigned>(date.month),
+           static_cast<unsigned>(date.day));
+  return buf;
+}
+
+void addGlobalStatsJson(JsonObject doc, const GlobalReadingStats& stats) {
+  ReadingStatsDateTime today;
+  const bool hasToday = getCurrentLocalReadingStatsDateTime(today);
+  doc["totalSessions"] = stats.totalSessions;
+  doc["totalReadingSeconds"] = stats.totalReadingSeconds;
+  doc["totalPagesTurned"] = stats.totalPagesTurned;
+  doc["completedBooks"] = stats.completedBooks;
+  doc["currentStreak"] = hasToday ? stats.currentReadingStreak(&today.date) : stats.currentReadingStreak(nullptr);
+  doc["longestStreak"] = stats.displayLongestReadingStreak();
+  JsonArray timeBuckets = doc["timeOfDaySeconds"].to<JsonArray>();
+  for (const uint32_t value : stats.timeOfDaySeconds) timeBuckets.add(value);
+  JsonArray dayBuckets = doc["dayOfWeekSeconds"].to<JsonArray>();
+  for (const uint32_t value : stats.dayOfWeekSeconds) dayBuckets.add(value);
+}
+
+void sendJsonDoc(WebServer* server, JsonDocument& doc, char* output, const size_t outputSize, bool& seenFirst) {
+  const size_t written = serializeJson(doc, output, outputSize);
+  if (written >= outputSize) return;
+  if (seenFirst) {
+    server->sendContent(",");
+  } else {
+    seenFirst = true;
+  }
+  server->sendContent(output);
+}
+
+bool isSupportedBookmarkType(const String& type) { return type == "epub" || type == "xtc" || type == "txt"; }
+
+bool isSupportedClippingType(const String& type) { return type == "epub"; }
 }  // namespace
 
 // File listing page template - now using generated headers:
@@ -451,6 +495,7 @@ void CrossPointWebServer::begin() {
   LOG_DBG("WEB", "Setting up routes...");
   server->on("/", HTTP_GET, [this] { handleRoot(); });
   server->on("/files", HTTP_GET, [this] { handleFileList(); });
+  server->on("/library", HTTP_GET, [this] { handleLibraryPage(); });
   server->on("/flashcards", HTTP_GET, [this] { handleFlashcardsPage(); });
   server->on("/js/jszip.min.js", HTTP_GET, [this] { handleJszip(); });
   server->on("/style.css", HTTP_GET, [this] { handleStyleCss(); });
@@ -459,6 +504,9 @@ void CrossPointWebServer::begin() {
   server->on("/api/status", HTTP_GET, [this] { handleStatus(); });
   server->on("/api/files", HTTP_GET, [this] { handleFileListData(); });
   server->on("/api/library/scan", HTTP_GET, [this] { handleLibraryScan(); });
+  server->on("/api/library/saved", HTTP_GET, [this] { handleLibrarySaved(); });
+  server->on("/api/library/saved/delete", HTTP_POST, [this] { handleLibrarySavedDelete(); });
+  server->on("/api/library/stats", HTTP_GET, [this] { handleLibraryStats(); });
   server->on("/api/library/ensure-folder", HTTP_POST, [this] { handleLibraryEnsureFolder(); });
   server->on("/api/library/bulk-move", HTTP_POST, [this] { handleLibraryBulkMove(); });
   server->on("/api/flashcards/decks", HTTP_GET, [this] { handleFlashcardDecks(); });
@@ -782,6 +830,10 @@ bool CrossPointWebServer::isEpubFile(const String& filename) const { return FsHe
 
 void CrossPointWebServer::handleFileList() const {
   sendHtmlContent(server.get(), FilesPageHtml, sizeof(FilesPageHtml));
+}
+
+void CrossPointWebServer::handleLibraryPage() const {
+  sendHtmlContent(server.get(), LibraryPageHtml, sizeof(LibraryPageHtml));
 }
 
 void CrossPointWebServer::handleFlashcardsPage() const {
@@ -1369,6 +1421,221 @@ void CrossPointWebServer::handleLibraryScan() const {
   server->sendContent(String(static_cast<unsigned long>(scanned)));
   server->sendContent("}");
   server->sendContent("");
+}
+
+void CrossPointWebServer::handleLibrarySaved() const {
+  std::vector<BookmarkedBookEntry> bookmarkedBooks;
+  std::vector<ClippedBookEntry> clippedBooks;
+  BookmarkStore::getAllBookmarkedBooks(bookmarkedBooks);
+  ClippingStore::getAllClippedBooks(clippedBooks);
+
+  uint32_t bookmarkCount = 0;
+  for (const auto& book : bookmarkedBooks) bookmarkCount += book.count;
+  uint32_t clippingCount = 0;
+  for (const auto& book : clippedBooks) clippingCount += book.count;
+
+  server->setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server->send(200, "application/json", "");
+  server->sendContent("{\"bookmarkCount\":");
+  server->sendContent(String(static_cast<unsigned long>(bookmarkCount)));
+  server->sendContent(",\"clippingCount\":");
+  server->sendContent(String(static_cast<unsigned long>(clippingCount)));
+  server->sendContent(",\"bookmarks\":[");
+
+  char output[1024];
+  JsonDocument doc;
+  bool seenBook = false;
+  for (const BookmarkedBookEntry& book : bookmarkedBooks) {
+    if (!BookmarkStore::getInstance().loadForBook(book.bookPath, book.bookTitle, book.bookAuthor, book.bookType)) {
+      continue;
+    }
+
+    doc.clear();
+    doc["title"] = book.bookTitle;
+    doc["author"] = book.bookAuthor;
+    doc["path"] = book.bookPath;
+    doc["type"] = book.bookType;
+    doc["count"] = book.count;
+    const size_t written = serializeJson(doc, output, sizeof(output));
+    if (written < sizeof(output)) {
+      if (seenBook) {
+        server->sendContent(",");
+      } else {
+        seenBook = true;
+      }
+      String prefix = output;
+      if (prefix.endsWith("}")) prefix.remove(prefix.length() - 1);
+      server->sendContent(prefix);
+      server->sendContent(",\"items\":[");
+
+      bool seenItem = false;
+      const auto& bookmarks = BookmarkStore::getInstance().getBookmarks();
+      for (size_t i = 0; i < bookmarks.size(); ++i) {
+        const Bookmark& bookmark = bookmarks[i];
+        doc.clear();
+        doc["index"] = static_cast<unsigned>(i);
+        doc["spineIndex"] = bookmark.spineIndex;
+        doc["progressPercent"] = bookmark.progress * 100.0f;
+        doc["chapter"] = bookmark.chapterTitle;
+        doc["paragraphIndex"] = bookmark.paragraphIndex == UINT16_MAX ? -1 : static_cast<int>(bookmark.paragraphIndex);
+        doc["snippet"] = bookmark.snippet;
+        sendJsonDoc(server.get(), doc, output, sizeof(output), seenItem);
+        yield();
+        esp_task_wdt_reset();
+      }
+      server->sendContent("]}");
+    }
+    BookmarkStore::getInstance().unload();
+    yield();
+    esp_task_wdt_reset();
+  }
+  BookmarkStore::getInstance().unload();
+
+  server->sendContent("],\"clippings\":[");
+  seenBook = false;
+  for (const ClippedBookEntry& book : clippedBooks) {
+    if (!ClippingStore::getInstance().loadForBook(book.bookPath, book.bookTitle, book.bookAuthor, book.bookType)) {
+      continue;
+    }
+
+    doc.clear();
+    doc["title"] = book.bookTitle;
+    doc["author"] = book.bookAuthor;
+    doc["path"] = book.bookPath;
+    doc["type"] = book.bookType;
+    doc["count"] = book.count;
+    const size_t written = serializeJson(doc, output, sizeof(output));
+    if (written < sizeof(output)) {
+      if (seenBook) {
+        server->sendContent(",");
+      } else {
+        seenBook = true;
+      }
+      String prefix = output;
+      if (prefix.endsWith("}")) prefix.remove(prefix.length() - 1);
+      server->sendContent(prefix);
+      server->sendContent(",\"items\":[");
+
+      bool seenItem = false;
+      const auto& clippings = ClippingStore::getInstance().getClippings();
+      for (size_t i = 0; i < clippings.size(); ++i) {
+        const Clipping& clipping = clippings[i];
+        doc.clear();
+        doc["index"] = static_cast<unsigned>(i);
+        doc["spineIndex"] = clipping.spineIndex;
+        doc["startPage"] = clipping.startPage;
+        doc["endPage"] = clipping.endPage;
+        doc["pageCount"] = clipping.pageCount;
+        doc["chapter"] = clipping.chapterTitle;
+        doc["text"] = clipping.text;
+        sendJsonDoc(server.get(), doc, output, sizeof(output), seenItem);
+        yield();
+        esp_task_wdt_reset();
+      }
+      server->sendContent("]}");
+    }
+    ClippingStore::getInstance().unload();
+    yield();
+    esp_task_wdt_reset();
+  }
+  ClippingStore::getInstance().unload();
+  server->sendContent("]}");
+  server->sendContent("");
+}
+
+void CrossPointWebServer::handleLibrarySavedDelete() {
+  const String body = jsonBody(server.get());
+  JsonDocument doc;
+  if (body.isEmpty() || deserializeJson(doc, body)) {
+    server->send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+    return;
+  }
+
+  const String kind = doc["kind"] | "";
+  const String path = normalizeWebPath(doc["path"] | "");
+  const String type = doc["type"] | "";
+  const int index = doc["index"] | -1;
+  if (path.isEmpty() || path == "/" || isProtectedPath(path)) {
+    server->send(400, "application/json", "{\"error\":\"Invalid book path\"}");
+    return;
+  }
+
+  bool ok = false;
+  if (kind == "bookmark") {
+    if (!isSupportedBookmarkType(type)) {
+      server->send(400, "application/json", "{\"error\":\"Invalid bookmark type\"}");
+      return;
+    }
+    if (index < 0) {
+      BookmarkStore::deleteForFilePath(path.c_str(), type.c_str());
+      ok = true;
+    } else {
+      RecentBook meta = RECENT_BOOKS.getDataFromBook(path.c_str());
+      if (meta.title.empty()) meta.title = fileNameOf(path).c_str();
+      ok = BookmarkStore::getInstance().loadForBook(path.c_str(), meta.title, meta.author, type.c_str()) &&
+           BookmarkStore::getInstance().removeBookmarkAt(static_cast<size_t>(index));
+      BookmarkStore::getInstance().unload();
+    }
+  } else if (kind == "clipping") {
+    if (!isSupportedClippingType(type)) {
+      server->send(400, "application/json", "{\"error\":\"Invalid clipping type\"}");
+      return;
+    }
+    if (index < 0) {
+      ClippingStore::deleteForFilePath(path.c_str(), type.c_str());
+      ok = true;
+    } else {
+      RecentBook meta = RECENT_BOOKS.getDataFromBook(path.c_str());
+      if (meta.title.empty()) meta.title = fileNameOf(path).c_str();
+      ok = ClippingStore::getInstance().loadForBook(path.c_str(), meta.title, meta.author, type.c_str()) &&
+           ClippingStore::getInstance().removeClippingAt(static_cast<size_t>(index));
+      ClippingStore::getInstance().unload();
+    }
+  } else {
+    server->send(400, "application/json", "{\"error\":\"Invalid saved item kind\"}");
+    return;
+  }
+
+  server->send(ok ? 200 : 500, "application/json", ok ? "{\"ok\":true}" : "{\"error\":\"Delete failed\"}");
+}
+
+void CrossPointWebServer::handleLibraryStats() const {
+  const GlobalReadingStats local = GlobalReadingStats::load();
+  const GlobalReadingStats aggregated = GlobalReadingStats::loadAggregated(local);
+
+  JsonDocument doc;
+  doc["hasSyncedStats"] = GlobalReadingStats::hasSyncedStats();
+  addGlobalStatsJson(doc["local"].to<JsonObject>(), local);
+  addGlobalStatsJson(doc["aggregated"].to<JsonObject>(), aggregated);
+  JsonArray recent = doc["recentBooks"].to<JsonArray>();
+
+  RECENT_BOOKS.loadFromFile();
+  for (const RecentBook& book : RECENT_BOOKS.getBooks()) {
+    if (RecentBooksStore::isMissing(book)) continue;
+    const std::string cachePath = cachePathForBookPath(book.path.c_str());
+    if (cachePath.empty()) continue;
+    const BookReadingStats stats = BookReadingStats::load(cachePath);
+    if (stats.sessionCount == 0 && stats.totalReadingSeconds == 0 && stats.totalPagesTurned == 0 &&
+        !stats.isCompleted) {
+      continue;
+    }
+    JsonObject item = recent.add<JsonObject>();
+    item["path"] = book.path;
+    item["title"] = book.title;
+    item["author"] = book.author;
+    item["sessionCount"] = stats.sessionCount;
+    item["totalReadingSeconds"] = stats.totalReadingSeconds;
+    item["totalPagesTurned"] = stats.totalPagesTurned;
+    item["completed"] = stats.isCompleted;
+    item["avgSecondsPerForwardPage"] = stats.avgSecondsPerForwardPage;
+    item["estimatedTimeLeftSeconds"] = stats.estimatedTimeLeftSeconds;
+    item["startDate"] = dateString(stats.startDate);
+    item["finishedDate"] = dateString(stats.finishedDate);
+  }
+
+  String json;
+  serializeJson(doc, json);
+  server->send(200, "application/json", json);
 }
 
 void CrossPointWebServer::handleLibraryEnsureFolder() {

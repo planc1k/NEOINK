@@ -28,6 +28,7 @@ JS_OUT = os.path.join(OUT, "js")
 PAGES = {
     "home":     ("HomePageHtml",     "NEOINK",                     "home",     ""),
     "files":    ("FilesPageHtml",    "Files - NEOINK",             "files",    '  <script src="/js/jszip.min.js"></script>'),
+    "library":  ("LibraryPageHtml",  "Library - NEOINK",           "library",  ""),
     "flashcards": ("FlashcardsPageHtml", "Flashcards - NEOINK",     "flashcards", '  <script src="/js/jszip.min.js"></script>'),
     "settings": ("SettingsPageHtml", "Settings - NEOINK Reader",   "settings", ""),
     "fonts":    ("FontsPageHtml",    "Fonts - NEOINK",             "fonts",    ""),
@@ -98,7 +99,8 @@ for slug, (ident, title, active, head_extra) in PAGES.items():
     values = {
         "title": title, "v": v, "head_extra": head_extra,
         "styles": page_css, "body": page_html, "script": script,
-        "cls_home": "", "cls_files": "", "cls_flashcards": "", "cls_settings": "", "cls_fonts": "",
+        "cls_home": "", "cls_files": "", "cls_library": "", "cls_flashcards": "", "cls_settings": "",
+        "cls_fonts": "",
     }
     values[f"cls_{active}"] = ' class="active"'
     html = minify_html(render(base, values))

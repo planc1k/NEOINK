@@ -41,7 +41,7 @@
 }
 .quick-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
 }
 .quick-card {
@@ -62,6 +62,7 @@
   box-shadow: var(--shadow-md);
 }
 .quick-card.files { background: var(--accent-yellow); }
+.quick-card.library { background: var(--accent-blue); }
 .quick-card.cards { background: var(--accent-mint); }
 .quick-card.settings { background: var(--accent-pink); }
 .quick-card.fonts { background: var(--accent-orange); }

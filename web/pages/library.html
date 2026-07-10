@@ -1,0 +1,53 @@
+<div class="page-header">
+  <div>
+    <h2>Library</h2>
+    <p class="subtle">Manage saved reading data stored on the SD card.</p>
+  </div>
+  <div class="top-actions">
+    <a class="btn btn-secondary" href="/download?path=%2FMy%20Clippings.txt">Export My Clippings</a>
+    <a class="btn btn-secondary" href="/files?path=%2F.crosspoint">Open Data Folder</a>
+  </div>
+</div>
+
+<section class="metric-grid wide" id="statsSummary">
+  <div class="metric"><div class="metric-value">-</div><div class="metric-label">Reading Time</div></div>
+  <div class="metric"><div class="metric-value">-</div><div class="metric-label">Sessions</div></div>
+  <div class="metric"><div class="metric-value">-</div><div class="metric-label">Pages</div></div>
+  <div class="metric"><div class="metric-value">-</div><div class="metric-label">Completed</div></div>
+</section>
+
+<div class="grid">
+  <section class="card">
+    <div class="section-heading">
+      <h2>Bookmarks</h2>
+      <span class="summary-inline" id="bookmarkSummary">Loading...</span>
+    </div>
+    <div id="bookmarksList"><p class="empty">Loading bookmarks...</p></div>
+  </section>
+
+  <section class="card">
+    <div class="section-heading">
+      <h2>Clippings</h2>
+      <span class="summary-inline" id="clippingSummary">Loading...</span>
+    </div>
+    <div id="clippingsList"><p class="empty">Loading clippings...</p></div>
+  </section>
+
+  <section class="card">
+    <div class="section-heading">
+      <h2>Reading Stats</h2>
+      <span class="summary-inline" id="statsMeta">Loading...</span>
+    </div>
+    <div id="statsDetail"><p class="empty">Loading reading stats...</p></div>
+  </section>
+
+  <section class="card">
+    <div class="section-heading">
+      <h2>Recent Book Stats</h2>
+      <span class="summary-inline">Recent cache only</span>
+    </div>
+    <div id="bookStatsList"><p class="empty">Loading book stats...</p></div>
+  </section>
+</div>
+
+<div id="status"></div>
