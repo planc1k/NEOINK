@@ -295,6 +295,55 @@ bool isMinimalTheme() {
   return static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme) == CrossPointSettings::UI_THEME::MINIMAL;
 }
 
+bool isInxTheme() {
+  const auto theme = static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme);
+  return theme == CrossPointSettings::UI_THEME::INX || theme == CrossPointSettings::UI_THEME::INX_FLOW ||
+         theme == CrossPointSettings::UI_THEME::INX_NEOBRUTALIST;
+}
+
+enum class InxHomeTab : uint8_t { Recent = 0, Library, Flashcards, FileTransfer, Statistics, Settings, Count };
+
+constexpr int kInxHomeTabCount = static_cast<int>(InxHomeTab::Count);
+
+const char* inxHomeTabLabel(const int index) {
+  switch (static_cast<InxHomeTab>(index)) {
+    case InxHomeTab::Recent:
+      return tr(STR_MENU_RECENT_BOOKS);
+    case InxHomeTab::Library:
+      return "Library";
+    case InxHomeTab::Flashcards:
+      return "Cards";
+    case InxHomeTab::FileTransfer:
+      return "Transfer";
+    case InxHomeTab::Statistics:
+      return "Stats";
+    case InxHomeTab::Settings:
+      return tr(STR_SETTINGS_TITLE);
+    case InxHomeTab::Count:
+    default:
+      return "";
+  }
+}
+
+int inxTabForInitialMenuItem(HomeMenuItem item) {
+  switch (item) {
+    case HomeMenuItem::FILE_BROWSER:
+      return static_cast<int>(InxHomeTab::Library);
+    case HomeMenuItem::RECENTS:
+      return static_cast<int>(InxHomeTab::Recent);
+    case HomeMenuItem::FLASHCARDS:
+      return static_cast<int>(InxHomeTab::Flashcards);
+    case HomeMenuItem::FILE_TRANSFER:
+      return static_cast<int>(InxHomeTab::FileTransfer);
+    case HomeMenuItem::SETTINGS_MENU:
+      return static_cast<int>(InxHomeTab::Settings);
+    case HomeMenuItem::OPDS_BROWSER:
+    case HomeMenuItem::NONE:
+    default:
+      return static_cast<int>(InxHomeTab::Recent);
+  }
+}
+
 bool isAnyFrontButtonPressed(const MappedInputManager& mappedInput) {
   return mappedInput.isFrontButtonPressed(HalGPIO::BTN_BACK) ||
          mappedInput.isFrontButtonPressed(HalGPIO::BTN_CONFIRM) ||
@@ -761,6 +810,7 @@ void HomeActivity::onEnter() {
 
   selectorIndex = 0;
   lastCarouselBookIndex = 0;
+  inxTabIndex = inxTabForInitialMenuItem(initialMenuItem);
   minimalMenuOpen = false;
   minimalSuppressInitialFrontRelease = isMinimalTheme();
   minimalMenuIndex = 0;
@@ -797,7 +847,7 @@ void HomeActivity::onEnter() {
   }
   updateHighlightedBookContext();
 
-  if (initialMenuItem != HomeMenuItem::NONE) {
+  if (!isInxTheme() && initialMenuItem != HomeMenuItem::NONE) {
     const bool includeContinueReading = metrics.homeContinueReadingInMenu && !recentBooks.empty();
     const auto menuItems = buildSelectableHomeMenuItems(hasOpdsServers, hasReadingStats, hasBookmarks, hasClippings,
                                                         includeContinueReading);
@@ -1270,6 +1320,67 @@ bool HomeActivity::preRenderCarouselFrames(bool showProgressPopup) {
 }
 
 void HomeActivity::loop() {
+  if (isInxTheme()) {
+    const int previousHighlightedBookIdx = getHighlightedBookIndex();
+    const int visibleBookCount = getVisibleRecentBookCount();
+
+    if (mappedInput.wasPressed(MappedInputManager::Button::Left)) {
+      inxTabIndex = ButtonNavigator::previousIndex(inxTabIndex, kInxHomeTabCount);
+      requestUpdate();
+    }
+    if (mappedInput.wasPressed(MappedInputManager::Button::Right)) {
+      inxTabIndex = ButtonNavigator::nextIndex(inxTabIndex, kInxHomeTabCount);
+      requestUpdate();
+    }
+    if (inxTabIndex == static_cast<int>(InxHomeTab::Recent) && visibleBookCount > 0) {
+      if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
+        selectorIndex = ButtonNavigator::previousIndex(selectorIndex, visibleBookCount);
+        lastCarouselBookIndex = selectorIndex;
+        requestUpdate();
+      }
+      if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
+        selectorIndex = ButtonNavigator::nextIndex(selectorIndex, visibleBookCount);
+        lastCarouselBookIndex = selectorIndex;
+        requestUpdate();
+      }
+    }
+
+    if (getHighlightedBookIndex() != previousHighlightedBookIdx) {
+      updateHighlightedBookContext();
+    }
+
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+      switch (static_cast<InxHomeTab>(inxTabIndex)) {
+        case InxHomeTab::Recent:
+          if (visibleBookCount > 0) {
+            onSelectBook(recentBooks[std::clamp(selectorIndex, 0, visibleBookCount - 1)].path);
+          } else {
+            onFileBrowserOpen();
+          }
+          break;
+        case InxHomeTab::Library:
+          onFileBrowserOpen();
+          break;
+        case InxHomeTab::Flashcards:
+          onFlashcardsOpen();
+          break;
+        case InxHomeTab::FileTransfer:
+          onFileTransferOpen();
+          break;
+        case InxHomeTab::Statistics:
+          onReadingStatsOpen();
+          break;
+        case InxHomeTab::Settings:
+          onSettingsOpen();
+          break;
+        case InxHomeTab::Count:
+        default:
+          break;
+      }
+    }
+    return;
+  }
+
   if (isMinimalTheme()) {
     const int pressedFrontButton = mappedInput.getPressedFrontButton();
     const int releasedFrontButton = mappedInput.getReleasedFrontButton();
@@ -1560,6 +1671,56 @@ void HomeActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
+
+  if (isInxTheme()) {
+    renderer.clearScreen();
+
+    GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, "NEOINK");
+
+    std::vector<TabInfo> tabs;
+    tabs.reserve(kInxHomeTabCount);
+    for (int i = 0; i < kInxHomeTabCount; ++i) {
+      tabs.push_back({inxHomeTabLabel(i), i == inxTabIndex});
+    }
+    GUI.drawTabBar(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight}, tabs,
+                   true);
+
+    if (selectorIndex >= getVisibleRecentBookCount() && getVisibleRecentBookCount() > 0) {
+      selectorIndex = getVisibleRecentBookCount() - 1;
+    }
+
+    bool bufferRestored = coverBufferStored && restoreCoverBuffer();
+    coverRectX = 0;
+    coverRectY = metrics.homeTopPadding;
+    coverRectW = pageWidth;
+    coverRectH = metrics.homeCoverTileHeight;
+    GUI.drawRecentBookCover(
+        renderer, Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight}, recentBooks, selectorIndex,
+        coverRendered, coverBufferStored, bufferRestored, std::bind(&HomeActivity::storeCoverBuffer, this),
+        hasAnyBookStats(currentBookStats) ? &currentBookStats : nullptr, currentBookProgressPercent);
+
+    const int promptY = std::min(pageHeight - metrics.buttonHintsHeight - 36,
+                                 metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.verticalSpacing);
+    const char* prompt = inxTabIndex == static_cast<int>(InxHomeTab::Recent) ? "Open recent book" : "Open tab";
+    GUI.drawSubHeader(renderer, Rect{0, promptY, pageWidth, 30}, prompt, inxHomeTabLabel(inxTabIndex));
+
+    const auto labels = mappedInput.mapLabels("", tr(STR_SELECT), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+
+    renderer.displayBuffer();
+
+    if (!firstRenderDone) {
+      firstRenderDone = true;
+      requestUpdate();
+      return;
+    }
+
+    if (!recentsLoaded && !recentsLoading) {
+      recentsLoading = true;
+      loadRecentCovers(metrics.homeCoverHeight);
+    }
+    return;
+  }
 
   if (isMinimalTheme()) {
     renderer.clearScreen();

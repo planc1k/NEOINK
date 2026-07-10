@@ -1,67 +1,59 @@
-/* Shared chrome for all CrossInk web portal pages.
+/* Shared chrome for all NEOINK web portal pages.
    Page-specific rules live in each page's own inline <style>. */
 :root {
-  --font-color: #1f2933;
-  --bg: #f3f4f6;
-  --title-color: #111827;
-  --card-bg: #ffffff;
-  --label-color: #6b7280;
-  --border-color: #e6e8ec;
-  --accent-color: #6e9a82;
-  --accent-hover-color: #5a8c73;
-  --accent-soft: rgba(110, 154, 130, 0.12);
-  --accent-color-10: rgba(110, 154, 130, 0.1);
+  --font-color: #182033;
+  --bg: #f8f3df;
+  --title-color: #050505;
+  --card-bg: #fffdf3;
+  --label-color: #42526b;
+  --border-color: #050505;
+  --accent-color: #432dd7;
+  --accent-hover-color: #2f1fa8;
+  --accent-soft: #fbd44b;
+  --accent-color-10: rgba(67, 45, 215, 0.12);
+  --accent-yellow: #fbd44b;
+  --accent-mint: #77d4a8;
+  --accent-pink: #ff7aac;
+  --accent-blue: #7cc7ff;
   --logo-filter: brightness(0);
-  --success-color: #16a34a;
-  --success-hover: #15803d;
-  --danger-color: #dc2626;
-  --danger-hover: #b91c1c;
-  --toggle-bg: #d1d5db;
-  --radius-lg: 16px;
-  --radius-md: 10px;
-  --radius-sm: 4px;
-  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05), 0 1px 3px rgba(16, 24, 40, 0.05);
-  --shadow-md: 0 6px 24px rgba(16, 24, 40, 0.12);
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --font-color: #e4e7eb;
-    --bg: #16181d;
-    --title-color: #f3f4f6;
-    --card-bg: #21242a;
-    --label-color: #9aa3af;
-    --border-color: #343941;
-    --accent-soft: rgba(110, 154, 130, 0.2);
-    --logo-filter: none;
-    --toggle-bg: #4b5563;
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-    --shadow-md: 0 6px 24px rgba(0, 0, 0, 0.5);
-    color-scheme: dark;
-  }
+  --success-color: #159957;
+  --success-hover: #0f7a45;
+  --danger-color: #e5484d;
+  --danger-hover: #b4232a;
+  --toggle-bg: #fbd44b;
+  --radius-lg: 0;
+  --radius-md: 0;
+  --radius-sm: 0;
+  --shadow-sm: 5px 5px 0 #050505;
+  --shadow-md: 8px 8px 0 #050505;
 }
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     Oxygen, Ubuntu, sans-serif;
-  max-width: 820px;
+  max-width: 960px;
   margin: 0 auto;
   padding: 28px 20px 56px;
   background-color: var(--bg);
+  background-image: linear-gradient(90deg, rgba(5, 5, 5, 0.05) 1px, transparent 1px),
+    linear-gradient(rgba(5, 5, 5, 0.05) 1px, transparent 1px);
+  background-size: 28px 28px;
   color: var(--font-color);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
 .crossink-header {
-  font-family: serif;
+  color: var(--accent-color);
 }
 h1 {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   color: var(--title-color);
-  font-size: 1.9em;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  margin: 0 0 18px;
+  font-size: 2.1em;
+  font-weight: 900;
+  letter-spacing: 0;
+  margin: 0 0 20px;
+  text-transform: uppercase;
 }
 .logo-mark {
   height: 1em;
@@ -73,39 +65,45 @@ h1 {
   background: var(--card-bg);
   border-radius: var(--radius-sm);
   padding: 22px 24px;
-  margin: 16px 0;
-  border: 1px solid var(--border-color);
+  margin: 18px 0 24px;
+  border: 2px solid var(--border-color);
   box-shadow: var(--shadow-sm);
 }
 .nav-links {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  margin: 0 0 24px;
-  padding: 5px;
-  background: var(--card-bg);
-  border: 1px solid var(--border-color);
+  gap: 8px;
+  margin: 0 0 28px;
+  padding: 8px;
+  background: var(--accent-yellow);
+  border: 2px solid var(--border-color);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-sm);
-  width: fit-content;
+  width: auto;
   max-width: 100%;
 }
 .nav-links a {
-  padding: 8px 18px;
-  color: var(--label-color);
+  padding: 9px 16px;
+  color: var(--title-color);
   text-decoration: none;
   border-radius: var(--radius-sm);
   font-size: 0.92em;
-  font-weight: 500;
-  transition: background-color 0.15s, color 0.15s;
+  font-weight: 800;
+  border: 2px solid transparent;
+  text-transform: uppercase;
+  transition: transform 0.12s, background-color 0.12s, color 0.12s;
 }
 .nav-links a.active {
   background: var(--accent-color);
-  color: #fff;
+  color: #fffdf3;
+  border-color: var(--border-color);
+  box-shadow: 3px 3px 0 var(--border-color);
 }
 .nav-links a:not(.active):hover {
-  background: var(--accent-soft);
-  color: var(--font-color);
+  background: var(--accent-mint);
+  color: var(--title-color);
+  border-color: var(--border-color);
+  transform: translate(-1px, -1px);
 }
 .loader-container {
   display: flex;
@@ -116,9 +114,9 @@ h1 {
 .loader {
   width: 48px;
   height: 48px;
-  border: 5px solid #AAA;
-  border-bottom-color: transparent;
-  border-radius: 50%;
+  border: 5px solid var(--border-color);
+  border-bottom-color: var(--accent-pink);
+  border-radius: 0;
   display: inline-block;
   box-sizing: border-box;
   animation: rotation 1s linear infinite;
@@ -129,10 +127,48 @@ h1 {
 }
 .footer {
   text-align: center;
-  color: var(--label-color);
+  color: var(--title-color);
   font-size: 0.85em;
+  font-weight: 800;
   padding: 20px 0;
   margin: 0;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+button,
+.btn,
+.action-btn,
+.save-btn,
+input[type="file"]::file-selector-button {
+  border: 2px solid var(--border-color);
+  border-radius: 0;
+  box-shadow: 3px 3px 0 var(--border-color);
+}
+button:hover,
+.btn:hover,
+.action-btn:hover,
+.save-btn:hover,
+input[type="file"]::file-selector-button:hover {
+  transform: translate(-1px, -1px);
+}
+button:active,
+.btn:active,
+.action-btn:active,
+.save-btn:active {
+  box-shadow: 1px 1px 0 var(--border-color);
+  transform: translate(2px, 2px);
+}
+input,
+select,
+textarea {
+  background: #fffdf3;
+  border: 2px solid var(--border-color);
+  border-radius: 0;
+  color: var(--font-color);
 }
 @media (max-width: 600px) {
   body {

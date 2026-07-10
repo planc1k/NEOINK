@@ -1,4 +1,4 @@
-"""Build the CrossInk web portal: compose pages from shared templates/assets,
+"""Build the NEOINK web portal: compose pages from shared templates/assets,
 minify, gzip, and emit the C headers that the firmware serves from flash.
 
 Source of truth lives under web/:
@@ -26,11 +26,11 @@ JS_OUT = os.path.join(OUT, "js")
 
 # slug -> (generated identifier, <title>, active nav, extra <head> markup)
 PAGES = {
-    "home":     ("HomePageHtml",     "CrossInk",                   "home",     ""),
-    "files":    ("FilesPageHtml",    "Files - CrossInk",           "files",    '  <script src="/js/jszip.min.js"></script>'),
-    "flashcards": ("FlashcardsPageHtml", "Flashcards - CrossInk",   "flashcards", '  <script src="/js/jszip.min.js"></script>'),
-    "settings": ("SettingsPageHtml", "Settings - CrossInk Reader", "settings", ""),
-    "fonts":    ("FontsPageHtml",    "Fonts - CrossInk",           "fonts",    ""),
+    "home":     ("HomePageHtml",     "NEOINK",                     "home",     ""),
+    "files":    ("FilesPageHtml",    "Files - NEOINK",             "files",    '  <script src="/js/jszip.min.js"></script>'),
+    "flashcards": ("FlashcardsPageHtml", "Flashcards - NEOINK",     "flashcards", '  <script src="/js/jszip.min.js"></script>'),
+    "settings": ("SettingsPageHtml", "Settings - NEOINK Reader",   "settings", ""),
+    "fonts":    ("FontsPageHtml",    "Fonts - NEOINK",             "fonts",    ""),
 }
 
 PRESERVE_TAGS = "pre|code|textarea|script|style"

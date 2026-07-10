@@ -35,6 +35,7 @@ class HomeActivity final : public Activity {
   bool minimalMenuOpen = false;
   bool minimalSuppressInitialFrontRelease = false;
   bool homeBookSwapLongPressHandled = false;
+  int inxTabIndex = 0;
   int minimalMenuIndex = 0;
   int minimalHomeNavIndex = -1;
   bool coverRendered = false;      // Track if cover has been rendered once

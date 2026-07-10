@@ -12,6 +12,7 @@
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
 #include "components/themes/BaseTheme.h"
+#include "components/themes/inx/InxTheme.h"
 #include "components/themes/lyra/Lyra3CoversTheme.h"
 #include "components/themes/lyra/LyraCarouselTheme.h"
 #include "components/themes/lyra/LyraTheme.h"
@@ -84,6 +85,21 @@ void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
       LOG_DBG("UI", "Using Neobrutalist theme");
       currentTheme = std::make_unique<NeobrutalistTheme>();
       currentMetrics = &NeobrutalistMetrics::values;
+      break;
+    case CrossPointSettings::UI_THEME::INX:
+      LOG_DBG("UI", "Using INX theme");
+      currentTheme = std::make_unique<InxTheme>();
+      currentMetrics = &InxMetrics::values;
+      break;
+    case CrossPointSettings::UI_THEME::INX_FLOW:
+      LOG_DBG("UI", "Using INX Flow theme");
+      currentTheme = std::make_unique<InxFlowTheme>();
+      currentMetrics = &InxFlowMetrics::values;
+      break;
+    case CrossPointSettings::UI_THEME::INX_NEOBRUTALIST:
+      LOG_DBG("UI", "Using INX Neobrutalist theme");
+      currentTheme = std::make_unique<InxNeobrutalistTheme>();
+      currentMetrics = &InxNeobrutalistMetrics::values;
       break;
     default:
       LOG_ERR("UI", "Unknown theme %d, falling back to Classic", static_cast<int>(type));

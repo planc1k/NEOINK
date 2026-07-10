@@ -310,13 +310,16 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     add(SettingInfo::Enum(
             StrId::STR_UI_THEME, &CrossPointSettings::uiTheme,
             {StrId::STR_THEME_CLASSIC, StrId::STR_THEME_MINIMAL, StrId::STR_THEME_LYRA, StrId::STR_THEME_LYRA_EXTENDED,
-             StrId::STR_THEME_LYRA_CAROUSEL, StrId::STR_THEME_ROUNDEDRAFF, StrId::STR_THEME_NEOBRUTALIST},
+             StrId::STR_THEME_LYRA_CAROUSEL, StrId::STR_THEME_ROUNDEDRAFF, StrId::STR_THEME_NEOBRUTALIST,
+             StrId::STR_THEME_INX, StrId::STR_THEME_INX_FLOW, StrId::STR_THEME_INX_NEOBRUTALIST},
             "uiTheme", StrId::STR_CAT_DISPLAY)
             .withEnumRawValues({CrossPointSettings::UI_THEME::CLASSIC, CrossPointSettings::UI_THEME::MINIMAL,
                                 CrossPointSettings::UI_THEME::LYRA, CrossPointSettings::UI_THEME::LYRA_3_COVERS,
                                 CrossPointSettings::UI_THEME::LYRA_CAROUSEL,
                                 CrossPointSettings::UI_THEME::ROUNDEDRAFF,
-                                CrossPointSettings::UI_THEME::NEOBRUTALIST}));
+                                CrossPointSettings::UI_THEME::NEOBRUTALIST, CrossPointSettings::UI_THEME::INX,
+                                CrossPointSettings::UI_THEME::INX_FLOW,
+                                CrossPointSettings::UI_THEME::INX_NEOBRUTALIST}));
     add(SettingInfo::Enum(StrId::STR_RECENT_BOOKS_VIEW, &CrossPointSettings::recentBooksView,
                           {StrId::STR_LIST_VIEW, StrId::STR_GRID_VIEW}, "recentBooksView", StrId::STR_CAT_DISPLAY));
     add(SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",

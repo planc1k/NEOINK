@@ -26,7 +26,7 @@ namespace {
 constexpr size_t CHUNK_SIZE = 8 * 1024;  // 8KB chunk for reading
 // Cache file magic and version
 constexpr uint32_t CACHE_MAGIC = 0x54585449;  // "TXTI"
-constexpr uint8_t CACHE_VERSION = 4;          // Increment when cache format changes
+constexpr uint8_t CACHE_VERSION = 5;          // Increment when cache format changes
 constexpr uint32_t MAX_CACHE_PAGES = 65535;   // Sanity cap to prevent unbounded reserve()
 
 bool isMarkdownMarker(const char c) {
@@ -55,14 +55,26 @@ bool isMarkdownHorizontalRule(const std::string& line) {
   return true;
 }
 
+bool isMarkdownFence(const std::string& line) {
+  const std::string trimmed = trimMarkdownWhitespace(line);
+  if (trimmed.size() < 3) return false;
+  return trimmed.rfind("```", 0) == 0 || trimmed.rfind("~~~", 0) == 0;
+}
+
 std::string removeMarkdownInlineMarkup(const std::string& text) {
   std::string out;
   out.reserve(text.size());
+  bool inCode = false;
 
   for (size_t i = 0; i < text.size(); ++i) {
     const char c = text[i];
     if (c == '\\' && i + 1 < text.size()) {
       out.push_back(text[++i]);
+      continue;
+    }
+
+    if (c == '`') {
+      inCode = !inCode;
       continue;
     }
 
@@ -86,7 +98,9 @@ std::string removeMarkdownInlineMarkup(const std::string& text) {
       }
     }
 
-    if (isMarkdownMarker(c)) {
+    if (!inCode && (c == '*' || c == '_' || c == '~')) {
+      const bool paired = i + 1 < text.size() && text[i + 1] == c;
+      if (paired) i++;
       continue;
     }
     out.push_back(c);
@@ -100,6 +114,7 @@ std::string renderMarkdownSegment(const std::string& line, const size_t start, c
 
   std::string segment = line.substr(start, end - start);
   if (start == 0) {
+    if (isMarkdownFence(segment)) return "";
     if (isMarkdownHorizontalRule(segment)) return "";
 
     size_t pos = 0;
@@ -114,19 +129,23 @@ std::string renderMarkdownSegment(const std::string& line, const size_t start, c
     }
 
     if (pos < segment.size() && segment[pos] == '>') {
-      pos++;
-      while (pos < segment.size() && std::isspace(static_cast<unsigned char>(segment[pos]))) pos++;
+      do {
+        pos++;
+        while (pos < segment.size() && std::isspace(static_cast<unsigned char>(segment[pos]))) pos++;
+      } while (pos < segment.size() && segment[pos] == '>');
       segment = "> " + segment.substr(pos);
     } else if (pos + 1 < segment.size() &&
                (segment[pos] == '-' || segment[pos] == '*' || segment[pos] == '+') &&
                std::isspace(static_cast<unsigned char>(segment[pos + 1]))) {
       pos += 2;
+      std::string checkbox;
       while (pos + 2 < segment.size() && segment[pos] == '[' && segment[pos + 2] == ']' &&
              (segment[pos + 1] == ' ' || segment[pos + 1] == 'x' || segment[pos + 1] == 'X')) {
+        checkbox = (segment[pos + 1] == 'x' || segment[pos + 1] == 'X') ? "[x] " : "[ ] ";
         pos += 3;
         while (pos < segment.size() && std::isspace(static_cast<unsigned char>(segment[pos]))) pos++;
       }
-      segment = "- " + segment.substr(pos);
+      segment = "- " + checkbox + segment.substr(pos);
     } else {
       size_t digits = pos;
       while (digits < segment.size() && std::isdigit(static_cast<unsigned char>(segment[digits]))) digits++;
