@@ -308,7 +308,7 @@ constexpr int kInxHomeTabCount = static_cast<int>(InxHomeTab::Count);
 const char* inxHomeTabLabel(const int index) {
   switch (static_cast<InxHomeTab>(index)) {
     case InxHomeTab::Recent:
-      return tr(STR_MENU_RECENT_BOOKS);
+      return "Recent";
     case InxHomeTab::Library:
       return "Library";
     case InxHomeTab::Flashcards:
@@ -323,6 +323,58 @@ const char* inxHomeTabLabel(const int index) {
     default:
       return "";
   }
+}
+
+struct InxTabPanelEntry {
+  const char* title;
+  const char* subtitle;
+  UIIcon icon;
+  HomeMenuAction action;
+};
+
+struct InxTabPanelEntries {
+  static constexpr int kCapacity = 4;
+  std::array<InxTabPanelEntry, kCapacity> entries{};
+  int count = 0;
+
+  void push(const InxTabPanelEntry& entry) {
+    if (count >= kCapacity) return;
+    entries[count++] = entry;
+  }
+
+  int size() const { return count; }
+
+  const InxTabPanelEntry& operator[](int index) const { return entries[index]; }
+};
+
+InxTabPanelEntries buildInxTabPanelEntries(const InxHomeTab tab, const bool hasReadingStats) {
+  InxTabPanelEntries entries;
+  switch (tab) {
+    case InxHomeTab::Recent:
+      entries.push({tr(STR_MENU_RECENT_BOOKS), tr(STR_CONTINUE_READING), Recent, HomeMenuAction::RecentBooks});
+      break;
+    case InxHomeTab::Library:
+      entries.push({tr(STR_BROWSE_FILES), "Open books and folders", Folder, HomeMenuAction::BrowseFiles});
+      entries.push({tr(STR_MENU_RECENT_BOOKS), "Return to a recent title", Recent, HomeMenuAction::RecentBooks});
+      break;
+    case InxHomeTab::Flashcards:
+      entries.push({"Flashcards", "Study decks and review progress", Book, HomeMenuAction::Flashcards});
+      break;
+    case InxHomeTab::FileTransfer:
+      entries.push({tr(STR_FILE_TRANSFER), "WiFi transfer and sync tools", Transfer, HomeMenuAction::FileTransfer});
+      break;
+    case InxHomeTab::Statistics:
+      entries.push({tr(STR_READING_STATS), hasReadingStats ? "Open reading progress" : "No sessions recorded yet",
+                    Chart, HomeMenuAction::ReadingStats});
+      break;
+    case InxHomeTab::Settings:
+      entries.push({tr(STR_SETTINGS_TITLE), "Display, reader, controls, system", Settings, HomeMenuAction::Settings});
+      break;
+    case InxHomeTab::Count:
+    default:
+      break;
+  }
+  return entries;
 }
 
 int inxTabForInitialMenuItem(HomeMenuItem item) {
@@ -1326,13 +1378,16 @@ void HomeActivity::loop() {
 
     if (mappedInput.wasPressed(MappedInputManager::Button::Left)) {
       inxTabIndex = ButtonNavigator::previousIndex(inxTabIndex, kInxHomeTabCount);
+      inxTabItemIndex = 0;
       requestUpdate();
     }
     if (mappedInput.wasPressed(MappedInputManager::Button::Right)) {
       inxTabIndex = ButtonNavigator::nextIndex(inxTabIndex, kInxHomeTabCount);
+      inxTabItemIndex = 0;
       requestUpdate();
     }
-    if (inxTabIndex == static_cast<int>(InxHomeTab::Recent) && visibleBookCount > 0) {
+    const InxHomeTab currentInxTab = static_cast<InxHomeTab>(inxTabIndex);
+    if (currentInxTab == InxHomeTab::Recent && visibleBookCount > 0) {
       if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
         selectorIndex = ButtonNavigator::previousIndex(selectorIndex, visibleBookCount);
         lastCarouselBookIndex = selectorIndex;
@@ -1343,6 +1398,21 @@ void HomeActivity::loop() {
         lastCarouselBookIndex = selectorIndex;
         requestUpdate();
       }
+    } else {
+      const auto entries = buildInxTabPanelEntries(currentInxTab, hasReadingStats);
+      if (entries.size() > 0) {
+        if (inxTabItemIndex >= entries.size()) {
+          inxTabItemIndex = entries.size() - 1;
+        }
+        if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
+          inxTabItemIndex = ButtonNavigator::previousIndex(inxTabItemIndex, entries.size());
+          requestUpdate();
+        }
+        if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
+          inxTabItemIndex = ButtonNavigator::nextIndex(inxTabItemIndex, entries.size());
+          requestUpdate();
+        }
+      }
     }
 
     if (getHighlightedBookIndex() != previousHighlightedBookIdx) {
@@ -1350,7 +1420,39 @@ void HomeActivity::loop() {
     }
 
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      switch (static_cast<InxHomeTab>(inxTabIndex)) {
+      auto activateAction = [this](const HomeMenuAction action) {
+        switch (action) {
+          case HomeMenuAction::BrowseFiles:
+            onFileBrowserOpen();
+            break;
+          case HomeMenuAction::ContinueReading:
+            onContinueReading();
+            break;
+          case HomeMenuAction::RecentBooks:
+            onRecentsOpen();
+            break;
+          case HomeMenuAction::OpdsBrowser:
+            onOpdsBrowserOpen();
+            break;
+          case HomeMenuAction::Flashcards:
+            onFlashcardsOpen();
+            break;
+          case HomeMenuAction::ReadingStats:
+            onReadingStatsOpen();
+            break;
+          case HomeMenuAction::Bookmarks:
+            onSavedItemsOpen();
+            break;
+          case HomeMenuAction::FileTransfer:
+            onFileTransferOpen();
+            break;
+          case HomeMenuAction::Settings:
+            onSettingsOpen();
+            break;
+        }
+      };
+
+      switch (currentInxTab) {
         case InxHomeTab::Recent:
           if (visibleBookCount > 0) {
             onSelectBook(recentBooks[std::clamp(selectorIndex, 0, visibleBookCount - 1)].path);
@@ -1359,20 +1461,17 @@ void HomeActivity::loop() {
           }
           break;
         case InxHomeTab::Library:
-          onFileBrowserOpen();
-          break;
         case InxHomeTab::Flashcards:
-          onFlashcardsOpen();
-          break;
         case InxHomeTab::FileTransfer:
-          onFileTransferOpen();
-          break;
         case InxHomeTab::Statistics:
-          onReadingStatsOpen();
+        case InxHomeTab::Settings: {
+          const auto entries = buildInxTabPanelEntries(currentInxTab, hasReadingStats);
+          if (entries.size() > 0) {
+            const int item = std::clamp(inxTabItemIndex, 0, entries.size() - 1);
+            activateAction(entries[item].action);
+          }
           break;
-        case InxHomeTab::Settings:
-          onSettingsOpen();
-          break;
+        }
         case InxHomeTab::Count:
         default:
           break;
@@ -1685,24 +1784,43 @@ void HomeActivity::render(RenderLock&&) {
     GUI.drawTabBar(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight}, tabs,
                    true);
 
+    const InxHomeTab currentInxTab = static_cast<InxHomeTab>(inxTabIndex);
     if (selectorIndex >= getVisibleRecentBookCount() && getVisibleRecentBookCount() > 0) {
       selectorIndex = getVisibleRecentBookCount() - 1;
     }
 
-    bool bufferRestored = coverBufferStored && restoreCoverBuffer();
-    coverRectX = 0;
-    coverRectY = metrics.homeTopPadding;
-    coverRectW = pageWidth;
-    coverRectH = metrics.homeCoverTileHeight;
-    GUI.drawRecentBookCover(
-        renderer, Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight}, recentBooks, selectorIndex,
-        coverRendered, coverBufferStored, bufferRestored, std::bind(&HomeActivity::storeCoverBuffer, this),
-        hasAnyBookStats(currentBookStats) ? &currentBookStats : nullptr, currentBookProgressPercent);
+    const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
+    const int contentBottom = pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing;
+    if (currentInxTab == InxHomeTab::Recent) {
+      bool bufferRestored = coverBufferStored && restoreCoverBuffer();
+      coverRectX = 0;
+      coverRectY = metrics.homeTopPadding;
+      coverRectW = pageWidth;
+      coverRectH = metrics.homeCoverTileHeight;
+      GUI.drawRecentBookCover(
+          renderer, Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight}, recentBooks, selectorIndex,
+          coverRendered, coverBufferStored, bufferRestored, std::bind(&HomeActivity::storeCoverBuffer, this),
+          hasAnyBookStats(currentBookStats) ? &currentBookStats : nullptr, currentBookProgressPercent);
 
-    const int promptY = std::min(pageHeight - metrics.buttonHintsHeight - 36,
-                                 metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.verticalSpacing);
-    const char* prompt = inxTabIndex == static_cast<int>(InxHomeTab::Recent) ? "Open recent book" : "Open tab";
-    GUI.drawSubHeader(renderer, Rect{0, promptY, pageWidth, 30}, prompt, inxHomeTabLabel(inxTabIndex));
+      const int promptY = std::min(pageHeight - metrics.buttonHintsHeight - 36,
+                                   metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.verticalSpacing);
+      const char* detail = recentBooks.empty() ? tr(STR_START_READING) : recentBooks[getHighlightedBookIndex()].title.c_str();
+      GUI.drawSubHeader(renderer, Rect{0, promptY, pageWidth, 30}, inxHomeTabLabel(inxTabIndex), detail);
+    } else {
+      const auto entries = buildInxTabPanelEntries(currentInxTab, hasReadingStats);
+      if (entries.size() > 0 && inxTabItemIndex >= entries.size()) {
+        inxTabItemIndex = entries.size() - 1;
+      }
+      GUI.drawSubHeader(renderer, Rect{0, contentTop, pageWidth, 32}, inxHomeTabLabel(inxTabIndex),
+                        entries.size() > 0 ? entries[std::max(0, inxTabItemIndex)].title : "");
+      const int listTop = contentTop + 40;
+      const int listHeight = std::max(0, contentBottom - listTop);
+      GUI.drawList(
+          renderer, Rect{0, listTop, pageWidth, listHeight}, entries.size(), inxTabItemIndex,
+          [&entries](int index) { return std::string(entries[index].title); },
+          [&entries](int index) { return std::string(entries[index].subtitle); },
+          [&entries](int index) { return entries[index].icon; });
+    }
 
     const auto labels = mappedInput.mapLabels("", tr(STR_SELECT), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

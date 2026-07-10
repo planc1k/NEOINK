@@ -5,6 +5,7 @@
 #include <HalDisplay.h>
 
 #include <algorithm>
+#include <cctype>
 #include <string>
 #include <vector>
 
@@ -41,6 +42,72 @@ void drawCompactScrollBar(const GfxRenderer& renderer, Rect rect, int itemCount,
   renderer.drawRect(barX, rect.y, barW, rect.height, 1, true);
   renderer.fillRect(barX, thumbY, barW, thumbH, true);
 }
+
+UIIcon tabIconForLabel(const char* label) {
+  std::string text = label ? label : "";
+  std::transform(text.begin(), text.end(), text.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  if (text.find("recent") != std::string::npos) return Recent;
+  if (text.find("libr") != std::string::npos || text.find("file") != std::string::npos) return Library;
+  if (text.find("card") != std::string::npos) return Book;
+  if (text.find("transfer") != std::string::npos) return Transfer;
+  if (text.find("stat") != std::string::npos) return Chart;
+  if (text.find("setting") != std::string::npos) return Settings;
+  return File;
+}
+
+void drawTabLabelWithIcon(const GfxRenderer& renderer, const Rect tab, const char* label, const bool foreground,
+                          const bool bold, const int fontId, const int iconSize, const int minIconWidth) {
+  const UIIcon icon = tabIconForLabel(label);
+  const EpdFontFamily::Style style = bold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
+  const int gap = 4;
+  const int labelW = std::max(1, tab.width - minIconWidth - gap - 4);
+  const std::string clipped = renderer.truncatedText(fontId, label, labelW, style);
+  const int textW = renderer.getTextWidth(fontId, clipped.c_str(), style);
+  const int totalW = textW + iconSize + gap;
+  int x = tab.x + std::max(2, (tab.width - totalW) / 2);
+  const int gy = tab.y + (tab.height - iconSize) / 2;
+  switch (icon) {
+    case Recent:
+      renderer.drawRect(x + 1, gy + 1, iconSize - 2, iconSize - 2, 1, foreground);
+      renderer.drawLine(x + iconSize / 2, gy + 3, x + iconSize / 2, gy + iconSize / 2, foreground);
+      renderer.drawLine(x + iconSize / 2, gy + iconSize / 2, x + iconSize - 4, gy + iconSize / 2, foreground);
+      break;
+    case Library:
+    case Folder:
+      renderer.drawRect(x + 1, gy + 4, iconSize - 2, iconSize - 5, 1, foreground);
+      renderer.drawLine(x + 3, gy + 3, x + iconSize / 2, gy + 3, foreground);
+      break;
+    case Book:
+      renderer.drawRect(x + 2, gy + 2, iconSize - 4, iconSize - 4, 1, foreground);
+      renderer.drawLine(x + iconSize / 2, gy + 2, x + iconSize / 2, gy + iconSize - 3, foreground);
+      break;
+    case Transfer:
+      renderer.drawLine(x + 1, gy + 4, x + iconSize - 2, gy + 4, foreground);
+      renderer.drawLine(x + iconSize - 5, gy + 1, x + iconSize - 2, gy + 4, foreground);
+      renderer.drawLine(x + iconSize - 5, gy + 7, x + iconSize - 2, gy + 4, foreground);
+      renderer.drawLine(x + iconSize - 2, gy + iconSize - 5, x + 1, gy + iconSize - 5, foreground);
+      renderer.drawLine(x + 4, gy + iconSize - 8, x + 1, gy + iconSize - 5, foreground);
+      renderer.drawLine(x + 4, gy + iconSize - 2, x + 1, gy + iconSize - 5, foreground);
+      break;
+    case Chart:
+      renderer.drawRect(x + 1, gy + 1, iconSize - 2, iconSize - 2, 1, foreground);
+      renderer.fillRect(x + 4, gy + iconSize - 5, 2, 2, foreground);
+      renderer.fillRect(x + 7, gy + iconSize - 8, 2, 5, foreground);
+      renderer.fillRect(x + 10, gy + iconSize - 11, 2, 8, foreground);
+      break;
+    case Settings:
+      renderer.drawRect(x + 2, gy + 2, iconSize - 4, iconSize - 4, 1, foreground);
+      renderer.drawLine(x + 4, gy + iconSize / 2, x + iconSize - 5, gy + iconSize / 2, foreground);
+      renderer.drawLine(x + iconSize / 2, gy + 4, x + iconSize / 2, gy + iconSize - 5, foreground);
+      break;
+    default:
+      renderer.drawRect(x + 2, gy + 2, iconSize - 4, iconSize - 4, 1, foreground);
+      break;
+  }
+  x += iconSize + gap;
+  renderer.drawText(fontId, x, centeredY(renderer, fontId, tab), clipped.c_str(), foreground, style);
+}
 }  // namespace
 
 void InxTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle,
@@ -74,14 +141,17 @@ void InxTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* ti
 void InxTheme::drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,
                           const bool selected) const {
   if (tabs.empty()) return;
+  const ThemeMetrics& metrics = inxMetrics();
   const int count = static_cast<int>(tabs.size());
   const int gap = 2;
   const int labelFont = kMetaFont;
+  const int contentX = rect.x + metrics.contentSidePadding;
+  const int contentW = std::max(1, rect.width - metrics.contentSidePadding * 2);
   const int y = rect.y + 4;
   const int h = rect.height - 8;
   for (int i = 0; i < count; ++i) {
-    const int x1 = rect.x + i * rect.width / count;
-    const int x2 = rect.x + (i + 1) * rect.width / count;
+    const int x1 = contentX + i * contentW / count;
+    const int x2 = contentX + (i + 1) * contentW / count;
     Rect tab{x1 + gap, y, std::max(1, x2 - x1 - 2 * gap), h};
     const bool active = tabs[i].selected;
     if (active && selected) {
@@ -89,12 +159,7 @@ void InxTheme::drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vec
     } else if (active) {
       renderer.fillRectDither(tab.x, tab.y + tab.height - 5, tab.width, 5, Color::LightGray);
     }
-    const std::string clipped = renderer.truncatedText(labelFont, tabs[i].label, tab.width - 4,
-                                                       active ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
-    const int tw = renderer.getTextWidth(labelFont, clipped.c_str(), active ? EpdFontFamily::BOLD
-                                                                            : EpdFontFamily::REGULAR);
-    renderer.drawText(labelFont, tab.x + (tab.width - tw) / 2, tab.y + 3, clipped.c_str(), true,
-                      active ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
+    drawTabLabelWithIcon(renderer, tab, tabs[i].label, true, active, labelFont, 12, 12);
   }
 }
 
@@ -252,9 +317,11 @@ void InxNeobrutalistTheme::drawTabBar(const GfxRenderer& renderer, Rect rect, co
   if (tabs.empty()) return;
   const int count = static_cast<int>(tabs.size());
   constexpr int gap = 5;
+  const int contentX = rect.x + InxNeobrutalistMetrics::values.contentSidePadding / 2;
+  const int contentW = std::max(1, rect.width - InxNeobrutalistMetrics::values.contentSidePadding);
   for (int i = 0; i < count; ++i) {
-    const int x1 = rect.x + i * rect.width / count;
-    const int x2 = rect.x + (i + 1) * rect.width / count;
+    const int x1 = contentX + i * contentW / count;
+    const int x2 = contentX + (i + 1) * contentW / count;
     Rect tab{x1 + gap / 2, rect.y + 4, std::max(1, x2 - x1 - gap), rect.height - 10};
     const bool active = tabs[i].selected;
     if (active) {
@@ -262,12 +329,6 @@ void InxNeobrutalistTheme::drawTabBar(const GfxRenderer& renderer, Rect rect, co
     }
     renderer.fillRect(tab.x, tab.y, tab.width, tab.height, active && selected);
     renderer.drawRect(tab.x, tab.y, tab.width, tab.height, active ? 2 : 1, true);
-    const std::string clipped = renderer.truncatedText(SMALL_FONT_ID, tabs[i].label, tab.width - 6,
-                                                       active ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
-    const int tw = renderer.getTextWidth(SMALL_FONT_ID, clipped.c_str(), active ? EpdFontFamily::BOLD
-                                                                                : EpdFontFamily::REGULAR);
-    renderer.drawText(SMALL_FONT_ID, tab.x + (tab.width - tw) / 2, centeredY(renderer, SMALL_FONT_ID, tab),
-                      clipped.c_str(), !(active && selected),
-                      active ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
+    drawTabLabelWithIcon(renderer, tab, tabs[i].label, !(active && selected), active, SMALL_FONT_ID, 12, 12);
   }
 }
