@@ -101,6 +101,7 @@ class HomeActivity final : public Activity {
   void loadRecentBooks(int maxBooks);
   void loadAllBookStats();
   void loadRecentCovers(int coverHeight);
+  void moveHomeSelectionTo(int nextIndex, int visibleBookCount);
 
  public:
   explicit HomeActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,

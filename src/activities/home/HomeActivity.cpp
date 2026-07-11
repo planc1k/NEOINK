@@ -915,6 +915,17 @@ void HomeActivity::updateHighlightedBookContext() {
           millis() - start);
 }
 
+void HomeActivity::moveHomeSelectionTo(const int nextIndex, const int visibleBookCount) {
+  if (selectorIndex < visibleBookCount) {
+    lastCarouselBookIndex = std::clamp(selectorIndex, 0, visibleBookCount - 1);
+  }
+  selectorIndex = nextIndex;
+  if (selectorIndex < visibleBookCount) {
+    lastCarouselBookIndex = std::clamp(selectorIndex, 0, visibleBookCount - 1);
+  }
+  requestUpdate();
+}
+
 void HomeActivity::onExit() {
   Activity::onExit();
 
@@ -1523,27 +1534,52 @@ void HomeActivity::loop() {
       requestUpdate();
     }
   } else {
-    const int menuCount = getMenuItemCount();
-    buttonNavigator.onNext([this, menuCount, visibleBookCount] {
-      if (selectorIndex < visibleBookCount) {
-        lastCarouselBookIndex = selectorIndex;
-      }
-      selectorIndex = ButtonNavigator::nextIndex(selectorIndex, menuCount);
-      if (selectorIndex < visibleBookCount) {
-        lastCarouselBookIndex = selectorIndex;
-      }
-      requestUpdate();
-    });
-    buttonNavigator.onPrevious([this, menuCount, visibleBookCount] {
-      if (selectorIndex < visibleBookCount) {
-        lastCarouselBookIndex = selectorIndex;
-      }
-      selectorIndex = ButtonNavigator::previousIndex(selectorIndex, menuCount);
-      if (selectorIndex < visibleBookCount) {
-        lastCarouselBookIndex = selectorIndex;
-      }
-      requestUpdate();
-    });
+    const int itemCount = getMenuItemCount();
+    const bool hasCoverRow = !UITheme::getInstance().getMetrics().homeContinueReadingInMenu && visibleBookCount > 1;
+
+    if (hasCoverRow) {
+      buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Down},
+                                           [this, itemCount, visibleBookCount] {
+                                             moveHomeSelectionTo(ButtonNavigator::nextIndex(selectorIndex, itemCount),
+                                                                 visibleBookCount);
+                                           });
+      buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Up},
+                                           [this, itemCount, visibleBookCount] {
+                                             moveHomeSelectionTo(
+                                                 ButtonNavigator::previousIndex(selectorIndex, itemCount),
+                                                 visibleBookCount);
+                                           });
+      buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Right},
+                                           [this, visibleBookCount, itemCount] {
+                                             if (selectorIndex < visibleBookCount) {
+                                               moveHomeSelectionTo(
+                                                   ButtonNavigator::nextIndex(selectorIndex, visibleBookCount),
+                                                   visibleBookCount);
+                                             } else {
+                                               moveHomeSelectionTo(ButtonNavigator::nextIndex(selectorIndex, itemCount),
+                                                                   visibleBookCount);
+                                             }
+                                           });
+      buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Left},
+                                           [this, visibleBookCount, itemCount] {
+                                             if (selectorIndex < visibleBookCount) {
+                                               moveHomeSelectionTo(
+                                                   ButtonNavigator::previousIndex(selectorIndex, visibleBookCount),
+                                                   visibleBookCount);
+                                             } else {
+                                               moveHomeSelectionTo(
+                                                   ButtonNavigator::previousIndex(selectorIndex, itemCount),
+                                                   visibleBookCount);
+                                             }
+                                           });
+    } else {
+      buttonNavigator.onNext([this, itemCount, visibleBookCount] {
+        moveHomeSelectionTo(ButtonNavigator::nextIndex(selectorIndex, itemCount), visibleBookCount);
+      });
+      buttonNavigator.onPrevious([this, itemCount, visibleBookCount] {
+        moveHomeSelectionTo(ButtonNavigator::previousIndex(selectorIndex, itemCount), visibleBookCount);
+      });
+    }
   }
 
   if (getHighlightedBookIndex() != previousHighlightedBookIdx) {
