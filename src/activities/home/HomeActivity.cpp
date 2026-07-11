@@ -33,6 +33,7 @@
 #include "components/UITheme.h"
 #include "components/themes/lyra/LyraCarouselTheme.h"
 #include "components/themes/minimal/MinimalTheme.h"
+#include "components/themes/neobrutalist/NeobrutalistTheme.h"
 #include "fontIds.h"
 
 namespace {
@@ -322,6 +323,20 @@ int minimalHomeCoverWidth(int coverHeight) {
 int minimalHomeCoverHeight(int coverHeight) {
   (void)coverHeight;
   return MinimalMetrics::homeCoverImageHeight;
+}
+
+int neobrutalistHomeCoverHeight(const ThemeMetrics& metrics) {
+  const int tileH = metrics.homeCoverTileHeight - NeobrutalistHomeLayout::tileVerticalTrim;
+  return std::max(1, std::min(metrics.homeCoverHeight, tileH - NeobrutalistHomeLayout::coverReservedCaptionHeight));
+}
+
+int neobrutalistHomeCoverWidth(const int screenWidth, const ThemeMetrics& metrics) {
+  const int availableW =
+      screenWidth - metrics.contentSidePadding * 2 -
+      NeobrutalistHomeLayout::tileGap * (NeobrutalistHomeLayout::slotCount - 1);
+  const int slotW = std::max(1, availableW / NeobrutalistHomeLayout::slotCount);
+  const int coverH = neobrutalistHomeCoverHeight(metrics);
+  return std::max(1, std::min(slotW - NeobrutalistHomeLayout::coverHorizontalInset, (coverH * 3 + 2) / 5));
 }
 
 std::string minimalHomeCoverPath(const RecentBook& book, int coverHeight) {
@@ -656,8 +671,17 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
         // Non-carousel: generate the active theme's thumbnail size.
         const bool useMinimalThumb =
             isMinimal && (FsHelpers::hasEpubExtension(book.path) || FsHelpers::hasXtcExtension(book.path));
-        const std::string coverPath = useMinimalThumb ? minimalHomeCoverPath(book, coverHeight)
-                                                      : UITheme::getCoverThumbPath(book.coverBmpPath, coverHeight);
+        const bool useNeobrutalistThumb = isNeobrutalistTheme();
+        const auto& metrics = UITheme::getInstance().getMetrics();
+        const int neobrutalistCoverW =
+            useNeobrutalistThumb ? neobrutalistHomeCoverWidth(renderer.getScreenWidth(), metrics) : 0;
+        const int neobrutalistCoverH = useNeobrutalistThumb ? neobrutalistHomeCoverHeight(metrics) : 0;
+        const std::string coverPath =
+            useMinimalThumb
+                ? minimalHomeCoverPath(book, coverHeight)
+                : (useNeobrutalistThumb
+                       ? UITheme::getCoverThumbPath(book.coverBmpPath, neobrutalistCoverW, neobrutalistCoverH)
+                       : UITheme::getCoverThumbPath(book.coverBmpPath, coverHeight));
         if (coverPath.empty() || !Storage.exists(coverPath.c_str())) {
           if (FsHelpers::hasEpubExtension(book.path)) {
             Epub epub(book.path, "/.crosspoint");
@@ -677,7 +701,9 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
             }
             const bool success = useMinimalThumb ? epub.generateAdaptiveThumbBmp(minimalHomeCoverWidth(coverHeight),
                                                                                  minimalHomeCoverHeight(coverHeight))
-                                                 : epub.generateThumbBmp(0, coverHeight);
+                                 : useNeobrutalistThumb
+                                     ? epub.generateThumbBmp(neobrutalistCoverW, neobrutalistCoverH)
+                                     : epub.generateThumbBmp(0, coverHeight);
             if (!success) {
               updateRecentBookCoverPath(book, "");
               book.coverBmpPath = "";
@@ -694,10 +720,13 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
                 popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
               }
               GUI.fillPopupProgress(renderer, popupRect, 10 + progress * progressIncrement);
-              const bool success =
-                  useMinimalThumb ? xtc.generateThumbBmp(static_cast<uint16_t>(minimalHomeCoverWidth(coverHeight)),
-                                                         static_cast<uint16_t>(minimalHomeCoverHeight(coverHeight)))
-                                  : xtc.generateThumbBmp(coverHeight);
+              const bool success = useMinimalThumb
+                                       ? xtc.generateThumbBmp(static_cast<uint16_t>(minimalHomeCoverWidth(coverHeight)),
+                                                              static_cast<uint16_t>(minimalHomeCoverHeight(coverHeight)))
+                                   : useNeobrutalistThumb
+                                       ? xtc.generateThumbBmp(static_cast<uint16_t>(neobrutalistCoverW),
+                                                              static_cast<uint16_t>(neobrutalistCoverH))
+                                       : xtc.generateThumbBmp(coverHeight);
               if (!success) {
                 updateRecentBookCoverPath(book, "");
                 book.coverBmpPath = "";

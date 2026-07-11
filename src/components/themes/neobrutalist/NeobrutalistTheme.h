@@ -70,6 +70,15 @@ constexpr ThemeMetrics values = {.batteryWidth = 16,
                                  .textFieldLineEndOffset = 0};
 }
 
+namespace NeobrutalistHomeLayout {
+constexpr int slotCount = 3;
+constexpr int tileGap = 8;
+constexpr int framePad = 4;
+constexpr int tileVerticalTrim = 12;
+constexpr int coverReservedCaptionHeight = 82;
+constexpr int coverHorizontalInset = 10;
+}  // namespace NeobrutalistHomeLayout
+
 class NeobrutalistTheme : public LyraTheme {
  public:
   void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle = nullptr,

@@ -6,6 +6,7 @@
 #include <I18n.h>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cstdio>
 #include <string>
@@ -25,9 +26,6 @@ constexpr int kPadX = 14;
 constexpr int kTitleFont = UI_12_FONT_ID;
 constexpr int kBodyFont = UI_10_FONT_ID;
 constexpr int kMetaFont = SMALL_FONT_ID;
-constexpr int kHomeSlotCount = 3;
-constexpr int kHomeTileGap = 8;
-constexpr int kHomeFramePad = 4;
 
 void drawShadow(const GfxRenderer& renderer, const Rect r) {
   renderer.fillRect(r.x + kShadowOffset, r.y + kShadowOffset, r.width, r.height, true);
@@ -93,36 +91,50 @@ bool drawCoverBitmap(GfxRenderer& renderer, const RecentBook& book, const Rect c
     return false;
   }
 
-  const std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, cover.height);
-  if (coverPath.empty()) {
-    return false;
-  }
+  const std::array<std::string, 2> coverPaths = {
+      UITheme::getCoverThumbPath(book.coverBmpPath, cover.width, cover.height),
+      UITheme::getCoverThumbPath(book.coverBmpPath, cover.height),
+  };
 
-  HalFile file;
-  if (!Storage.openFileForRead("HOME", coverPath, file)) {
-    return false;
-  }
-
-  Bitmap bitmap(file);
-  bool rendered = false;
-  if (bitmap.parseHeaders() == BmpReaderError::Ok && bitmap.getWidth() > 0 && bitmap.getHeight() > 0) {
-    const float srcW = static_cast<float>(bitmap.getWidth());
-    const float srcH = static_cast<float>(bitmap.getHeight());
-    const float srcRatio = srcW / srcH;
-    const float targetRatio = static_cast<float>(cover.width) / static_cast<float>(cover.height);
-    float cropX = 0.0f;
-    float cropY = 0.0f;
-    if (srcRatio > targetRatio) {
-      cropX = std::max(0.0f, 1.0f - (targetRatio / srcRatio));
-    } else if (srcRatio < targetRatio) {
-      cropY = std::max(0.0f, 1.0f - (srcRatio / targetRatio));
+  for (size_t i = 0; i < coverPaths.size(); ++i) {
+    const std::string& coverPath = coverPaths[i];
+    if (coverPath.empty()) {
+      continue;
     }
-    renderer.fillRect(cover.x, cover.y, cover.width, cover.height, false);
-    renderer.drawBitmap(bitmap, cover.x, cover.y, cover.width, cover.height, cropX, cropY);
-    rendered = true;
+    if (i > 0 && coverPath == coverPaths[0]) {
+      continue;
+    }
+
+    HalFile file;
+    if (!Storage.openFileForRead("HOME", coverPath, file)) {
+      continue;
+    }
+
+    Bitmap bitmap(file);
+    bool rendered = false;
+    if (bitmap.parseHeaders() == BmpReaderError::Ok && bitmap.getWidth() > 0 && bitmap.getHeight() > 0) {
+      const float srcW = static_cast<float>(bitmap.getWidth());
+      const float srcH = static_cast<float>(bitmap.getHeight());
+      const float srcRatio = srcW / srcH;
+      const float targetRatio = static_cast<float>(cover.width) / static_cast<float>(cover.height);
+      float cropX = 0.0f;
+      float cropY = 0.0f;
+      if (srcRatio > targetRatio) {
+        cropX = std::max(0.0f, 1.0f - (targetRatio / srcRatio));
+      } else if (srcRatio < targetRatio) {
+        cropY = std::max(0.0f, 1.0f - (srcRatio / targetRatio));
+      }
+      renderer.fillRect(cover.x, cover.y, cover.width, cover.height, false);
+      renderer.drawBitmap(bitmap, cover.x, cover.y, cover.width, cover.height, cropX, cropY);
+      rendered = true;
+    }
+    file.close();
+    if (rendered) {
+      return true;
+    }
   }
-  file.close();
-  return rendered;
+
+  return false;
 }
 
 void drawFallbackCover(const GfxRenderer& renderer, const Rect cover, const RecentBook& book) {
@@ -163,7 +175,11 @@ void NeobrutalistTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const
   }
 
   const auto& metrics = NeobrutalistMetrics::values;
-  const int side = metrics.contentSidePadding;
+  const int screenWidth = renderer.getScreenWidth();
+  int side = 0;
+  if (rect.x == 0 && rect.width >= screenWidth) {
+    side = rect.height <= metrics.homeTopPadding ? metrics.contentSidePadding : metrics.contentSidePadding / 2;
+  }
   Rect panel{rect.x + side, rect.y + 8, rect.width - side * 2, rect.height - 16};
   if (panel.height < 34) panel.height = rect.height - 8;
   drawPanel(renderer, panel, false, false, true);
@@ -418,16 +434,20 @@ void NeobrutalistTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect,
                                             bool& coverRendered, bool& coverBufferStored, bool& bufferRestored,
                                             const std::function<bool()>& storeCoverBuffer,
                                             const BookReadingStats* stats, float progressPercent) const {
-  const int bookCount = std::min(static_cast<int>(recentBooks.size()), kHomeSlotCount);
+  const int bookCount = std::min(static_cast<int>(recentBooks.size()), NeobrutalistHomeLayout::slotCount);
   const int side = NeobrutalistMetrics::values.contentSidePadding;
-  const int availableW = rect.width - side * 2 - kHomeTileGap * (kHomeSlotCount - 1);
-  const int slotW = std::max(1, availableW / kHomeSlotCount);
-  const int totalW = bookCount > 0 ? bookCount * slotW + (bookCount - 1) * kHomeTileGap : slotW * 2;
+  const int availableW =
+      rect.width - side * 2 - NeobrutalistHomeLayout::tileGap * (NeobrutalistHomeLayout::slotCount - 1);
+  const int slotW = std::max(1, availableW / NeobrutalistHomeLayout::slotCount);
+  const int totalW =
+      bookCount > 0 ? bookCount * slotW + (bookCount - 1) * NeobrutalistHomeLayout::tileGap : slotW * 2;
   const int startX = rect.x + (rect.width - totalW) / 2;
   const int tileY = rect.y + 4;
-  const int tileH = rect.height - 12;
-  const int coverH = std::min(NeobrutalistMetrics::values.homeCoverHeight, tileH - 82);
-  const int coverW = std::min(slotW - 10, (coverH * 3 + 2) / 5);
+  const int tileH = rect.height - NeobrutalistHomeLayout::tileVerticalTrim;
+  const int coverH = std::max(1, std::min(NeobrutalistMetrics::values.homeCoverHeight,
+                                          tileH - NeobrutalistHomeLayout::coverReservedCaptionHeight));
+  const int coverW =
+      std::max(1, std::min(slotW - NeobrutalistHomeLayout::coverHorizontalInset, (coverH * 3 + 2) / 5));
 
   if (bookCount <= 0) {
     Rect empty{rect.x + side, tileY + 8, rect.width - side * 2, std::min(tileH - 16, 164)};
@@ -442,10 +462,11 @@ void NeobrutalistTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect,
   if (redrawStaticCovers) {
     renderer.fillRect(rect.x, rect.y, rect.width, rect.height, false);
     for (int i = 0; i < bookCount; ++i) {
-      const int slotX = startX + i * (slotW + kHomeTileGap);
+      const int slotX = startX + i * (slotW + NeobrutalistHomeLayout::tileGap);
       Rect cover{slotX + (slotW - coverW) / 2, tileY + 10, coverW, coverH};
-      Rect frame{cover.x - kHomeFramePad, cover.y - kHomeFramePad, cover.width + kHomeFramePad * 2,
-                 cover.height + kHomeFramePad * 2};
+      Rect frame{cover.x - NeobrutalistHomeLayout::framePad, cover.y - NeobrutalistHomeLayout::framePad,
+                 cover.width + NeobrutalistHomeLayout::framePad * 2,
+                 cover.height + NeobrutalistHomeLayout::framePad * 2};
       drawShadow(renderer, frame);
       renderer.fillRect(frame.x, frame.y, frame.width, frame.height, false);
       renderer.drawRect(frame.x, frame.y, frame.width, frame.height, kBorder, true);
@@ -464,11 +485,12 @@ void NeobrutalistTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect,
 
   for (int i = 0; i < bookCount; ++i) {
     const bool selected = selectorIndex == i;
-    const int slotX = startX + i * (slotW + kHomeTileGap);
+    const int slotX = startX + i * (slotW + NeobrutalistHomeLayout::tileGap);
     Rect tile{slotX, tileY, slotW, tileH};
     Rect cover{slotX + (slotW - coverW) / 2, tileY + 10, coverW, coverH};
-    Rect frame{cover.x - kHomeFramePad, cover.y - kHomeFramePad, cover.width + kHomeFramePad * 2,
-               cover.height + kHomeFramePad * 2};
+    Rect frame{cover.x - NeobrutalistHomeLayout::framePad, cover.y - NeobrutalistHomeLayout::framePad,
+               cover.width + NeobrutalistHomeLayout::framePad * 2,
+               cover.height + NeobrutalistHomeLayout::framePad * 2};
 
     if (selected) {
       renderer.drawRect(tile.x, tile.y, tile.width, tile.height, kHeavyBorder, true);
