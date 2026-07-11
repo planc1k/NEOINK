@@ -1535,51 +1535,18 @@ void HomeActivity::loop() {
     }
   } else {
     const int itemCount = getMenuItemCount();
-    const bool hasCoverRow = !UITheme::getInstance().getMetrics().homeContinueReadingInMenu && visibleBookCount > 1;
-
-    if (hasCoverRow) {
-      buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Down},
-                                           [this, itemCount, visibleBookCount] {
-                                             moveHomeSelectionTo(ButtonNavigator::nextIndex(selectorIndex, itemCount),
-                                                                 visibleBookCount);
-                                           });
-      buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Up},
-                                           [this, itemCount, visibleBookCount] {
-                                             moveHomeSelectionTo(
-                                                 ButtonNavigator::previousIndex(selectorIndex, itemCount),
-                                                 visibleBookCount);
-                                           });
-      buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Right},
-                                           [this, visibleBookCount, itemCount] {
-                                             if (selectorIndex < visibleBookCount) {
-                                               moveHomeSelectionTo(
-                                                   ButtonNavigator::nextIndex(selectorIndex, visibleBookCount),
-                                                   visibleBookCount);
-                                             } else {
-                                               moveHomeSelectionTo(ButtonNavigator::nextIndex(selectorIndex, itemCount),
-                                                                   visibleBookCount);
-                                             }
-                                           });
-      buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Left},
-                                           [this, visibleBookCount, itemCount] {
-                                             if (selectorIndex < visibleBookCount) {
-                                               moveHomeSelectionTo(
-                                                   ButtonNavigator::previousIndex(selectorIndex, visibleBookCount),
-                                                   visibleBookCount);
-                                             } else {
-                                               moveHomeSelectionTo(
-                                                   ButtonNavigator::previousIndex(selectorIndex, itemCount),
-                                                   visibleBookCount);
-                                             }
-                                           });
-    } else {
-      buttonNavigator.onNext([this, itemCount, visibleBookCount] {
-        moveHomeSelectionTo(ButtonNavigator::nextIndex(selectorIndex, itemCount), visibleBookCount);
-      });
-      buttonNavigator.onPrevious([this, itemCount, visibleBookCount] {
-        moveHomeSelectionTo(ButtonNavigator::previousIndex(selectorIndex, itemCount), visibleBookCount);
-      });
-    }
+    buttonNavigator.onNextRelease([this, itemCount, visibleBookCount] {
+      moveHomeSelectionTo(ButtonNavigator::nextIndex(selectorIndex, itemCount), visibleBookCount);
+    });
+    buttonNavigator.onPreviousRelease([this, itemCount, visibleBookCount] {
+      moveHomeSelectionTo(ButtonNavigator::previousIndex(selectorIndex, itemCount), visibleBookCount);
+    });
+    buttonNavigator.onNextContinuous([this, itemCount, visibleBookCount] {
+      moveHomeSelectionTo(ButtonNavigator::nextIndex(selectorIndex, itemCount), visibleBookCount);
+    });
+    buttonNavigator.onPreviousContinuous([this, itemCount, visibleBookCount] {
+      moveHomeSelectionTo(ButtonNavigator::previousIndex(selectorIndex, itemCount), visibleBookCount);
+    });
   }
 
   if (getHighlightedBookIndex() != previousHighlightedBookIdx) {
